@@ -1,0 +1,7 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Calidad Platform</title>
+  <desc id="desc">Icono corporativo de gestion de anomalias.</desc>
+  <rect width="256" height="256" rx="48" fill="#0f4c5c" />
+  <path d="M64 186V70h68c38 0 60 19 60 49 0 28-21 47-53 47H96v20H64zm32-49h40c17 0 27-8 27-21s-10-20-27-20H96v41z" fill="#f4f7f8" />
+  <circle cx="190" cy="72" r="18" fill="#d88c3a" />
+</svg>

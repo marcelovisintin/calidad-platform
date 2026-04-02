@@ -1,0 +1,34 @@
+# Secrets and local env
+.env
+.env.*
+!.env.example
+!deploy/docker/.env.server.example
+/deploy/docker/.env.server
+/deploy/docker/.env.server.local
+
+# Python
+.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py,cover
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Frontend
+/frontend/node_modules/
+/frontend/dist/
+/frontend/frontend-dev.log
+
+# Runtime and generated data
+/storage/
+/runtime/
+*.log
+
+# OS / IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,232 @@
+PLATAFORMA CORPORATIVA DE CALIDAD
+RESUMEN DE AVANCE DEL SISTEMA
+Fecha de corte: 2026-03-22
+
+1. OBJETIVO GENERAL
+
+El sistema fue disenado para gestionar anomalias, acciones, tareas, notificaciones y trazabilidad operativa dentro de un entorno corporativo. La arquitectura actual ya permite operar localmente en planta y, al mismo tiempo, deja preparada la migracion futura a infraestructura cloud sin cambios fuertes de arquitectura.
+
+2. ARQUITECTURA GENERAL
+
+Backend:
+- Django
+- Django REST Framework
+- PostgreSQL
+- JWT para autenticacion
+
+Frontend:
+- React
+- TypeScript
+- Vite
+- PWA base
+
+Despliegue:
+- Docker Compose local
+- Nginx para servir frontend y hacer proxy de API
+- Gunicorn para backend
+- Volumenes persistentes para datos, adjuntos, logs y backups
+
+3. MODULOS IMPLEMENTADOS
+
+3.1 Accounts
+- Login
+- Refresh token
+- Logout
+- Usuario actual
+- Roles
+- Permisos
+- Scopes por usuario
+
+3.2 Catalog
+- Sitios
+- Areas
+- Tipos de anomalia
+- Origenes
+- Severidades
+- Prioridades
+- Tipos de accion
+
+3.3 Anomalies
+- Registro de anomalia
+- Workflow completo de 12 etapas
+- Historial de estados
+- Participantes
+- Comentarios
+- Adjuntos
+- Verificacion inicial 6M
+- Clasificacion
+- Analisis de causa
+- Propuestas
+- Resultados
+- Verificacion de eficacia
+- Cierre
+- Estandarizacion y aprendizaje
+
+3.4 Actions
+- Planes de accion
+- Acciones individuales
+- Responsable
+- Prioridad
+- Fecha compromiso
+- Evidencia esperada
+- Evidencia cargada
+- Comentario de cierre
+- Historial de acciones
+
+3.5 Notifications
+- Bandeja interna
+- Pendientes
+- Tareas por usuario
+- Marcado de lectura
+- Resolucion de tareas
+
+3.6 Audit
+- Consulta de eventos
+- Resumen de auditoria
+- Trazabilidad transversal
+
+4. WORKFLOW DE ANOMALIAS SOPORTADO
+
+Etapas:
+1. Registro
+2. Contencion
+3. Verificacion inicial
+4. Clasificacion
+5. Analisis de causa
+6. Propuestas
+7. Plan de accion
+8. Ejecucion y seguimiento
+9. Resultados
+10. Verificacion de eficacia
+11. Cierre
+12. Estandarizacion y aprendizaje
+
+Estados principales:
+- registered
+- in_evaluation
+- in_analysis
+- in_treatment
+- pending_verification
+- closed
+- cancelled
+- reopened
+
+Reglas ya implementadas:
+- Toda anomalia tiene ID unico
+- Toda transicion relevante se audita
+- No se puede cerrar sin verificacion minima
+- No se puede completar aprendizaje sin registrar learning
+- Si falta informacion obligatoria, el backend bloquea la transicion
+- La logica critica del workflow vive en backend
+
+5. FRONTEND INICIAL YA OPERATIVO
+
+Pantallas disponibles:
+- Login
+- Dashboard
+- Nueva anomalia
+- Confirmacion de carga
+- Mis anomalias
+- Detalle de anomalia
+- Mis acciones
+- Pendientes
+- Bandeja interna
+
+Capacidades del frontend:
+- Consumo real de API DRF
+- Refresh automatico de sesion
+- Rutas protegidas
+- Manejo de loading y errores
+- Vista responsive
+- Experiencia simple para Windows y Android
+
+6. VALIDACIONES YA REALIZADAS
+
+Backend:
+- check de Django
+- tests de modulos principales
+- validacion funcional real del workflow completo de anomalias
+- validacion de acciones, notificaciones y auditoria
+
+Frontend:
+- npm install
+- npm run check
+- npm run build
+- pruebas manuales reales sobre:
+  - login
+  - dashboard
+  - nueva anomalia
+  - confirmacion
+  - mis anomalias
+  - detalle y timeline
+  - mis acciones
+  - pendientes
+  - bandeja interna
+
+Despliegue local:
+- Stack Docker levantado y verificado
+- PostgreSQL en contenedor
+- Backend en contenedor
+- Frontend en contenedor
+- Admin accesible
+- API accesible
+- Frontend accesible en localhost
+
+7. DESPLIEGUE LOCAL CLOUD-READY
+
+Separacion ya definida:
+- aplicacion backend
+- frontend
+- base de datos
+- archivos adjuntos
+- configuracion por variables de entorno
+- logs
+- backups
+
+Buenas practicas ya aplicadas:
+- no hardcodear IPs en configuracion principal
+- variables de entorno centralizadas
+- rutas portables
+- media y static fuera del codigo
+- logs persistentes
+- backups con carpeta dedicada
+- misma origin para frontend y backend en despliegue productivo local
+
+8. ARCHIVOS Y DOCUMENTACION CLAVE
+
+Documentacion:
+- README.md
+- docs/deployment/local-cloud-ready.md
+- docs/workflows/anomalies-workflow.md
+- docs/architecture/system-overview.md
+
+Infraestructura:
+- deploy/docker/docker-compose.local.yml
+- deploy/docker/backend.Dockerfile
+- deploy/docker/frontend.Dockerfile
+- deploy/nginx/calidad.conf
+- deploy/docker/.env.server.example
+- deploy/backups/backup_local.sh
+
+9. ESTADO REAL AL MOMENTO
+
+El sistema ya no esta en fase de solo maqueta.
+Actualmente cuenta con:
+- backend funcional
+- frontend funcional
+- integracion real frontend-backend
+- despliegue local en Docker validado
+- acceso por navegador
+
+10. PENDIENTES RECOMENDADOS A FUTURO
+
+- Carga de datos base para entornos nuevos
+- Restore automatizado de backups
+- Catalogos consumidos 100 por ciento desde API
+- Monitoreo y observabilidad
+- Publicacion por nombre interno de red
+- Endurecimiento de seguridad productiva
+
+11. CONCLUSION
+
+La plataforma ya cuenta con una base tecnica solida para operar como sistema corporativo de gestion de anomalias en entorno local de fabrica. La solucion queda preparada para crecer funcionalmente y para migrar a nube en una etapa futura con cambios concentrados en infraestructura, configuracion y migracion de datos.

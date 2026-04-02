@@ -1,0 +1,61 @@
+﻿import { apiRequest } from "./http";
+import type { CurrentUser, LoginResponse, PagedResponse, UserDirectoryItem, UserWritePayload } from "./types";
+
+export function login(identifier: string, password: string) {
+  return apiRequest<LoginResponse>("/accounts/login/", {
+    method: "POST",
+    skipAuth: true,
+    body: { identifier, password },
+  });
+}
+
+export function fetchCurrentUser() {
+  return apiRequest<CurrentUser>("/accounts/me/");
+}
+
+export function logout(refresh: string) {
+  return apiRequest<void>("/accounts/logout/", {
+    method: "POST",
+    body: { refresh },
+  });
+}
+
+export function changeOwnPassword(payload: { current_password: string; new_password: string; confirm_password: string }) {
+  return apiRequest<CurrentUser>("/accounts/change-password/", {
+    method: "POST",
+    body: payload,
+  });
+}
+export function fetchUsers(params: { active?: boolean; q?: string } = {}) {
+  const query = new URLSearchParams();
+  if (typeof params.active === "boolean") {
+    query.set("active", String(params.active));
+  }
+  if (params.q?.trim()) {
+    query.set("q", params.q.trim());
+  }
+
+  const suffix = query.toString();
+  return apiRequest<PagedResponse<UserDirectoryItem>>(`/accounts/users/${suffix ? `?${suffix}` : ""}`);
+}
+
+export function createUser(payload: UserWritePayload) {
+  return apiRequest<UserDirectoryItem>("/accounts/users/", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function updateUser(userId: string, payload: UserWritePayload) {
+  return apiRequest<UserDirectoryItem>(`/accounts/users/${userId}/`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export function deleteUser(userId: string) {
+  return apiRequest<void>(`/accounts/users/${userId}/`, {
+    method: "DELETE",
+  });
+}
+

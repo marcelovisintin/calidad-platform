@@ -1,0 +1,498 @@
+Prompt 1 — Arquitectura y diseño base
+Actúa como un Arquitecto de Software Empresarial Senior y Desarrollador Full Stack experto en sistemas corporativos multiusuario, workflow, trazabilidad y aplicaciones web escalables.
+
+Quiero diseñar la base técnica de un sistema corporativo propio. El primer módulo será gestión de anomalías, pero debe construirse desde el inicio con visión de crecimiento futuro hacia una plataforma más amplia.
+
+DECISIONES YA TOMADAS
+- Backend: Python con Django
+- API: Django REST Framework
+- Base de datos: PostgreSQL
+- Frontend: React + TypeScript
+- Frontend liviano, responsive y preferentemente PWA
+- Despliegue inicial local en servidor de fábrica
+- Arquitectura preparada para futura migración a nube sin cambios mayores
+- El backend debe centralizar toda la lógica de negocio
+- La PC de calidad será una terminal de uso, no el servidor principal por lo que debe acceder a un front end dedicado a usuarios de alto nivel (admin) (programador)
+- Todo el sistema debe estar en Español 
+
+OBJETIVO DE ESTA ETAPA
+No quiero todavía todo el código completo.
+Quiero definir correctamente la arquitectura y el diseño base.
+
+TAREA
+Entregar en este orden:
+
+1. Propuesta de arquitectura general del sistema
+Debe incluir:
+- backend
+- frontend
+- base de datos
+- despliegue local inicial
+- preparación para nube futura
+- separación de responsabilidades
+- justificación del enfoque monolito modular
+
+2. Decisiones arquitectónicas justificadas
+Explicar por qué conviene:
+- backend centralizado
+- frontend liviano
+- PostgreSQL
+- PWA en vez de apps nativas
+- despliegue local cloud-ready
+
+3. Árbol de carpetas sugerido
+Proponer estructura profesional para:
+- backend Django
+- frontend React
+- configuración
+- migraciones
+- tests
+- archivos adjuntos
+- documentación técnica
+
+4. Definición de dominios o apps backend
+Proponer apps como mínimo para:
+- Cuentas
+- catalogos
+- anomalias
+- actioones
+- notificaciones
+- auditoria
+- common/core
+
+5. Modelo de datos inicial
+Definir entidades principales, propósito, relaciones, restricciones y trazabilidad.
+
+6. Reglas de negocio de alto nivel
+Explicar:
+- workflow de anomalías
+- estados
+- transiciones
+- restricciones de cierre
+- trazabilidad obligatoria
+
+FORMA DE RESPONDER
+Responder en secciones claras y técnicas.
+No ser genérico.
+Pensar como si estuvieras definiendo la base real de un producto interno empresarial.
+Prompt 2 — Backend base Django + DRF + PostgreSQL
+Actúa como un Desarrollador Backend Senior experto en Django, Django REST Framework y PostgreSQL.
+
+Ya está definida la arquitectura base de un sistema corporativo cuyo primer módulo será gestión de anomalías. Ahora necesito que generes la base funcional inicial del backend.
+
+STACK OBLIGATORIO
+- Python
+- Django
+- Django REST Framework
+- PostgreSQL
+
+CRITERIOS DE ARQUITECTURA
+- monolito modular
+- apps separadas por dominio
+- código limpio
+- buena estructura
+- configuración externalizada
+- preparado para despliegue local inicial y futura migración a nube
+- no hardcodear IPs, rutas ni credenciales
+
+TAREA
+Generar la base funcional inicial del backend incluyendo:
+
+1. Estructura inicial del proyecto Django
+2. Configuración para PostgreSQL por variables de entorno
+3. Apps base:
+- common/core
+- accounts
+- catalog
+- anomalies
+- actions
+- notifications
+- audit
+
+4. Archivos base necesarios
+5. Configuración inicial de Django REST Framework
+6. Configuración inicial de rutas
+7. Configuración inicial de Django Admin
+8. Base para manejo de archivos adjuntos
+9. Recomendaciones para entorno local de fábrica, manteniendo cloud-readiness
+
+FORMA DE ENTREGAR
+Cuando generes código:
+- indicar la ruta del archivo
+- entregar el contenido completo
+- mantener consistencia entre archivos
+- no usar pseudocódigo salvo aclaración
+- comentar brevemente las decisiones importantes
+
+COMIENZA generando:
+1. estructura del proyecto,
+2. settings base,
+3. configuración PostgreSQL,
+4. instalación de apps,
+5. rutas principales,
+6. archivos iniciales mínimos.
+Prompt 3 — Autenticación, usuarios, roles y permisos
+Actúa como un Desarrollador Backend Senior experto en Django y seguridad de aplicaciones empresariales.
+
+Estoy construyendo un sistema corporativo multiusuario de gestión de anomalías. Necesito implementar autenticación, usuarios, roles y permisos de forma profesional.
+
+CONTEXTO
+- Backend con Django + DRF
+- Base PostgreSQL
+- Frontend React + TypeScript
+- Despliegue local inicial en servidor de fábrica
+- Futura migración a nube
+- El sistema tendrá múltiples usuarios y sectores
+
+REQUERIMIENTOS
+Implementar y diseñar correctamente:
+
+1. Modelo de usuario
+Debe contemplar como mínimo:
+- username o email
+- nombre
+- apellido
+- sector
+- rol
+- activo/inactivo
+- fecha de alta
+- última actividad
+
+2. Roles iniciales
+- Operario
+- Supervisor
+- Calidad
+- Ingeniería
+- Administrador
+- Programador
+
+3. Permisos base
+Debe contemplarse quién puede:
+- crear anomalías
+- editar
+- clasificar
+- analizar
+- asignar acciones
+- ejecutar acciones
+- verificar eficacia
+- cerrar
+- anular
+- reabrir
+- ver todo o solo su sector
+
+4. Login
+Definir estrategia recomendada:
+- JWT o sesión/token
+- justificar cuál conviene más para este sistema
+- preparar backend para frontend React
+
+5. API de autenticación
+Endpoints mínimos:
+- login
+- logout si corresponde
+- usuario actual
+- refresh token si aplica
+- listado básico de usuarios si corresponde
+
+6. Seguridad básica
+- contraseñas
+- permisos
+- protección de rutas
+- validaciones backend
+
+FORMA DE RESPONDER
+
+Generar código real de modelos, serializers, views, permisos, urls y configuración necesaria.
+Indicar siempre la ruta de cada archivo.
+Prompt 4 — Módulo de anomalías y workflow
+Actúa como un Arquitecto Backend y Desarrollador Senior experto en sistemas de workflow y trazabilidad.
+
+Necesito desarrollar el núcleo del módulo de gestión de anomalías en Django + DRF.
+
+FLUJO FUNCIONAL OBLIGATORIO
+El módulo debe contemplar estas etapas:
+1. Registro
+2. Contención
+3. Verificación inicial
+4. Clasificación
+5. Análisis de causa
+6. Propuestas
+7. Plan de acción
+8. Ejecución y seguimiento
+9. Resultados
+10. Verificación de eficacia
+11. Cierre
+12. Estandarización y aprendizaje
+
+ESTADOS MÍNIMOS DE LA ANOMALÍA
+- Registrada
+- En evaluación
+- En análisis
+- En tratamiento
+- Pendiente de verificación
+- Cerrada
+- Anulada
+- Reabierta
+
+REGLAS IMPORTANTES
+- toda anomalía debe tener ID único
+- todo cambio de estado debe quedar auditado
+- debe registrarse usuario, fecha/hora, comentario, estado anterior y nuevo
+- no debe poder cerrarse sin verificación mínima
+- si no fue eficaz, debe poder reabrirse o volver a tratamiento
+- el backend debe centralizar toda la lógica del workflow
+
+DATOS MÍNIMOS DE LA ANOMALÍA
+- ID único
+- fecha y hora
+- usuario que registra
+- sector / área
+- proceso afectado
+- título breve
+- descripción detallada
+- criticidad inicial
+- origen de detección
+- evidencia adjunta
+
+OTROS COMPONENTES
+- verificación inicial con enfoque 6M o 4 porque
+- clasificación
+- análisis de causa con método utilizado
+- propuestas
+- historial de comentarios
+- participantes
+- verificación de eficacia
+- estandarización/aprendizaje
+
+TAREA
+1. Diseñar las entidades necesarias
+2. Generar modelos Django
+3. Generar serializers
+4. Generar views/viewsets
+5. Generar urls
+6. Generar reglas de transición
+7. Generar servicios o lógica de dominio si corresponde
+8. Preparar Django Admin para administrar anomalías
+
+ENTREGA
+Indicar siempre la ruta del archivo y el contenido completo.
+Evitar pseudocódigo.
+Priorizar trazabilidad, claridad y mantenibilidad.
+Prompt 5 — Acciones, tareas y notificaciones internas
+Actúa como un Desarrollador Backend Senior experto en workflow empresarial y asignación de tareas.
+
+Necesito implementar en Django + DRF la parte de acciones, pendientes y participación de usuarios dentro del módulo de anomalías.
+
+OBJETIVO
+Cuando una anomalía genere acciones o requiera intervención de usuarios, el sistema debe reflejarlo claramente.
+
+REQUERIMIENTOS FUNCIONALES
+
+1. Acciones asociadas a anomalías
+Cada acción debe tener:
+- número o código
+- tipo: contención / correctiva / preventiva / mejora
+- descripción
+- responsable
+- fecha compromiso
+- prioridad
+- estado
+- evidencia esperada
+- evidencia cargada
+- comentario de cierre
+
+2. Estados de acciones
+- pendiente
+- en curso
+- vencida
+- completada
+- cancelada
+
+3. Historial de acciones
+Cada cambio relevante debe registrar:
+- usuario
+- fecha/hora
+- comentario
+- estado anterior
+- estado nuevo
+
+4. Tareas de usuario
+El sistema debe poder mostrar:
+- mis acciones
+- tareas pendientes
+- solicitudes de participación en análisis, tratamiento o verificación
+
+5. Notificaciones internas
+Inicialmente no necesito push complejas.
+Quiero:
+- bandeja interna
+- indicadores de pendientes
+- registro de tareas por usuario
+
+6. Confirmación al cargar anomalía
+Cuando un usuario carga una anomalía, debe poder recibir al menos:
+- ID generado
+- estado inicial
+- fecha/hora
+- responsable actual, si aplica
+
+TAREA
+1. Diseñar entidades necesarias para acciones y tareas
+2. Generar modelos
+3. Generar serializers
+4. Generar endpoints
+5. Generar reglas de negocio
+6. Preparar vistas admin
+
+ENTREGA
+Responder primero con diseño técnico breve y luego con código real completo por archivo.
+Prompt 6 — Frontend liviano React + TypeScript + PWA
+Actúa como un Desarrollador Frontend Senior experto en React, TypeScript, aplicaciones responsive empresariales y PWA.
+
+Necesito crear el frontend inicial de un sistema corporativo de gestión de anomalías.
+
+CONTEXTO
+- Backend: Django + DRF
+- Base de datos: PostgreSQL
+- Despliegue inicial local en servidor de fábrica
+- Futuro paso a nube
+- Frontend debe funcionar en Android y Windows como web app liviana, idealmente preparada como PWA
+- No se harán apps nativas separadas en esta etapa
+
+OBJETIVO DEL FRONTEND
+Debe ser lo más liviano posible.
+No debe tener lógica crítica de negocio.
+Debe consumir la API del backend.
+
+FUNCIONALIDADES MÍNIMAS DEL FRONTEND
+- login
+- pantalla inicial / dashboard simple
+- nueva anomalía
+- confirmación de carga
+- ver ID y estado
+- mis anomalías
+- detalle de anomalía
+- mis acciones
+- tareas pendientes
+- actualizar avance de una acción
+- ver historial o timeline
+- ver cuando el usuario debe participar en análisis o tratamiento
+
+CRITERIOS UX
+- diseño sobrio
+- claridad
+- rapidez
+- formularios simples
+- mobile friendly
+- buena experiencia en Android
+- buena experiencia en Windows navegador
+- responsive
+- arquitectura ordenada del frontend
+
+TAREA
+1. Proponer estructura de carpetas frontend
+2. Definir estrategia de autenticación y consumo de API
+3. Generar la base del proyecto React + TypeScript
+4. Generar layout y rutas principales
+5. Generar pantallas mínimas
+6. Preparar el frontend como PWA si es razonable
+7. Manejar estados de carga, error y sesión
+
+FORMA DE ENTREGAR
+Indicar siempre la ruta del archivo y el contenido completo.
+No usar pseudocódigo salvo aclaración.
+Mantener consistencia entre componentes y rutas.
+Prompt 7 — Integración frontend-backend
+Actúa como un Full Stack Senior experto en integración entre React y Django REST Framework.
+
+Ya tengo backend y frontend base para un sistema de gestión de anomalías. Ahora necesito conectarlos correctamente.
+
+OBJETIVO
+Implementar la integración entre frontend React + TypeScript y backend Django + DRF de forma limpia, mantenible y segura.
+
+REQUERIMIENTOS
+1. Conectar login con autenticación backend
+2. Persistir sesión según estrategia elegida
+3. Consumir endpoints de:
+- anomalías
+- detalle de anomalía
+- acciones
+- tareas pendientes
+- usuario actual
+
+4. Manejar:
+- estados de carga
+- errores
+- expiración de sesión
+- protección de rutas
+- manejo de permisos visibles en frontend sin duplicar lógica crítica
+
+5. Confirmar carga de anomalía mostrando:
+- ID generado
+- estado inicial
+- fecha/hora
+- responsable actual si corresponde
+
+6. Mostrar “mis acciones” y “mis pendientes”
+
+TAREA
+1. Proponer estrategia de integración
+2. Generar servicios API frontend
+3. Ajustar backend si hace falta
+4. Conectar formularios y listados
+5. Validar flujo completo mínimo:
+- login
+- crear anomalía
+- ver confirmación
+- consultar estado
+- ver acciones pendientes
+
+FORMA DE ENTREGA
+Primero explicar brevemente la estrategia.
+Luego generar código real por archivo.
+Prompt 8 — Despliegue local y diseño cloud-ready
+Actúa como un Arquitecto DevOps / Software Senior experto en despliegue de aplicaciones web empresariales.
+
+Necesito definir el despliegue inicial local de un sistema de gestión de anomalías, pero dejándolo preparado para migrar a nube en el futuro sin cambios mayores.
+
+CONTEXTO
+- Backend: Django + DRF
+- Base de datos: PostgreSQL
+- Frontend: React + TypeScript + PWA
+- Despliegue inicial en servidor local de fábrica
+- Acceso desde PCs Windows y dispositivos Android por red interna
+- La PC de calidad solo será terminal de uso, no servidor
+
+OBJETIVO
+Definir una estrategia de despliegue local ordenada y cloud-ready.
+
+REQUERIMIENTOS
+1. Explicar arquitectura de despliegue local inicial
+2. Separar:
+- aplicación backend
+- frontend
+- base de datos
+- archivos adjuntos
+- configuración
+- logs
+- backups
+
+3. Definir buenas prácticas:
+- variables de entorno
+- rutas portables
+- no hardcodear IPs
+- manejo de archivos adjuntos
+- backups
+- logs
+- seguridad básica
+
+4. Dejar preparada la futura migración a nube
+Explicar qué debe mantenerse desacoplado para que la futura migración implique principalmente:
+- cambio de infraestructura
+- cambio de configuración
+- migración de datos/archivos
+
+5. Si es útil, proponer uso de Docker o no, justificando.
+
+FORMA DE RESPONDER
+Primero explicar estrategia y luego generar archivos de configuración o ejemplos que sean real

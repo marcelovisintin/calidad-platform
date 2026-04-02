@@ -1,0 +1,93 @@
+﻿{
+  "source": "database-bootstrap",
+  "generatedAt": "2026-03-22T10:18:00-03:00",
+  "sites": [
+    {
+      "id": "ccefc7db-07fd-4370-83d1-4e7fd6b67b8f",
+      "code": "001",
+      "name": "corte"
+    },
+    {
+      "id": "d689caa0-a214-484d-9b0f-096eec799458",
+      "code": "P01",
+      "name": "Area 1"
+    }
+  ],
+  "areas": [
+    {
+      "id": "b0383e24-56ef-4391-bc0d-3cb36509553a",
+      "code": "001",
+      "name": "corte",
+      "site": {
+        "id": "ccefc7db-07fd-4370-83d1-4e7fd6b67b8f",
+        "code": "001",
+        "name": "corte"
+      }
+    }
+  ],
+  "anomalyTypes": [
+    {
+      "id": "7d1b955e-15f2-42f1-b7a8-bb6e84999774",
+      "code": "001",
+      "name": "rayado"
+    },
+    {
+      "id": "f638d210-06e1-4d5b-86a8-f16a22260843",
+      "code": "002",
+      "name": "faltante de"
+    }
+  ],
+  "anomalyOrigins": [
+    {
+      "id": "6b0b4436-61fd-4dd6-8dbd-336ff505dbba",
+      "code": "o01",
+      "name": "proceso"
+    }
+  ],
+  "severities": [
+    {
+      "id": "e32fe8bc-e7d5-4ff1-8aa3-d30198f6e524",
+      "code": "alta",
+      "name": "Alta"
+    },
+    {
+      "id": "d15d1a91-b6b8-49ce-aece-c651adc8b684",
+      "code": "baja",
+      "name": "Baja"
+    }
+  ],
+  "priorities": [
+    {
+      "id": "92a3c802-1139-4824-83ad-1b5f0b2a76e6",
+      "code": "alta",
+      "name": "Prioridad Alta"
+    },
+    {
+      "id": "960d9790-0d1c-4ab5-bf9c-4904c6c0b5bf",
+      "code": "baja",
+      "name": "Prioridad baja"
+    }
+  ],
+  "actionTypes": [
+    {
+      "id": "51e99a20-8846-4bcc-9a07-177bb322a53c",
+      "code": "CONT",
+      "name": "Accion de Contencion"
+    },
+    {
+      "id": "79c4359d-5e01-4c17-9d66-14259e7645ee",
+      "code": "CORR",
+      "name": "Accion Correctiva"
+    },
+    {
+      "id": "4d97a0b9-9f40-475b-bde0-55ddcdf78f4a",
+      "code": "MEJ",
+      "name": "Accion de Mejora"
+    },
+    {
+      "id": "db2f58b7-9499-482d-92d7-321ea7b92efe",
+      "code": "PREV",
+      "name": "Accion Preventiva"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Calidad Platform Maskable Icon</title>
+  <desc id="desc">Icono maskable para instalacion PWA.</desc>
+  <rect width="256" height="256" rx="64" fill="#0b2830" />
+  <rect x="28" y="28" width="200" height="200" rx="48" fill="#0f4c5c" />
+  <path d="M76 184V72h66c36 0 58 18 58 47 0 27-21 46-52 46h-38v19H76zm34-48h34c15 0 24-7 24-19s-9-18-24-18h-34v37z" fill="#f4f7f8" />
+  <circle cx="186" cy="78" r="16" fill="#d88c3a" />
+</svg>
