@@ -79,6 +79,7 @@ export interface UserDirectoryItem {
   last_name: string;
   full_name: string;
   employee_code?: string;
+  phone?: string;
   access_level: "usuario_activo" | "mando_medio_activo" | "administrador" | "desarrollador";
   must_change_password: boolean;
   password_changed_at?: string | null;
@@ -98,6 +99,7 @@ export interface UserWritePayload {
   first_name?: string;
   last_name?: string;
   employee_code?: string;
+  phone?: string;
   access_level?: "usuario_activo" | "mando_medio_activo" | "administrador" | "desarrollador";
   primary_sector?: UUID | null;
   is_active?: boolean;

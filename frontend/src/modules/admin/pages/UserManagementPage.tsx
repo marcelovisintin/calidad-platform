@@ -20,6 +20,7 @@ type UserFormState = {
   first_name: string;
   last_name: string;
   employee_code: string;
+  phone: string;
   access_level: AccessLevel;
   primary_sector: string;
   is_active: boolean;
@@ -39,6 +40,7 @@ const emptyForm: UserFormState = {
   first_name: "",
   last_name: "",
   employee_code: "",
+  phone: "",
   access_level: "usuario_activo",
   primary_sector: "",
   is_active: true,
@@ -116,6 +118,7 @@ export function UserManagementPage() {
       first_name: item.first_name || "",
       last_name: item.last_name || "",
       employee_code: item.employee_code || "",
+      phone: item.phone || "",
       access_level: resolveAccessLevel(item),
       primary_sector: item.primary_sector_id || item.sector?.id || "",
       is_active: item.is_active,
@@ -136,6 +139,7 @@ export function UserManagementPage() {
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
         employee_code: form.employee_code.trim(),
+        phone: form.phone.trim(),
         access_level: form.access_level,
         primary_sector: form.primary_sector || null,
         is_active: form.is_active,
@@ -262,6 +266,10 @@ export function UserManagementPage() {
                 <input name="employee_code" onChange={handleInputChange} type="text" value={form.employee_code} />
               </label>
               <label className="field">
+                <span>Celular</span>
+                <input name="phone" onChange={handleInputChange} type="tel" value={form.phone} placeholder="+54 9 11 1234-5678" />
+              </label>
+              <label className="field">
                 <span>Nivel de acceso</span>
                 <select name="access_level" onChange={handleInputChange} value={form.access_level}>
                   {accessLevelOptions.map((option) => (
@@ -336,8 +344,8 @@ export function UserManagementPage() {
                       <p>{item.email}</p>
                       <small>
                         {item.username}
-                        {item.sector ? ` · ${item.sector.name}` : " · Sin sector"}
-                        {item.employee_code ? ` · Legajo ${item.employee_code}` : ""}
+                        {item.sector ? ` ï¿½ ${item.sector.name}` : " ï¿½ Sin sector"}
+                        {item.employee_code ? ` ï¿½ Legajo ${item.employee_code}` : ""}
                       </small>
                       <small>Ultima actividad: {formatDateTime(item.last_activity_at)}</small>
                     </div>

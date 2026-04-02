@@ -48,6 +48,7 @@ class User(AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
     employee_code = models.CharField(max_length=50, blank=True)
+    phone = models.CharField(max_length=30, blank=True)
     access_level = models.CharField(
         max_length=30,
         choices=AccessLevel.choices,
