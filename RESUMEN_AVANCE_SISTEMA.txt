@@ -229,4 +229,134 @@ Actualmente cuenta con:
 
 11. CONCLUSION
 
-La plataforma ya cuenta con una base tecnica solida para operar como sistema corporativo de gestion de anomalias en entorno local de fabrica. La solucion queda preparada para crecer funcionalmente y para migrar a nube en una etapa futura con cambios concentrados en infraestructura, configuracion y migracion de datos.
+La plataforma ya cuenta con una base tecnica solida para operar como sistema corporativo
+ de gestion de anomalias en entorno local de fabrica. La solucion queda preparada para crecer 
+ funcionalmente y para migrar a nube en una etapa futura con cambios concentrados en infraestructura,
+  configuracion y migracion de datos.
+
+
+Modif a partir del 2 de abril
+en tratamientos detalle de tratamiento vista 2 de analisis cuando creo una nueva tarea los campos de la
+tarea que fueron rellenados deben vaciarce porque si por error apreto nueva mente crear tarea se duplica. 
+si los campos estan vacios no debe generarce nueva tarea hasta que esten completos, y son todos obligatorios. 
+tambien hay que pulir los botones de vista tienen un signo de interrogacion en el medio que hay que sacar.
+en tratameinto cuando le damos a guardar analisis deberia aparecer un emergente que pida confirmacion 
+una vez confirmada en seguimiento de anomalias deberia verce reflejado en la tarjeta participantes y verificaciones 
+campo analisis de causa. (deebria decir analizado) tambien debe actualizare ahi la tarjeta historial con la creacion
+ del tratameinto y luego con los pasos del mismo.
+
+ con la carga de anomalias se debe poder cargar imagenes o pdfs. como evidencia objetiva.
+ durante el tratamiento deben estar visibles las evidencias objetivas de las anomalias que intervienen, tambien debe 
+ poder agregarce 
+ evidencias al tratamiento.
+ en las tareas tambien debe ser posible agregar evidencias durante su realizacion.
+
+ en el listado de anomalias o tratamientos o etapas del historial o cualquier otro listado, listar solo 10 por pagina
+  y hacer paginacion.
+
+
+secciones principales acciones y pendientes,  en el panel izq. "mis acciones" que sea solo "acciones". Acciones listara el historico de acciones realizadas (tareas)
+  y se debe poder filtrar 
+ por anomalia a la que pertence, tratamiento al que pertenece, fecha de terminada, usuario que la realizo. el listado 
+ deberea ser de 10 por paginas con 
+ paginacion como las otras listas.
+ en el panel izq. "mis acciones" que sea solo "acciones". Acciones listara el historico de acciones realizadas (tareas)
+  y se debe poder filtrar 
+ por anomalia a la que pertence, tratamiento al que pertenece, fecha de terminada, usuario que la realizo. el listado 
+ deberea ser de 10 por paginas con 
+ paginacion como las otras listas.
+__________________________________________________________________________________________________________________________
+
+ cuando una anomalia es clasificada como accion inmediata, no se debe permitir crear tratamiento, se deberia abrir 
+ nueva pantalla para anomalias con accion inmediata y dentro de esta poner una observacion un responsable fecha y acciones 
+ a tomar o que se tomaron. fecha verificacion de eficacia y luego cierre directo sin mas.
+
+------------------------------------------------------------------------------------------------------------------------
+
+Cuando todas las tareas de un tratamiento estén en estado COMPLETADAS, el sistema debe cambiar automáticamente el 
+estado del tratamiento a "VERIFICACION_DE_EFICACIA".
+
+En este estado, el ADMIN debe:
+- Cargar fecha de verificación
+- Asignar responsable verificador
+
+El verificador debe:
+- Cargar evidencia objetiva (archivos)
+- Indicar resultado: EFICAZ o NO EFICAZ
+- Cargar comentarios
+- Cargar fecha de verificación
+
+Si el resultado es EFICAZ:
+- El ADMIN puede cerrar el tratamiento -> estado CERRADO_EFICAZ
+
+Si el resultado es NO EFICAZ:
+- El ADMIN debe crear un NUEVO TRATAMIENTO
+- El nuevo tratamiento debe estar asociado al tratamiento original (tratamiento_origen_id)
+- El tratamiento original queda en estado CERRADO_NO_EFICAZ
+
+Debe existir historial de cambios de estado y trazabilidad entre tratamientos.
+No se puede cerrar un tratamiento sin verificación de eficacia.
+
+deberia de verce el codigo de la anomalia acutal, ya reservarlo para esta anomalia si hubiera multiples usuarios 
+creando nuevas anomalias ya el numero estaria reservado para esta.
+_________________________________________________________________________________________________
+
+ y avisarle al usuario que tenia a cargo el tratamiento  que verifique si fue eficaz. si fue eficaz se cierra, si no 
+ se convoca nuevamente otro tratamiento 
+ al cual se asociara el anterior con todos sus datos.
+
+
+
+ las tarjetas señaladas que estan en edicion o con foco en ellas deberian de  tener un color verde un tono o dos mas arriba 
+ que el fondo para destacar visualmente el foco en ellas
+
+Hay que revisar bien usuario comun solo ve tareas en la que esta involucrado y puede editarlas y completarlas
+mando medio puede ver las tareas de todos los usuarios y editarlas pero no puede agregar ni borrar
+admin puede hacer todo.
+
+usuario comun no ve tratamientos directamente , mando medio los ve y puede editarlos pero no borrarlos ni cerrarlos 
+ni aprobar verificacion e 
+
+_21/04________________________________________________________________________________________________________
+En seguimiento de anomalias el campo clasificacion solo se puede cambiar una vez agregar
+ cartel de " esta seguro de la clasificacion? " , si la anomalia no ha pasado aun a una siguiente etapa se podra
+  habilitar nuevamente el cambio poner cartel " se habilita el cambiode clasificacion" si la anomalia ya paso
+   a otra etapa   cartel " no se puede modificar la clasificacion".   ECHO CON DETALLES
+...........................................................................................................
+cuando creamos tratamiento,(boton crear tratamiento en tratamientos, se le asigna un Id eso es correcto lo
+ que falta es que ahi cambie el estado de la anomalia a tratameinto creado e impacte en detalle de
+ anomalia historial y en participacion y verificaciones,entre clasificacion y antes de analisis de causa ) 
+ tambien este cambio servira para bloquear cambio de clasificacion
+.........................................................................................................
+revisar tareas y acciones son lo mismo?
+.........................................................................................................
+aciones todo usuario puede entrar a acciones pero puede ver todas y solo modificar las que le pertenecen 
+(cargadas en el tratameinto, en analisis, tareas surgidas del tratameinto, responsable)
+........................................................................................................
+
+
+
+Permisos usuario revisar funcion de tarjeta rol y campo nivel de acceso en tarjeta usuarios.
+
+
+Nivel de acceso:  Usuario activo 
+                  Mando medio activo
+                  Administrador
+                  Desarrollador
+                 
+
+
+Rol por usauario y niveles de acceso
+
+    1 menu contextual
+    2 nueva anomalia
+    3 seguimiento anomalia
+    4 accion inmediata
+    5 tratamientos
+      5a creacion de tratamientos
+      5b convocatoria
+      5c Analisis
+    6 acciones
+    7 pendientes
+    8 verificacion de eficacia
+................................................................................................................

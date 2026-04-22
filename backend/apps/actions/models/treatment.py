@@ -1,7 +1,8 @@
-﻿from django.db import models
+from django.db import models
 from django.utils import timezone
 
 from apps.core.models import AuditBaseModel
+from common.storage import treatment_evidence_upload_to, treatment_task_evidence_upload_to
 
 
 class TreatmentStatus(models.TextChoices):
@@ -149,3 +150,39 @@ class TreatmentTaskAnomaly(AuditBaseModel):
         constraints = [
             models.UniqueConstraint(fields=["task", "anomaly"], name="trt_task_anom_uq"),
         ]
+
+
+class TreatmentEvidence(AuditBaseModel):
+    treatment = models.ForeignKey("actions.Treatment", on_delete=models.CASCADE, related_name="evidences")
+    file = models.FileField(upload_to=treatment_evidence_upload_to)
+    original_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100, blank=True)
+    note = models.TextField(blank=True)
+    uploaded_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="treatment_evidences",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = "Evidencia de tratamiento"
+        verbose_name_plural = "Evidencias de tratamiento"
+
+
+class TreatmentTaskEvidence(AuditBaseModel):
+    treatment_task = models.ForeignKey("actions.TreatmentTask", on_delete=models.CASCADE, related_name="evidences")
+    file = models.FileField(upload_to=treatment_task_evidence_upload_to)
+    original_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100, blank=True)
+    note = models.TextField(blank=True)
+    uploaded_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="treatment_task_evidences",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = "Evidencia de tarea de tratamiento"
+        verbose_name_plural = "Evidencias de tareas de tratamiento"

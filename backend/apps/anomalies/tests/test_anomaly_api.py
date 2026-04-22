@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import User
-from apps.anomalies.models import Anomaly, AnomalyParticipant, AnomalyStage, AnomalyStatus, ParticipantRole
+from apps.anomalies.models import Anomaly, AnomalyCodeReservation, AnomalyParticipant, AnomalyStage, AnomalyStatus, ParticipantRole
 from apps.catalog.models import AnomalyOrigin, AnomalyType, Area, Priority, Severity, Site
 
 
@@ -21,6 +21,8 @@ class AnomalyCreateApiTests(APITestCase):
         self.anomaly_type = AnomalyType.objects.create(code="TIPO", name="Tipo")
         self.anomaly_origin = AnomalyOrigin.objects.create(code="ORIG", name="Origen")
         self.severity = Severity.objects.create(code="ALTA", name="Alta")
+        self.severity_alt = Severity.objects.create(code="MEDIA", name="Media")
+        self.severity_extra = Severity.objects.create(code="BAJA", name="Baja")
         self.priority = Priority.objects.create(code="P1", name="Prioridad 1")
 
     def _build_payload(self, suffix: str, *, include_severity: bool = True):
@@ -70,6 +72,32 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertTrue(second.data["code"].startswith(year_prefix))
         self.assertEqual(int(second.data["code"][-4:]), int(first.data["code"][-4:]) + 1)
         self.assertNotEqual(first.data["id"], second.data["id"])
+
+
+    def test_reserve_code_returns_current_year_format(self):
+        response = self.client.post("/api/v1/anomalies/reserve-code/", {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertRegex(response.data["code"], rf"^{timezone.localdate().year}\d{{4}}$")
+
+        second = self.client.post("/api/v1/anomalies/reserve-code/", {}, format="json")
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second.data["id"], response.data["id"])
+
+    def test_create_anomaly_consumes_reserved_code(self):
+        reserve_response = self.client.post("/api/v1/anomalies/reserve-code/", {}, format="json")
+        self.assertEqual(reserve_response.status_code, status.HTTP_201_CREATED)
+
+        payload = self._build_payload("006")
+        payload["code_reservation_id"] = reserve_response.data["id"]
+
+        create_response = self.client.post("/api/v1/anomalies/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_response.data["code"], reserve_response.data["code"])
+
+        reservation = AnomalyCodeReservation.objects.get(pk=reserve_response.data["id"])
+        self.assertEqual(str(reservation.anomaly_id), create_response.data["id"])
+        self.assertIsNotNone(reservation.consumed_at)
 
     def test_create_anomaly_allows_missing_severity(self):
         payload = self._build_payload("003", include_severity=False)
@@ -267,3 +295,101 @@ class AnomalyCreateApiTests(APITestCase):
         ).exists()
         self.assertTrue(participant_exists)
 
+
+
+
+
+
+    def test_classification_only_allows_one_change_without_unlock(self):
+        payload = self._build_payload("007", include_severity=False)
+        create_response = self.client.post("/api/v1/anomalies/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        anomaly_id = create_response.data["id"]
+
+        first_classification = self.client.patch(
+            f"/api/v1/anomalies/{anomaly_id}/",
+            {"severity": str(self.severity.pk)},
+            format="json",
+        )
+        self.assertEqual(first_classification.status_code, status.HTTP_200_OK)
+
+        second_classification = self.client.patch(
+            f"/api/v1/anomalies/{anomaly_id}/",
+            {"severity": str(self.severity_alt.pk)},
+            format="json",
+        )
+        self.assertEqual(second_classification.status_code, status.HTTP_200_OK)
+        self.assertEqual(second_classification.data["classification_change_count"], 1)
+        self.assertFalse(second_classification.data["can_modify_classification"])
+        self.assertTrue(second_classification.data["can_unlock_classification"])
+
+        blocked_change = self.client.patch(
+            f"/api/v1/anomalies/{anomaly_id}/",
+            {"severity": str(self.severity_extra.pk)},
+            format="json",
+        )
+        self.assertEqual(blocked_change.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("No se puede modificar la clasificacion", str(blocked_change.data))
+
+        unlock_response = self.client.post(f"/api/v1/anomalies/{anomaly_id}/classification/unlock/", {}, format="json")
+        self.assertEqual(unlock_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(unlock_response.data["can_modify_classification"])
+
+        unlocked_change = self.client.patch(
+            f"/api/v1/anomalies/{anomaly_id}/",
+            {"severity": str(self.severity_extra.pk)},
+            format="json",
+        )
+        self.assertEqual(unlocked_change.status_code, status.HTTP_200_OK)
+        self.assertEqual(unlocked_change.data["severity"]["id"], str(self.severity_extra.pk))
+
+    def test_unlock_classification_is_blocked_after_stage_advanced(self):
+        payload = self._build_payload("008", include_severity=False)
+        create_response = self.client.post("/api/v1/anomalies/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        anomaly = Anomaly.objects.get(pk=create_response.data["id"])
+        anomaly.severity = self.severity
+        anomaly.current_stage = AnomalyStage.CAUSE_ANALYSIS
+        anomaly.current_status = AnomalyStatus.IN_ANALYSIS
+        anomaly.updated_by = self.user
+        anomaly.save(update_fields=["severity", "current_stage", "current_status", "updated_by", "updated_at"])
+
+        unlock_response = self.client.post(f"/api/v1/anomalies/{anomaly.pk}/classification/unlock/", {}, format="json")
+        self.assertEqual(unlock_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("No se puede modificar la clasificacion", str(unlock_response.data))
+
+
+    def test_create_treatment_moves_anomaly_to_treatment_created_and_blocks_classification(self):
+        payload = self._build_payload("009", include_severity=False)
+        create_response = self.client.post("/api/v1/anomalies/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        anomaly_id = create_response.data["id"]
+        classify_response = self.client.patch(
+            f"/api/v1/anomalies/{anomaly_id}/",
+            {"severity": str(self.severity.pk)},
+            format="json",
+        )
+        self.assertEqual(classify_response.status_code, status.HTTP_200_OK)
+
+        treatment_response = self.client.post(
+            "/api/v1/actions/treatments/",
+            {"primary_anomaly": anomaly_id},
+            format="json",
+        )
+        self.assertEqual(treatment_response.status_code, status.HTTP_201_CREATED)
+
+        detail_response = self.client.get(f"/api/v1/anomalies/{anomaly_id}/")
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.data["current_stage"], AnomalyStage.TREATMENT_CREATED)
+        self.assertEqual(detail_response.data["current_status"], AnomalyStatus.IN_ANALYSIS)
+        self.assertFalse(detail_response.data["can_modify_classification"])
+        self.assertFalse(detail_response.data["can_unlock_classification"])
+
+        treatment_created_entries = [
+            item for item in detail_response.data["status_history"] if item["to_stage"] == AnomalyStage.TREATMENT_CREATED
+        ]
+        self.assertTrue(treatment_created_entries)
+        self.assertIn("tratamiento", treatment_created_entries[0]["comment"].lower())

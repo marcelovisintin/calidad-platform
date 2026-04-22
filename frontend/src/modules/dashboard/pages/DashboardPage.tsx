@@ -14,7 +14,7 @@ import { StatusBadge } from "../../../components/StatusBadge";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
-const primarySections = [
+const primarySectionsBase = [
   {
     title: "Registrar anomalia",
     description: "Carga inicial desde planta con datos rapidos, OF, cantidad afectada y confirmacion inmediata.",
@@ -37,7 +37,7 @@ const primarySections = [
     title: "Acciones y pendientes",
     description: "Accede a acciones asignadas, tareas abiertas y bandeja interna del usuario.",
     to: "/actions/mine",
-    label: "Ver mis acciones",
+    label: "Ver acciones",
   },
   {
     title: "Bandeja interna",
@@ -46,6 +46,13 @@ const primarySections = [
     label: "Abrir bandeja",
   },
 ];
+
+const immediateActionSection = {
+  title: "Accion inmediata",
+  description: "Cierre directo de anomalias clasificadas como accion inmediata, con responsable, evidencia y verificacion de eficacia.",
+  to: "/anomalies/immediate-actions",
+  label: "Gestionar accion inmediata",
+};
 
 const workflowSections = [
   {
@@ -61,7 +68,7 @@ const workflowSections = [
   {
     title: "Plan y ejecucion",
     description: "Definicion de propuestas, acciones, responsables, evidencia y seguimiento.",
-    helper: "Se apoya en Mis acciones, Pendientes y Bandeja.",
+    helper: "Se apoya en Acciones, Pendientes y Bandeja.",
   },
   {
     title: "Verificacion y cierre",
@@ -145,6 +152,10 @@ export function DashboardPage() {
     [adminUser],
   );
 
+  const primarySections = useMemo(
+    () => (adminUser ? [...primarySectionsBase, immediateActionSection] : primarySectionsBase),
+    [adminUser],
+  );
   const { data, loading, error, reload } = useAsyncTask(async () => {
     if (!user) {
       throw new Error("No hay usuario autenticado.");
@@ -251,7 +262,7 @@ export function DashboardPage() {
                       <strong>2. Seguir:</strong> entra a <span>Seguimiento de anomalias</span> para ver estado, etapa e historial.
                     </li>
                     <li>
-                      <strong>3. Ejecutar:</strong> usa <span>Mis acciones</span>, <span>Pendientes</span> y <span>Bandeja</span> para resolver tareas.
+                      <strong>3. Ejecutar:</strong> usa <span>Acciones</span>, <span>Pendientes</span> y <span>Bandeja</span> para resolver tareas.
                     </li>
                     <li>
                       <strong>4. Administrar:</strong> si sos admin, usa el menu contextual para entrar a configuracion y catalogos.
@@ -274,7 +285,7 @@ export function DashboardPage() {
                 </div>
                 <div className="stats-grid compact-grid">
                   <StatCard label="Seguimiento de anomalias" value={data.anomalies.count} hint="Casos reportados por vos" />
-                  <StatCard label="Mis acciones" value={data.myActions.count} hint="Acciones activas o historicas" tone="accent" />
+                  <StatCard label="Acciones" value={data.myActions.count} hint="Acciones activas o historicas" tone="accent" />
                   <StatCard label="Pendientes" value={data.pendingActions.count} hint="Trabajo operativo abierto" tone="warning" />
                   <StatCard label="Bandeja" value={data.inboxSummary.tasks_pending} hint="Solicitudes por resolver" tone="success" />
                 </div>
@@ -387,7 +398,7 @@ export function DashboardPage() {
                       <h2>Acciones pendientes</h2>
                     </div>
                     <Link className="text-link" to="/actions/mine">
-                      Ver mis acciones
+                      Ver acciones
                     </Link>
                   </div>
                   <div className="stack-list">
@@ -457,6 +468,8 @@ export function DashboardPage() {
     </section>
   );
 }
+
+
 
 
 

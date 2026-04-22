@@ -1445,3 +1445,68 @@ small {
 
 
 
+
+.pagination-controls {
+  margin-top: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.pagination-info {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.pagination-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.pagination-actions .button {
+  min-height: 40px;
+  padding: 0.55rem 1rem;
+}
+
+.pagination-page {
+  min-width: 130px;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.actions-filters-grid {
+  align-items: end;
+}
+
+.action-card {
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.action-card.active {
+  border-color: rgba(21, 132, 111, 0.45);
+  box-shadow: 0 8px 20px rgba(12, 56, 53, 0.08);
+}
+
+.action-detail-inline {
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px dashed rgba(21, 132, 111, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.compact-inline-panel {
+  margin-top: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}

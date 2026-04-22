@@ -1,13 +1,15 @@
 ﻿import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createAnomaly } from "../../../api/anomalies";
+import { createAnomaly, reserveAnomalyCode, uploadAnomalyAttachment } from "../../../api/anomalies";
 import { fetchCatalogBootstrap } from "../../../api/catalog";
-import type { CatalogBootstrap } from "../../../api/types";
+import type { AnomalyCodeReservation, CatalogBootstrap } from "../../../api/types";
 import { toOffsetIso } from "../../../app/utils";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
 const CREATED_ANOMALY_KEY = "calidad-platform.last-created-anomaly";
+const EVIDENCE_ACCEPT =
+  "image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.odt,.ods,.zip";
 
 function nowAsLocalDateTime() {
   const date = new Date();
@@ -24,6 +26,12 @@ export function NewAnomalyPage() {
   usePageTitle("Nueva anomalia");
   const navigate = useNavigate();
   const { data: bootstrap, loading, error, reload } = useAsyncTask<CatalogBootstrap>(fetchCatalogBootstrap, []);
+  const {
+    data: codeReservation,
+    loading: codeReservationLoading,
+    error: codeReservationError,
+    reload: reloadCodeReservation,
+  } = useAsyncTask<AnomalyCodeReservation>(reserveAnomalyCode, []);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -38,6 +46,7 @@ export function NewAnomalyPage() {
     origin_process: "",
     detected_at: nowAsLocalDateTime(),
   });
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -113,6 +122,29 @@ export function NewAnomalyPage() {
     setForm((current) => ({ ...current, [name]: value }));
   };
 
+  const handleEvidenceChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (!files.length) {
+      return;
+    }
+    setEvidenceFiles((current) => {
+      const byKey = new Map(current.map((file) => [`${file.name}-${file.size}-${file.lastModified}`, file]));
+      for (const file of files) {
+        byKey.set(`${file.name}-${file.size}-${file.lastModified}`, file);
+      }
+      return Array.from(byKey.values());
+    });
+    event.target.value = "";
+  };
+
+  const handleRemoveEvidence = (index: number) => {
+    setEvidenceFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
+  };
+
+  const handleClearEvidence = () => {
+    setEvidenceFiles([]);
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
@@ -130,9 +162,30 @@ export function NewAnomalyPage() {
         manufacturing_order_number: form.manufacturing_order_number.trim() || undefined,
         affected_quantity: form.affected_quantity ? Number(form.affected_quantity) : undefined,
         affected_process: form.affected_process.trim() || undefined,
+        code_reservation_id: codeReservation?.id,
       });
+
+      let attachmentWarning: string | null = null;
+      if (evidenceFiles.length) {
+        try {
+          await Promise.all(
+            evidenceFiles.map((file) =>
+              uploadAnomalyAttachment(response.id, {
+                file,
+                originalName: file.name,
+              }),
+            ),
+          );
+        } catch (attachmentError) {
+          attachmentWarning =
+            attachmentError instanceof Error
+              ? `La anomalia se registro, pero fallo la carga de evidencias: ${attachmentError.message}`
+              : "La anomalia se registro, pero fallo la carga de evidencias.";
+        }
+      }
+
       window.sessionStorage.setItem(CREATED_ANOMALY_KEY, JSON.stringify(response));
-      navigate("/anomalies/created", { state: { anomaly: response } });
+      navigate("/anomalies/created", { state: { anomaly: response, attachmentWarning } });
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "No se pudo registrar la anomalia.");
     } finally {
@@ -150,8 +203,12 @@ export function NewAnomalyPage() {
         </div>
         <div className="form-hero-card">
           <span className="stat-label">Codigo visible</span>
-          <strong>{`${new Date().getFullYear()}0001`}</strong>
-          <p>Se genera automaticamente con el anio actual y correlativo interno.</p>
+          <strong>{codeReservationLoading ? "Reservando..." : codeReservation?.code || "Sin reserva"}</strong>
+          <p>
+            {codeReservation
+              ? "Codigo reservado para esta carga. No se comparte con otros usuarios mientras completas el registro."
+              : "No se pudo reservar el codigo automaticamente. Reintenta para continuar."}
+          </p>
         </div>
       </header>
 
@@ -169,6 +226,16 @@ export function NewAnomalyPage() {
         <div className="panel warning">
           <strong>Catalogos incompletos.</strong>
           <p>Carga `catalog.bootstrap.json` con sitios, procesos, tipos, origenes y prioridades para habilitar el alta.</p>
+        </div>
+      ) : null}
+
+      {codeReservationError ? (
+        <div className="panel warning">
+          <strong>No se pudo reservar el codigo visible.</strong>
+          <p>{codeReservationError}</p>
+          <button className="button button-secondary" onClick={() => void reloadCodeReservation()} type="button">
+            Reintentar reserva
+          </button>
         </div>
       ) : null}
 
@@ -226,6 +293,33 @@ export function NewAnomalyPage() {
             <label className="field">
               <span>Cantidad de piezas afectadas</span>
               <input inputMode="numeric" min="1" name="affected_quantity" onChange={handleChange} placeholder="Ej. 12" type="number" value={form.affected_quantity} />
+            </label>
+            <label className="field field-span-2">
+              <span>Evidencia objetiva (imagenes, PDF, Word, Excel o texto)</span>
+              <input accept={EVIDENCE_ACCEPT} multiple onChange={handleEvidenceChange} type="file" />
+              <small className="muted-copy">
+                {evidenceFiles.length
+                  ? `${evidenceFiles.length} archivo(s) listo(s) para adjuntar. Podes seleccionar mas de una vez para acumular archivos.`
+                  : "Opcional: podes adjuntar evidencias objetivas junto con el registro."}
+              </small>
+              {evidenceFiles.length ? (
+                <div className="stack-list compact">
+                  {evidenceFiles.map((file, index) => (
+                    <div className="list-card compact" key={`${file.name}-${file.size}-${file.lastModified}`}>
+                      <div>
+                        <strong>{file.name}</strong>
+                        <small>{`${Math.max(1, Math.round(file.size / 1024))} KB`}</small>
+                      </div>
+                      <button className="button button-ghost" onClick={() => handleRemoveEvidence(index)} type="button">
+                        Quitar
+                      </button>
+                    </div>
+                  ))}
+                  <button className="button button-secondary" onClick={handleClearEvidence} type="button">
+                    Limpiar evidencias
+                  </button>
+                </div>
+              ) : null}
             </label>
           </div>
         </section>
@@ -296,7 +390,7 @@ export function NewAnomalyPage() {
             <span>Se guardara con codigo, estado inicial y confirmacion inmediata.</span>
           </div>
           <div className="form-actions">
-            <button className="button button-primary button-large" disabled={submitting || !catalogsReady} type="submit">
+            <button className="button button-primary button-large" disabled={submitting || !catalogsReady || codeReservationLoading || !codeReservation} type="submit">
               {submitting ? "Registrando..." : "Registrar anomalia"}
             </button>
           </div>
@@ -305,3 +399,4 @@ export function NewAnomalyPage() {
     </section>
   );
 }
+

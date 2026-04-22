@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+﻿import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../app/providers/AuthProvider";
 import { CompanyLogo } from "../components/CompanyLogo";
 
@@ -6,8 +6,9 @@ const mainNav = [
   { to: "/dashboard", label: "Inicio", mobileLabel: "Inicio" },
   { to: "/anomalies/new", label: "Nueva", mobileLabel: "Nueva" },
   { to: "/anomalies", label: "Seguimiento de anomalias", mobileLabel: "Anomalias" },
+  { to: "/anomalies/immediate-actions", label: "Accion inmediata", mobileLabel: "Inmediata" },
   { to: "/treatments", label: "Tratamientos", mobileLabel: "Tratamientos" },
-  { to: "/actions/mine", label: "Mis acciones", mobileLabel: "Acciones" },
+  { to: "/actions/mine", label: "Acciones", mobileLabel: "Acciones" },
   { to: "/tasks", label: "Pendientes", mobileLabel: "Pendientes" },
   { to: "/notifications/inbox", label: "Bandeja", mobileLabel: "Bandeja" },
 ];
@@ -94,6 +95,7 @@ export function AppLayout() {
     </div>
   );
 }
+
 
 
 

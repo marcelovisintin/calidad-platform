@@ -1,4 +1,4 @@
-﻿from django.contrib import admin
+from django.contrib import admin
 
 from apps.actions.models import (
     ActionEvidence,
@@ -7,10 +7,12 @@ from apps.actions.models import (
     ActionPlan,
     Treatment,
     TreatmentAnomaly,
+    TreatmentEvidence,
     TreatmentParticipant,
     TreatmentRootCause,
     TreatmentTask,
     TreatmentTaskAnomaly,
+    TreatmentTaskEvidence,
 )
 
 
@@ -98,10 +100,24 @@ class TreatmentParticipantInline(admin.TabularInline):
     extra = 0
 
 
+class TreatmentEvidenceInline(admin.TabularInline):
+    model = TreatmentEvidence
+    extra = 0
+    fields = ("original_name", "content_type", "note", "file", "uploaded_by", "created_at")
+    readonly_fields = ("created_at",)
+
+
 class TreatmentTaskInline(admin.TabularInline):
     model = TreatmentTask
     extra = 0
     fields = ("code", "title", "status", "responsible", "execution_date", "root_cause")
+
+
+class TreatmentTaskEvidenceInline(admin.TabularInline):
+    model = TreatmentTaskEvidence
+    extra = 0
+    fields = ("original_name", "content_type", "note", "file", "uploaded_by", "created_at")
+    readonly_fields = ("created_at",)
 
 
 @admin.register(Treatment)
@@ -111,7 +127,7 @@ class TreatmentAdmin(admin.ModelAdmin):
     list_select_related = ("primary_anomaly",)
     search_fields = ("code", "primary_anomaly__code", "primary_anomaly__title")
     readonly_fields = ("created_at", "updated_at", "row_version")
-    inlines = [TreatmentAnomalyInline, TreatmentParticipantInline, TreatmentTaskInline]
+    inlines = [TreatmentAnomalyInline, TreatmentParticipantInline, TreatmentEvidenceInline, TreatmentTaskInline]
 
 
 @admin.register(TreatmentRootCause)
@@ -127,9 +143,24 @@ class TreatmentTaskAdmin(admin.ModelAdmin):
     list_filter = ("status",)
     list_select_related = ("treatment", "responsible", "root_cause")
     search_fields = ("code", "title", "treatment__code")
+    inlines = [TreatmentTaskEvidenceInline]
 
 
 @admin.register(TreatmentTaskAnomaly)
 class TreatmentTaskAnomalyAdmin(admin.ModelAdmin):
     list_display = ("task", "anomaly", "created_at")
     list_select_related = ("task", "anomaly")
+
+
+@admin.register(TreatmentEvidence)
+class TreatmentEvidenceAdmin(admin.ModelAdmin):
+    list_display = ("treatment", "original_name", "uploaded_by", "created_at")
+    list_select_related = ("treatment", "uploaded_by")
+    search_fields = ("treatment__code", "original_name", "note")
+
+
+@admin.register(TreatmentTaskEvidence)
+class TreatmentTaskEvidenceAdmin(admin.ModelAdmin):
+    list_display = ("treatment_task", "original_name", "uploaded_by", "created_at")
+    list_select_related = ("treatment_task", "uploaded_by")
+    search_fields = ("treatment_task__code", "original_name", "note")

@@ -1,12 +1,15 @@
-from .anomaly_service import (
+﻿from .anomaly_service import (
     add_attachment,
     add_comment,
     add_participant,
     add_proposal,
     create_anomaly,
     record_effectiveness_check,
+    reserve_anomaly_code,
     save_cause_analysis,
     save_classification,
+    unlock_classification_change,
+    save_immediate_action,
     save_initial_verification,
     save_learning,
     snapshot_anomaly,
@@ -24,12 +27,20 @@ __all__ = [
     "add_proposal",
     "create_anomaly",
     "record_effectiveness_check",
+    "reserve_anomaly_code",
     "resolve_status_for_stage",
     "save_cause_analysis",
     "save_classification",
+    "unlock_classification_change",
+    "save_immediate_action",
     "save_initial_verification",
     "save_learning",
     "snapshot_anomaly",
     "transition_anomaly",
     "update_anomaly",
 ]
+
+
+
+
+

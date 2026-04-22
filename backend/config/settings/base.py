@@ -132,7 +132,7 @@ REST_FRAMEWORK = {
         "user": env("DRF_USER_RATE", default="600/hour"),
         "login": env("DRF_LOGIN_RATE", default="10/minute"),
     },
-    "PAGE_SIZE": 25,
+    "PAGE_SIZE": 10,
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
         "rest_framework.renderers.BrowsableAPIRenderer",

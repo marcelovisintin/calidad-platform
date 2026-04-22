@@ -1,16 +1,18 @@
-﻿import { apiRequest } from "./http";
+import { apiRequest } from "./http";
 import type { NotificationInboxItem, NotificationInboxSummary, PagedResponse } from "./types";
 
 export function fetchInboxSummary() {
   return apiRequest<NotificationInboxSummary>("/notifications/inbox/summary/");
 }
 
-export function fetchInbox() {
-  return apiRequest<PagedResponse<NotificationInboxItem>>("/notifications/inbox/");
+export function fetchInbox(page = 1) {
+  const params = new URLSearchParams({ page: String(page), page_size: "10" });
+  return apiRequest<PagedResponse<NotificationInboxItem>>(`/notifications/inbox/?${params.toString()}`);
 }
 
-export function fetchInboxTasks() {
-  return apiRequest<PagedResponse<NotificationInboxItem>>("/notifications/inbox/tasks/");
+export function fetchInboxTasks(page = 1) {
+  const params = new URLSearchParams({ page: String(page), page_size: "10" });
+  return apiRequest<PagedResponse<NotificationInboxItem>>(`/notifications/inbox/tasks/?${params.toString()}`);
 }
 
 export function markInboxItemRead(id: string) {

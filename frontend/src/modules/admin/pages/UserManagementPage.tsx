@@ -8,6 +8,7 @@ import { useAuth } from "../../../app/providers/AuthProvider";
 import { formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
+import { PaginationControls } from "../../../components/PaginationControls";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
@@ -63,6 +64,7 @@ export function UserManagementPage() {
   const adminUser = isAdminUser(user);
 
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [includeInactive, setIncludeInactive] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<UserFormState>(emptyForm);
@@ -76,6 +78,8 @@ export function UserManagementPage() {
       fetchUsers({
         active: includeInactive ? undefined : true,
         q: search,
+        page,
+        pageSize: 10,
       }),
       fetchCatalogBootstrap(),
     ]);
@@ -84,7 +88,7 @@ export function UserManagementPage() {
       users,
       areas: bootstrap.areas,
     };
-  }, [search, includeInactive]);
+  }, [search, includeInactive, page]);
 
   const areas = data?.areas ?? [];
   const users = data?.users.results ?? [];
@@ -215,13 +219,13 @@ export function UserManagementPage() {
         <section className="toolbar-card user-toolbar user-toolbar-compact">
           <input
             name="search"
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => { setSearch(event.target.value); setPage(1); }}
             placeholder="Buscar por usuario, email, nombre o legajo"
             type="search"
             value={search}
           />
           <label className="checkbox-inline">
-            <input checked={includeInactive} onChange={(event) => setIncludeInactive(event.target.checked)} type="checkbox" />
+            <input checked={includeInactive} onChange={(event) => { setIncludeInactive(event.target.checked); setPage(1); }} type="checkbox" />
             Incluir inactivos
           </label>
           <button className="button button-secondary" onClick={resetForm} type="button">
@@ -344,8 +348,8 @@ export function UserManagementPage() {
                       <p>{item.email}</p>
                       <small>
                         {item.username}
-                        {item.sector ? ` � ${item.sector.name}` : " � Sin sector"}
-                        {item.employee_code ? ` � Legajo ${item.employee_code}` : ""}
+                        {item.sector ? ` | ${item.sector.name}` : " | Sin sector"}
+                        {item.employee_code ? ` | Legajo ${item.employee_code}` : ""}
                       </small>
                       <small>Ultima actividad: {formatDateTime(item.last_activity_at)}</small>
                     </div>
@@ -371,6 +375,12 @@ export function UserManagementPage() {
                 ))
               )}
             </div>
+            <PaginationControls
+              page={page}
+              totalCount={data?.users.count || 0}
+              onPageChange={setPage}
+              disabled={loading}
+            />
           </section>
         </div>
       </DataState>

@@ -1,13 +1,15 @@
-from .anomaly import (
+﻿from .anomaly import (
     AnalysisMethod,
     Anomaly,
     AnomalyAttachment,
     AnomalyCauseAnalysis,
     AnomalyClassification,
+    AnomalyCodeReservation,
     AnomalyComment,
     AnomalyCommentType,
     AnomalyEffectivenessCheck,
     AnomalyInitialVerification,
+    AnomalyImmediateAction,
     AnomalyLearning,
     AnomalyParticipant,
     AnomalyProposal,
@@ -24,10 +26,12 @@ __all__ = [
     "AnomalyAttachment",
     "AnomalyCauseAnalysis",
     "AnomalyClassification",
+    "AnomalyCodeReservation",
     "AnomalyComment",
     "AnomalyCommentType",
     "AnomalyEffectivenessCheck",
     "AnomalyInitialVerification",
+    "AnomalyImmediateAction",
     "AnomalyLearning",
     "AnomalyParticipant",
     "AnomalyProposal",
@@ -37,3 +41,5 @@ __all__ = [
     "ParticipantRole",
     "STAGE_STATUS_MAP",
 ]
+
+

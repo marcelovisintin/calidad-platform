@@ -4,9 +4,11 @@ import type { NotificationInboxItem } from "../../../api/types";
 import { formatDateTime, humanizeToken } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
+import { PaginationControls } from "../../../components/PaginationControls";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
+import { useState } from "react";
 
 function resolveTaskLink(item: NotificationInboxItem) {
   if (item.source_type === "anomaly" && item.source_id) {
@@ -20,7 +22,8 @@ function resolveTaskLink(item: NotificationInboxItem) {
 
 export function PendingTasksPage() {
   usePageTitle("Tareas pendientes");
-  const { data, loading, error, reload } = useAsyncTask(fetchInboxTasks, []);
+  const [page, setPage] = useState(1);
+  const { data, loading, error, reload } = useAsyncTask(() => fetchInboxTasks(page), [page]);
 
   const handleResolve = async (id: string, taskStatus: string) => {
     try {
@@ -31,11 +34,20 @@ export function PendingTasksPage() {
     }
   };
 
+  const totalCount = data?.count ?? 0;
+
   return (
     <section className="page-shell">
       <PageHeader title="Tareas pendientes" description="Pendientes operativos y solicitudes de participacion del usuario." />
 
-      <DataState loading={loading} error={error} onRetry={reload} empty={!data?.results.length} emptyTitle="No hay tareas pendientes" emptyDescription="Las solicitudes de participacion y acciones pendientes apareceran aca.">
+      <DataState
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        empty={totalCount === 0}
+        emptyTitle="No hay tareas pendientes"
+        emptyDescription="Las solicitudes de participacion y acciones pendientes apareceran aca."
+      >
         <div className="stack-list">
           {data?.results.map((item) => (
             <article className="panel" key={item.id}>
@@ -58,8 +70,9 @@ export function PendingTasksPage() {
             </article>
           ))}
         </div>
+
+        <PaginationControls page={page} totalCount={totalCount} onPageChange={setPage} disabled={loading} />
       </DataState>
     </section>
   );
 }
-

@@ -1,4 +1,4 @@
-﻿from .action import (
+from .action import (
     ActionEvidence,
     ActionHistoryEvent,
     ActionItem,
@@ -10,6 +10,7 @@
 from .treatment import (
     Treatment,
     TreatmentAnomaly,
+    TreatmentEvidence,
     TreatmentMethod,
     TreatmentParticipant,
     TreatmentParticipantRole,
@@ -17,6 +18,7 @@ from .treatment import (
     TreatmentStatus,
     TreatmentTask,
     TreatmentTaskAnomaly,
+    TreatmentTaskEvidence,
     TreatmentTaskStatus,
 )
 
@@ -30,6 +32,7 @@ __all__ = [
     "ActionPlanStatus",
     "Treatment",
     "TreatmentAnomaly",
+    "TreatmentEvidence",
     "TreatmentMethod",
     "TreatmentParticipant",
     "TreatmentParticipantRole",
@@ -37,5 +40,6 @@ __all__ = [
     "TreatmentStatus",
     "TreatmentTask",
     "TreatmentTaskAnomaly",
+    "TreatmentTaskEvidence",
     "TreatmentTaskStatus",
 ]

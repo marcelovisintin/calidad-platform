@@ -1,4 +1,4 @@
-﻿import { appConfig } from "../app/config";
+import { appConfig } from "../app/config";
 import { apiRequest } from "./http";
 import type { CatalogBootstrap, CatalogEntity, CatalogManagementItem, PagedResponse } from "./types";
 
@@ -53,8 +53,14 @@ export async function fetchCatalogBootstrap(): Promise<CatalogBootstrap> {
   }
 }
 
-export function fetchCatalogItems(entity: CatalogEntity, params: { active?: boolean; q?: string } = {}) {
+export function fetchCatalogItems(
+  entity: CatalogEntity,
+  params: { active?: boolean; q?: string; page?: number; pageSize?: number } = {},
+) {
   const query = new URLSearchParams();
+  query.set("page", String(params.page ?? 1));
+  query.set("page_size", String(params.pageSize ?? 100));
+
   if (typeof params.active === "boolean") {
     query.set("active", String(params.active));
   }
@@ -62,8 +68,7 @@ export function fetchCatalogItems(entity: CatalogEntity, params: { active?: bool
     query.set("q", params.q.trim());
   }
 
-  const suffix = query.toString();
-  return apiRequest<PagedResponse<CatalogManagementItem>>(`/catalog/${entity}/${suffix ? `?${suffix}` : ""}`);
+  return apiRequest<PagedResponse<CatalogManagementItem>>(`/catalog/${entity}/?${query.toString()}`);
 }
 
 export function createCatalogItem(entity: CatalogEntity, payload: Record<string, unknown>) {

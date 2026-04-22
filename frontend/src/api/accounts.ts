@@ -1,4 +1,4 @@
-﻿import { apiRequest } from "./http";
+import { apiRequest } from "./http";
 import type { CurrentUser, LoginResponse, PagedResponse, UserDirectoryItem, UserWritePayload } from "./types";
 
 export function login(identifier: string, password: string) {
@@ -26,8 +26,12 @@ export function changeOwnPassword(payload: { current_password: string; new_passw
     body: payload,
   });
 }
-export function fetchUsers(params: { active?: boolean; q?: string } = {}) {
+
+export function fetchUsers(params: { active?: boolean; q?: string; page?: number; pageSize?: number } = {}) {
   const query = new URLSearchParams();
+  query.set("page", String(params.page ?? 1));
+  query.set("page_size", String(params.pageSize ?? 100));
+
   if (typeof params.active === "boolean") {
     query.set("active", String(params.active));
   }
@@ -35,8 +39,7 @@ export function fetchUsers(params: { active?: boolean; q?: string } = {}) {
     query.set("q", params.q.trim());
   }
 
-  const suffix = query.toString();
-  return apiRequest<PagedResponse<UserDirectoryItem>>(`/accounts/users/${suffix ? `?${suffix}` : ""}`);
+  return apiRequest<PagedResponse<UserDirectoryItem>>(`/accounts/users/?${query.toString()}`);
 }
 
 export function createUser(payload: UserWritePayload) {
@@ -58,4 +61,3 @@ export function deleteUser(userId: string) {
     method: "DELETE",
   });
 }
-

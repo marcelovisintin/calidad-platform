@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -23,6 +23,7 @@ class AnomalyStage(models.TextChoices):
     CONTAINMENT = "containment", "Contencion"
     INITIAL_VERIFICATION = "initial_verification", "Verificacion inicial"
     CLASSIFICATION = "classification", "Clasificacion"
+    TREATMENT_CREATED = "treatment_created", "Tratamiento creado"
     CAUSE_ANALYSIS = "cause_analysis", "Analisis de causa"
     PROPOSALS = "proposals", "Propuestas"
     ACTION_PLAN = "action_plan", "Plan de accion"
@@ -38,6 +39,7 @@ STAGE_STATUS_MAP = {
     AnomalyStage.CONTAINMENT: AnomalyStatus.IN_EVALUATION,
     AnomalyStage.INITIAL_VERIFICATION: AnomalyStatus.IN_EVALUATION,
     AnomalyStage.CLASSIFICATION: AnomalyStatus.IN_EVALUATION,
+    AnomalyStage.TREATMENT_CREATED: AnomalyStatus.IN_ANALYSIS,
     AnomalyStage.CAUSE_ANALYSIS: AnomalyStatus.IN_ANALYSIS,
     AnomalyStage.PROPOSALS: AnomalyStatus.IN_ANALYSIS,
     AnomalyStage.ACTION_PLAN: AnomalyStatus.IN_TREATMENT,
@@ -135,6 +137,8 @@ class Anomaly(AuditBaseModel):
     last_transition_at = models.DateTimeField(null=True, blank=True)
     containment_summary = models.TextField(blank=True)
     classification_summary = models.TextField(blank=True)
+    classification_change_count = models.PositiveIntegerField(default=0)
+    classification_change_unlocked = models.BooleanField(default=False)
     root_cause_summary = models.TextField(blank=True)
     resolution_summary = models.TextField(blank=True)
     result_summary = models.TextField(blank=True)
@@ -169,6 +173,47 @@ class Anomaly(AuditBaseModel):
 
     def __str__(self) -> str:
         return f"{self.code} - {self.title}"
+
+
+class AnomalyCodeReservation(AuditBaseModel):
+    code = models.CharField(max_length=50, unique=True)
+    year = models.PositiveIntegerField()
+    sequence = models.PositiveIntegerField()
+    reserved_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="anomaly_code_reservations",
+    )
+    anomaly = models.OneToOneField(
+        "anomalies.Anomaly",
+        on_delete=models.SET_NULL,
+        related_name="code_reservation",
+        null=True,
+        blank=True,
+    )
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    consumed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="anomaly_code_reservations_consumed",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["year", "sequence"], name="anom_code_resv_year_seq_idx"),
+            models.Index(fields=["reserved_by", "consumed_at"], name="anom_code_resv_user_cons_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=["year", "sequence"], name="anom_code_resv_year_seq_uq"),
+        ]
+        verbose_name = "Reserva de codigo de anomalia"
+        verbose_name_plural = "Reservas de codigos de anomalia"
+
+    def __str__(self) -> str:
+        return self.code
 
 
 class AnomalyStatusHistory(AuditBaseModel):
@@ -374,4 +419,23 @@ class AnomalyLearning(AuditBaseModel):
         verbose_name = "Estandarizacion y aprendizaje"
         verbose_name_plural = "Estandarizacion y aprendizaje"
 
+
+
+class AnomalyImmediateAction(AuditBaseModel):
+    anomaly = models.OneToOneField("anomalies.Anomaly", on_delete=models.CASCADE, related_name="immediate_action")
+    responsible = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="anomaly_immediate_actions",
+    )
+    action_date = models.DateField()
+    effectiveness_verified_at = models.DateTimeField()
+    observation = models.TextField()
+    actions_taken = models.TextField()
+    effectiveness_comment = models.TextField(blank=True)
+    closure_comment = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Accion inmediata de anomalia"
+        verbose_name_plural = "Acciones inmediatas de anomalia"
 

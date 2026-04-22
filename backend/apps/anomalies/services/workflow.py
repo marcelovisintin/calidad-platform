@@ -32,6 +32,12 @@ ALLOWED_STAGE_TRANSITIONS = {
         AnomalyStage.CAUSE_ANALYSIS,
     },
     AnomalyStage.CLASSIFICATION: {
+        AnomalyStage.TREATMENT_CREATED,
+        AnomalyStage.CAUSE_ANALYSIS,
+        AnomalyStage.PROPOSALS,
+        AnomalyStage.ACTION_PLAN,
+    },
+    AnomalyStage.TREATMENT_CREATED: {
         AnomalyStage.CAUSE_ANALYSIS,
         AnomalyStage.PROPOSALS,
         AnomalyStage.ACTION_PLAN,
@@ -65,6 +71,7 @@ ALLOWED_STAGE_TRANSITIONS = {
 }
 
 REOPENABLE_STAGES = {
+    AnomalyStage.TREATMENT_CREATED,
     AnomalyStage.CAUSE_ANALYSIS,
     AnomalyStage.PROPOSALS,
     AnomalyStage.ACTION_PLAN,
@@ -103,7 +110,7 @@ def ensure_transition_permission(*, user, target_status: str, target_stage: str)
         _require_any_permission(user, {PERMISSION_CLASSIFY_ANOMALY}, "No tiene permisos para clasificar la anomalia.")
         return
 
-    if target_stage in {AnomalyStage.CAUSE_ANALYSIS, AnomalyStage.PROPOSALS}:
+    if target_stage in {AnomalyStage.TREATMENT_CREATED, AnomalyStage.CAUSE_ANALYSIS, AnomalyStage.PROPOSALS}:
         _require_any_permission(user, {PERMISSION_ANALYZE_ANOMALY}, "No tiene permisos para analizar la anomalia.")
         return
 

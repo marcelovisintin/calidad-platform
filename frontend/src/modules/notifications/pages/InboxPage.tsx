@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { fetchInbox, fetchInboxSummary, markInboxItemRead } from "../../../api/notifications";
 import { formatDateTime, humanizeToken } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
+import { PaginationControls } from "../../../components/PaginationControls";
 import { StatCard } from "../../../components/StatCard";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
@@ -9,10 +11,11 @@ import { usePageTitle } from "../../../hooks/usePageTitle";
 
 export function InboxPage() {
   usePageTitle("Bandeja interna");
+  const [page, setPage] = useState(1);
   const { data, loading, error, reload } = useAsyncTask(async () => {
-    const [summary, inbox] = await Promise.all([fetchInboxSummary(), fetchInbox()]);
+    const [summary, inbox] = await Promise.all([fetchInboxSummary(), fetchInbox(page)]);
     return { summary, inbox };
-  }, []);
+  }, [page]);
 
   const handleRead = async (id: string) => {
     try {
@@ -22,6 +25,8 @@ export function InboxPage() {
       window.alert(err instanceof Error ? err.message : "No se pudo actualizar la bandeja.");
     }
   };
+
+  const totalCount = data?.inbox.count ?? 0;
 
   return (
     <section className="page-shell">
@@ -47,7 +52,7 @@ export function InboxPage() {
                     </div>
                     <StatusBadge value={item.task_status || item.delivery_status} />
                   </div>
-                  <small>{humanizeToken(item.category)} · {formatDateTime(item.created_at)}</small>
+                  <small>{humanizeToken(item.category)} Â· {formatDateTime(item.created_at)}</small>
                   <div className="form-actions">
                     {!item.read_at ? (
                       <button className="button button-secondary" onClick={() => void handleRead(item.id)} type="button">Marcar leida</button>
@@ -58,10 +63,11 @@ export function InboxPage() {
                 </article>
               ))}
             </div>
+
+            <PaginationControls page={page} totalCount={totalCount} onPageChange={setPage} disabled={loading} />
           </>
         ) : null}
       </DataState>
     </section>
   );
 }
-

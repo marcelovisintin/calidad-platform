@@ -1,13 +1,15 @@
-from django.contrib import admin
+﻿from django.contrib import admin
 
 from apps.anomalies.models import (
     Anomaly,
     AnomalyAttachment,
     AnomalyCauseAnalysis,
     AnomalyClassification,
+    AnomalyCodeReservation,
     AnomalyComment,
     AnomalyEffectivenessCheck,
     AnomalyInitialVerification,
+    AnomalyImmediateAction,
     AnomalyLearning,
     AnomalyParticipant,
     AnomalyProposal,
@@ -119,6 +121,21 @@ class AnomalyLearningAdmin(admin.ModelAdmin):
     search_fields = ("anomaly__code", "recorded_by__username", "lessons_learned")
 
 
+
+@admin.register(AnomalyImmediateAction)
+class AnomalyImmediateActionAdmin(admin.ModelAdmin):
+    list_display = ("anomaly", "responsible", "action_date", "effectiveness_verified_at")
+    list_select_related = ("anomaly", "responsible")
+    search_fields = ("anomaly__code", "responsible__username", "observation", "actions_taken")
+
+
+@admin.register(AnomalyCodeReservation)
+class AnomalyCodeReservationAdmin(admin.ModelAdmin):
+    list_display = ("code", "reserved_by", "anomaly", "created_at", "consumed_at")
+    list_select_related = ("reserved_by", "anomaly", "consumed_by")
+    search_fields = ("code", "reserved_by__username", "anomaly__code")
+    readonly_fields = ("code", "year", "sequence", "reserved_by", "anomaly", "consumed_at", "consumed_by", "created_at", "updated_at")
+
 @admin.register(AnomalyStatusHistory)
 class AnomalyStatusHistoryAdmin(admin.ModelAdmin):
     list_display = ("anomaly", "from_status", "to_status", "from_stage", "to_stage", "changed_by", "changed_at")
@@ -154,3 +171,5 @@ class AnomalyProposalAdmin(admin.ModelAdmin):
     list_select_related = ("anomaly", "proposed_by")
     list_filter = ("is_selected",)
     search_fields = ("anomaly__code", "title", "description", "proposed_by__username")
+
+

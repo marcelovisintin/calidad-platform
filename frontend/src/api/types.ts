@@ -1,4 +1,4 @@
-export type UUID = string;
+﻿export type UUID = string;
 
 export interface SiteSummary {
   id: UUID;
@@ -150,6 +150,18 @@ export interface ActionItemSummary {
   action_type?: CatalogSummary;
   priority?: CatalogSummary | null;
   assigned_to?: UserSummary | null;
+  anomaly?: {
+    id: UUID;
+    code: string;
+    title: string;
+    current_status: string;
+    current_stage: string;
+  } | null;
+  treatments?: Array<{
+    id: UUID;
+    code: string;
+    status: string;
+  }>;
   created_at?: string;
   updated_at?: string;
   row_version?: number;
@@ -201,6 +213,15 @@ export interface ActionPlanSummary {
 }
 
 
+export interface AnomalyAttachmentSummary {
+  id: UUID;
+  original_name: string;
+  content_type: string;
+  file_url: string;
+  uploaded_by?: UserSummary | null;
+  created_at: string;
+}
+
 export interface TreatmentAnomalySummary {
   id: UUID;
   code: string;
@@ -212,6 +233,7 @@ export interface TreatmentAnomalySummary {
   area?: CatalogSummary | null;
   anomaly_origin?: CatalogSummary | null;
   detected_at?: string;
+  attachments: AnomalyAttachmentSummary[];
 }
 
 export interface TreatmentParticipant {
@@ -235,6 +257,26 @@ export interface TreatmentTaskAnomalyLink {
   anomaly: TreatmentAnomalySummary;
 }
 
+export interface TreatmentEvidence {
+  id: UUID;
+  original_name: string;
+  content_type: string;
+  note?: string;
+  file_url: string;
+  uploaded_by?: UserSummary | null;
+  created_at: string;
+}
+
+export interface TreatmentTaskEvidence {
+  id: UUID;
+  original_name: string;
+  content_type: string;
+  note?: string;
+  file_url: string;
+  uploaded_by?: UserSummary | null;
+  created_at: string;
+}
+
 export interface TreatmentTask {
   id: UUID;
   code: string;
@@ -246,6 +288,38 @@ export interface TreatmentTask {
   root_cause?: UUID | null;
   is_overdue?: boolean;
   anomaly_links: TreatmentTaskAnomalyLink[];
+  evidences: TreatmentTaskEvidence[];
+  created_at: string;
+  updated_at: string;
+}
+
+
+export interface TreatmentTaskHistoryRootCause {
+  id: UUID;
+  sequence: number;
+  description: string;
+}
+
+export interface TreatmentTaskHistoryTreatment {
+  id: UUID;
+  code: string;
+  status: string;
+  primary_anomaly: TreatmentAnomalySummary;
+}
+
+export interface TreatmentTaskHistory {
+  id: UUID;
+  code: string;
+  title: string;
+  description: string;
+  status: string;
+  execution_date?: string | null;
+  is_overdue?: boolean;
+  responsible?: UserSummary | null;
+  treatment: TreatmentTaskHistoryTreatment;
+  anomalies: TreatmentAnomalySummary[];
+  root_cause?: TreatmentTaskHistoryRootCause | null;
+  evidences: TreatmentTaskEvidence[];
   created_at: string;
   updated_at: string;
 }
@@ -276,6 +350,7 @@ export interface TreatmentDetail extends TreatmentSummary {
   anomaly_links: TreatmentAnomalyLink[];
   root_causes: TreatmentRootCause[];
   tasks: TreatmentTask[];
+  evidences: TreatmentEvidence[];
   row_version: number;
 }
 
@@ -342,6 +417,10 @@ export interface AnomalyListItem {
   anomaly_origin?: CatalogSummary;
   severity?: CatalogSummary;
   priority?: CatalogSummary;
+  can_modify_classification?: boolean;
+  can_unlock_classification?: boolean;
+  classification_change_count?: number;
+  classification_change_unlocked?: boolean;
   manufacturing_order_number?: string;
   affected_quantity?: number | null;
   affected_process?: string;
@@ -440,6 +519,35 @@ export interface AnomalyLearning {
   shared_at?: string | null;
 }
 
+export interface AnomalyImmediateAction {
+  id: UUID;
+  responsible?: UserSummary | null;
+  action_date: string;
+  effectiveness_verified_at: string;
+  observation: string;
+  actions_taken: string;
+  effectiveness_comment?: string;
+  closure_comment?: string;
+}
+
+
+
+export interface AnomalyTreatmentTaskSummary {
+  id: UUID;
+  code?: string;
+  title: string;
+  description: string;
+  status: string;
+  execution_date?: string | null;
+  is_overdue?: boolean;
+  responsible?: UserSummary | null;
+  treatment?: {
+    id: UUID;
+    code: string;
+    status: string;
+  } | null;
+  root_cause_description?: string;
+}
 export interface AnomalyDetail extends AnomalyListItem {
   description: string;
   duplicate_of?: AnomalyListItem | null;
@@ -453,14 +561,7 @@ export interface AnomalyDetail extends AnomalyListItem {
   closure_comment?: string;
   cancellation_reason?: string;
   comments: AnomalyComment[];
-  attachments: Array<{
-    id: UUID;
-    original_name: string;
-    content_type: string;
-    file_url: string;
-    uploaded_by?: UserSummary | null;
-    created_at: string;
-  }>;
+  attachments: AnomalyAttachmentSummary[];
   participants: Array<{
     id: UUID;
     user?: UserSummary | null;
@@ -476,12 +577,33 @@ export interface AnomalyDetail extends AnomalyListItem {
   classification?: AnomalyClassification | null;
   cause_analysis?: AnomalyCauseAnalysis | null;
   learning?: AnomalyLearning | null;
+  immediate_action?: AnomalyImmediateAction | null;
   action_plans: ActionPlanSummary[];
+  treatment_tasks: AnomalyTreatmentTaskSummary[];
   created_at: string;
   updated_at: string;
   row_version: number;
 }
 
+export interface ImmediateActionPayload {
+  responsible: UUID;
+  action_date: string;
+  effectiveness_verified_at: string;
+  observation: string;
+  actions_taken: string;
+  effectiveness_comment?: string;
+  closure_comment?: string;
+}
+
+
+export interface AnomalyCodeReservation {
+  id: UUID;
+  code: string;
+  year: number;
+  sequence: number;
+  created_at: string;
+  reserved_by?: UserSummary | null;
+}
 export interface AnomalyCreatePayload {
   title: string;
   description: string;
@@ -494,6 +616,7 @@ export interface AnomalyCreatePayload {
   manufacturing_order_number?: string;
   affected_quantity?: number;
   affected_process?: string;
+  code_reservation_id?: UUID;
 }
 
 export interface CatalogBootstrap {
@@ -507,6 +630,18 @@ export interface CatalogBootstrap {
   priorities: CatalogSummary[];
   actionTypes: CatalogSummary[];
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

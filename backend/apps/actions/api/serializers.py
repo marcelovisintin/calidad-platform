@@ -41,6 +41,12 @@ class AnomalySummarySerializer(serializers.Serializer):
     current_stage = serializers.CharField(read_only=True)
 
 
+class TreatmentSummarySerializer(serializers.Serializer):
+    id = serializers.UUIDField(read_only=True)
+    code = serializers.CharField(read_only=True)
+    status = serializers.CharField(read_only=True)
+
+
 class CatalogSummarySerializer(serializers.Serializer):
     id = serializers.UUIDField(read_only=True)
     code = serializers.CharField(read_only=True)
@@ -87,6 +93,8 @@ class ActionItemBaseSerializer(serializers.ModelSerializer):
     action_type = CatalogSummarySerializer(read_only=True)
     priority = CatalogSummarySerializer(read_only=True)
     assigned_to = UserSummarySerializer(read_only=True)
+    anomaly = serializers.SerializerMethodField()
+    treatments = serializers.SerializerMethodField()
 
     class Meta:
         model = ActionItem
@@ -107,10 +115,53 @@ class ActionItemBaseSerializer(serializers.ModelSerializer):
             "action_type",
             "priority",
             "assigned_to",
+            "anomaly",
+            "treatments",
             "created_at",
             "updated_at",
             "row_version",
         )
+
+    def get_anomaly(self, obj):
+        anomaly = getattr(getattr(obj, "action_plan", None), "anomaly", None)
+        if not anomaly:
+            return None
+        return {
+            "id": anomaly.id,
+            "code": anomaly.code,
+            "title": anomaly.title,
+            "current_status": anomaly.current_status,
+            "current_stage": anomaly.current_stage,
+        }
+
+    def get_treatments(self, obj):
+        anomaly = getattr(getattr(obj, "action_plan", None), "anomaly", None)
+        if not anomaly:
+            return []
+
+        aggregated = {}
+
+        for treatment in anomaly.primary_treatments.all():
+            aggregated[str(treatment.id)] = {
+                "id": treatment.id,
+                "code": treatment.code,
+                "status": treatment.status,
+            }
+
+        for link in anomaly.treatment_links.all():
+            treatment = getattr(link, "treatment", None)
+            if not treatment:
+                continue
+            aggregated.setdefault(
+                str(treatment.id),
+                {
+                    "id": treatment.id,
+                    "code": treatment.code,
+                    "status": treatment.status,
+                },
+            )
+
+        return TreatmentSummarySerializer(aggregated.values(), many=True).data
 
 
 class ActionItemListSerializer(ActionItemBaseSerializer):

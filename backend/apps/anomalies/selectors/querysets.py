@@ -1,4 +1,4 @@
-from django.db.models import Prefetch
+﻿from django.db.models import Prefetch
 
 from apps.accounts.constants import (
     PERMISSION_ANALYZE_ANOMALY,
@@ -90,6 +90,7 @@ def build_anomaly_queryset(*, detailed: bool = False):
             "classification__classified_by",
             "cause_analysis__analyzed_by",
             "learning__recorded_by",
+            "immediate_action__responsible",
         )
     return queryset
 

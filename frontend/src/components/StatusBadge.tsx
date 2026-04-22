@@ -32,6 +32,7 @@ const toneMap: Record<string, string> = {
   desarrollador: "warning",
   draft: "neutral",
   containment: "warning",
+  treatment_created: "info",
   cause_analysis: "accent",
   action_plan: "info",
   execution_follow_up: "accent",

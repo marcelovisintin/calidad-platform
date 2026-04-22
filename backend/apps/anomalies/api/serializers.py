@@ -1,18 +1,23 @@
-﻿from django.urls import reverse
+﻿from pathlib import Path
+
+from django.db.models import Q
+from django.urls import reverse
 from rest_framework import serializers
 
 from apps.accounts.models import User
-from apps.actions.models import ActionItem, ActionItemStatus, ActionPlan
+from apps.actions.models import ActionItem, ActionItemStatus, ActionPlan, TreatmentTask
 from apps.anomalies.models import (
     AnalysisMethod,
     Anomaly,
     AnomalyAttachment,
     AnomalyCauseAnalysis,
     AnomalyClassification,
+    AnomalyCodeReservation,
     AnomalyComment,
     AnomalyCommentType,
     AnomalyEffectivenessCheck,
     AnomalyInitialVerification,
+    AnomalyImmediateAction,
     AnomalyLearning,
     AnomalyParticipant,
     AnomalyProposal,
@@ -22,6 +27,7 @@ from apps.anomalies.models import (
     ParticipantRole,
 )
 from apps.catalog.models import Area, Line, Site
+from apps.anomalies.services.classification_rules import can_modify_classification, can_unlock_classification_change
 
 DATETIME_INPUT_STYLE = {
     "input_type": "text",
@@ -29,6 +35,65 @@ DATETIME_INPUT_STYLE = {
 }
 
 OPEN_ACTION_ITEM_STATUSES = {ActionItemStatus.PENDING, ActionItemStatus.IN_PROGRESS}
+
+ALLOWED_EVIDENCE_CONTENT_TYPES = {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/plain",
+    "text/csv",
+    "application/rtf",
+    "application/vnd.oasis.opendocument.text",
+    "application/vnd.oasis.opendocument.spreadsheet",
+    "application/zip",
+    "application/x-zip-compressed",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "image/bmp",
+    "image/tiff",
+    "image/heic",
+    "image/heif",
+}
+
+ALLOWED_EVIDENCE_EXTENSIONS = {
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".txt",
+    ".csv",
+    ".rtf",
+    ".odt",
+    ".ods",
+    ".zip",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".gif",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".heic",
+    ".heif",
+}
+
+def _validate_objective_file(file_obj):
+    content_type = (getattr(file_obj, "content_type", "") or "").lower()
+    file_name = (getattr(file_obj, "name", "") or "").lower()
+    extension = Path(file_name).suffix
+
+    if content_type in ALLOWED_EVIDENCE_CONTENT_TYPES:
+        return file_obj
+    if extension in ALLOWED_EVIDENCE_EXTENSIONS:
+        return file_obj
+
+    raise serializers.ValidationError("Solo se permiten evidencias en formato imagen, PDF, Word, Excel, texto o ZIP.")
 
 
 class UserSummarySerializer(serializers.Serializer):
@@ -75,6 +140,14 @@ class CurrentResponsibleMixin:
     def get_current_responsible(self, obj):
         responsible = self._resolve_current_responsible(obj)
         return UserSummarySerializer(responsible).data if responsible else None
+
+
+class ClassificationControlsMixin:
+    def get_can_modify_classification(self, obj):
+        return can_modify_classification(obj)
+
+    def get_can_unlock_classification(self, obj):
+        return can_unlock_classification_change(obj)
 
 
 class SiteSummarySerializer(serializers.ModelSerializer):
@@ -144,6 +217,41 @@ class ActionPlanSummarySerializer(serializers.ModelSerializer):
         fields = ("id", "status", "approved_at", "owner", "items")
 
 
+class TreatmentTaskPlanSerializer(serializers.ModelSerializer):
+    responsible = UserSummarySerializer(read_only=True)
+    is_overdue = serializers.BooleanField(read_only=True)
+    treatment = serializers.SerializerMethodField()
+    root_cause_description = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TreatmentTask
+        fields = (
+            "id",
+            "code",
+            "title",
+            "description",
+            "status",
+            "execution_date",
+            "is_overdue",
+            "responsible",
+            "treatment",
+            "root_cause_description",
+        )
+
+    def get_treatment(self, obj):
+        treatment = getattr(obj, "treatment", None)
+        if not treatment:
+            return None
+        return {
+            "id": treatment.id,
+            "code": treatment.code,
+            "status": treatment.status,
+        }
+
+    def get_root_cause_description(self, obj):
+        root_cause = getattr(obj, "root_cause", None)
+        return getattr(root_cause, "description", "") if root_cause else ""
+
 class AnomalyStatusHistorySerializer(serializers.ModelSerializer):
     changed_by = UserSummarySerializer(read_only=True)
 
@@ -168,6 +276,14 @@ class AnomalyCommentSerializer(serializers.ModelSerializer):
         model = AnomalyComment
         fields = ("id", "body", "comment_type", "author", "created_at")
 
+
+
+class AnomalyCodeReservationSerializer(serializers.ModelSerializer):
+    reserved_by = UserSummarySerializer(read_only=True)
+
+    class Meta:
+        model = AnomalyCodeReservation
+        fields = ("id", "code", "year", "sequence", "reserved_by", "created_at")
 
 class AnomalyAttachmentSerializer(serializers.ModelSerializer):
     uploaded_by = UserSummarySerializer(read_only=True)
@@ -305,7 +421,24 @@ class AnomalyLearningSerializer(serializers.ModelSerializer):
         )
 
 
-class AnomalyListSerializer(CurrentResponsibleMixin, serializers.ModelSerializer):
+
+class AnomalyImmediateActionSerializer(serializers.ModelSerializer):
+    responsible = UserSummarySerializer(read_only=True)
+
+    class Meta:
+        model = AnomalyImmediateAction
+        fields = (
+            "id",
+            "responsible",
+            "action_date",
+            "effectiveness_verified_at",
+            "observation",
+            "actions_taken",
+            "effectiveness_comment",
+            "closure_comment",
+        )
+
+class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin, serializers.ModelSerializer):
     site = SiteSummarySerializer(read_only=True)
     area = AreaSummarySerializer(read_only=True)
     line = LineSummarySerializer(read_only=True)
@@ -316,6 +449,8 @@ class AnomalyListSerializer(CurrentResponsibleMixin, serializers.ModelSerializer
     anomaly_origin = CatalogSummarySerializer(read_only=True)
     severity = CatalogSummarySerializer(read_only=True)
     priority = CatalogSummarySerializer(read_only=True)
+    can_modify_classification = serializers.SerializerMethodField()
+    can_unlock_classification = serializers.SerializerMethodField()
 
     class Meta:
         model = Anomaly
@@ -336,6 +471,10 @@ class AnomalyListSerializer(CurrentResponsibleMixin, serializers.ModelSerializer
             "anomaly_origin",
             "severity",
             "priority",
+            "can_modify_classification",
+            "can_unlock_classification",
+            "classification_change_count",
+            "classification_change_unlocked",
             "manufacturing_order_number",
             "affected_quantity",
             "affected_process",
@@ -345,7 +484,7 @@ class AnomalyListSerializer(CurrentResponsibleMixin, serializers.ModelSerializer
         )
 
 
-class AnomalyDetailSerializer(CurrentResponsibleMixin, serializers.ModelSerializer):
+class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMixin, serializers.ModelSerializer):
     site = SiteSummarySerializer(read_only=True)
     area = AreaSummarySerializer(read_only=True)
     line = LineSummarySerializer(read_only=True)
@@ -357,6 +496,8 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, serializers.ModelSerializ
     anomaly_origin = CatalogSummarySerializer(read_only=True)
     severity = CatalogSummarySerializer(read_only=True)
     priority = CatalogSummarySerializer(read_only=True)
+    can_modify_classification = serializers.SerializerMethodField()
+    can_unlock_classification = serializers.SerializerMethodField()
     comments = AnomalyCommentSerializer(many=True, read_only=True)
     attachments = AnomalyAttachmentSerializer(many=True, read_only=True)
     participants = AnomalyParticipantSerializer(many=True, read_only=True)
@@ -367,7 +508,22 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, serializers.ModelSerializ
     classification = AnomalyClassificationSerializer(read_only=True)
     cause_analysis = AnomalyCauseAnalysisSerializer(read_only=True)
     learning = AnomalyLearningSerializer(read_only=True)
+    immediate_action = AnomalyImmediateActionSerializer(read_only=True)
     action_plans = ActionPlanSummarySerializer(many=True, read_only=True)
+    treatment_tasks = serializers.SerializerMethodField()
+
+    def get_treatment_tasks(self, obj):
+        queryset = (
+            TreatmentTask.objects.filter(
+                Q(treatment__primary_anomaly=obj)
+                | Q(treatment__anomaly_links__anomaly=obj)
+                | Q(anomaly_links__anomaly=obj)
+            )
+            .select_related("responsible", "root_cause", "treatment")
+            .distinct()
+            .order_by("execution_date", "created_at")
+        )
+        return TreatmentTaskPlanSerializer(queryset, many=True, context=self.context).data
 
     class Meta:
         model = Anomaly
@@ -390,6 +546,10 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, serializers.ModelSerializ
             "anomaly_origin",
             "severity",
             "priority",
+            "can_modify_classification",
+            "can_unlock_classification",
+            "classification_change_count",
+            "classification_change_unlocked",
             "manufacturing_order_number",
             "affected_quantity",
             "affected_process",
@@ -415,7 +575,9 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, serializers.ModelSerializ
             "classification",
             "cause_analysis",
             "learning",
+            "immediate_action",
             "action_plans",
+            "treatment_tasks",
             "created_at",
             "updated_at",
             "row_version",
@@ -426,6 +588,7 @@ class AnomalyCreateSerializer(serializers.ModelSerializer):
     detected_at = serializers.DateTimeField(style=DATETIME_INPUT_STYLE)
     due_at = serializers.DateTimeField(required=False, allow_null=True, style=DATETIME_INPUT_STYLE)
     registration_comment = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    code_reservation_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = Anomaly
@@ -451,6 +614,7 @@ class AnomalyCreateSerializer(serializers.ModelSerializer):
             "resolution_summary",
             "result_summary",
             "registration_comment",
+            "code_reservation_id",
         )
         extra_kwargs = {
             "code": {"required": False, "allow_blank": True},
@@ -464,6 +628,7 @@ class AnomalyCreateSerializer(serializers.ModelSerializer):
             "affected_quantity": {"required": False, "allow_null": True},
             "affected_process": {"required": False, "allow_blank": True},
             "severity": {"required": False, "allow_null": True},
+            "code_reservation_id": {"required": False, "allow_null": True},
         }
 
 
@@ -629,10 +794,23 @@ class AnomalyLearningWriteSerializer(serializers.ModelSerializer):
         )
 
 
+
+class AnomalyImmediateActionWriteSerializer(serializers.Serializer):
+    responsible = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True))
+    action_date = serializers.DateField()
+    effectiveness_verified_at = serializers.DateTimeField(style=DATETIME_INPUT_STYLE)
+    observation = serializers.CharField()
+    actions_taken = serializers.CharField()
+    effectiveness_comment = serializers.CharField(required=False, allow_blank=True)
+    closure_comment = serializers.CharField(required=False, allow_blank=True)
+
 class AnomalyAttachmentWriteSerializer(serializers.Serializer):
     file = serializers.FileField()
     original_name = serializers.CharField(required=False, allow_blank=True)
     content_type = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_file(self, value):
+        return _validate_objective_file(value)
 
 
 class WorkflowMetadataSerializer(serializers.Serializer):
@@ -641,5 +819,20 @@ class WorkflowMetadataSerializer(serializers.Serializer):
     analysis_methods = serializers.DictField(child=serializers.CharField())
     participant_roles = serializers.DictField(child=serializers.CharField())
     comment_types = serializers.DictField(child=serializers.CharField())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

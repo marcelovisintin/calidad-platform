@@ -1,4 +1,4 @@
-import { Navigate, RouterProvider, createBrowserRouter } from "react-router-dom";
+﻿import { Navigate, RouterProvider, createBrowserRouter } from "react-router-dom";
 import { HomeRedirect } from "../components/HomeRedirect";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { AppLayout } from "../layouts/AppLayout";
@@ -10,6 +10,7 @@ import { MyActionsPage } from "../modules/actions/pages/MyActionsPage";
 import { AnomalyCreatedPage } from "../modules/anomalies/pages/AnomalyCreatedPage";
 import { AnomalyDetailPage } from "../modules/anomalies/pages/AnomalyDetailPage";
 import { MyAnomaliesPage } from "../modules/anomalies/pages/MyAnomaliesPage";
+import { ImmediateActionsPage } from "../modules/anomalies/pages/ImmediateActionsPage";
 import { NewAnomalyPage } from "../modules/anomalies/pages/NewAnomalyPage";
 import { DashboardPage } from "../modules/dashboard/pages/DashboardPage";
 import { TreatmentsPage } from "../modules/treatments/pages/TreatmentsPage";
@@ -40,6 +41,7 @@ export const router = createBrowserRouter([
       { index: true, element: <HomeRedirect /> },
       { path: "dashboard", element: <DashboardPage /> },
       { path: "anomalies", element: <MyAnomaliesPage /> },
+      { path: "anomalies/immediate-actions", element: <ImmediateActionsPage /> },
       { path: "anomalies/new", element: <NewAnomalyPage /> },
       { path: "anomalies/created", element: <AnomalyCreatedPage /> },
       { path: "anomalies/:anomalyId", element: <AnomalyDetailPage /> },

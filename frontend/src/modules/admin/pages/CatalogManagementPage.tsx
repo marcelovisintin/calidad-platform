@@ -1,4 +1,4 @@
-﻿import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { createCatalogItem, deleteCatalogItem, fetchCatalogItems, updateCatalogItem } from "../../../api/catalog";
 import type { CatalogEntity, CatalogManagementItem } from "../../../api/types";
@@ -7,6 +7,7 @@ import { useAuth } from "../../../app/providers/AuthProvider";
 import { formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
+import { PaginationControls } from "../../../components/PaginationControls";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
@@ -110,6 +111,7 @@ export function CatalogManagementPage() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [includeInactive, setIncludeInactive] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -126,10 +128,14 @@ export function CatalogManagementPage() {
       fetchCatalogItems(entity, {
         active: includeInactive ? undefined : true,
         q: search,
+        page,
+        pageSize: 10,
       }),
       meta.parentEntity
         ? fetchCatalogItems(meta.parentEntity, {
             active: undefined,
+            page: 1,
+            pageSize: 100,
           })
         : Promise.resolve({ count: 0, next: null, previous: null, results: [] as CatalogManagementItem[] }),
     ]);
@@ -139,13 +145,14 @@ export function CatalogManagementPage() {
       items: items.results,
       parents: parents.results,
     };
-  }, [entity, includeInactive, meta.parentEntity, search]);
+  }, [entity, includeInactive, meta.parentEntity, search, page]);
 
   const parentOptions = data?.parents ?? [];
   const items = data?.items ?? [];
 
   const changeEntity = (next: CatalogEntity) => {
     setSearchParams({ entity: next });
+    setPage(1);
     setEditingId(null);
     setForm(EMPTY_FORM);
     setSubmitError(null);
@@ -278,14 +285,14 @@ export function CatalogManagementPage() {
 
           <input
             name="search"
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => { setSearch(event.target.value); setPage(1); }}
             placeholder="Buscar por codigo o nombre"
             type="search"
             value={search}
           />
 
           <label className="checkbox-inline">
-            <input checked={includeInactive} onChange={(event) => setIncludeInactive(event.target.checked)} type="checkbox" />
+            <input checked={includeInactive} onChange={(event) => { setIncludeInactive(event.target.checked); setPage(1); }} type="checkbox" />
             Incluir inactivos
           </label>
 
@@ -399,6 +406,12 @@ export function CatalogManagementPage() {
                 ))
               )}
             </div>
+            <PaginationControls
+              page={page}
+              totalCount={data?.total || 0}
+              onPageChange={setPage}
+              disabled={loading}
+            />
           </section>
         </div>
       </DataState>

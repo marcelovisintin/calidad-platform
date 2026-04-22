@@ -24,3 +24,15 @@ def anomaly_attachment_upload_to(instance, filename: str) -> str:
 def action_evidence_upload_to(instance, filename: str) -> str:
     action_item_id = getattr(instance, "action_item_id", None) or "unassigned"
     return _build_upload_path("actions", action_item_id, filename)
+
+
+
+def treatment_evidence_upload_to(instance, filename: str) -> str:
+    treatment_id = getattr(instance, "treatment_id", None) or "unassigned"
+    return _build_upload_path("treatments", treatment_id, filename)
+
+
+
+def treatment_task_evidence_upload_to(instance, filename: str) -> str:
+    task_id = getattr(instance, "treatment_task_id", None) or "unassigned"
+    return _build_upload_path("treatment-tasks", task_id, filename)

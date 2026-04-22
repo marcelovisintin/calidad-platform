@@ -23,6 +23,7 @@ const TOKEN_LABELS: Record<string, string> = {
   draft: "borrador",
   registration: "registro",
   containment: "contencion",
+  treatment_created: "tratamiento creado",
   cause_analysis: "analisis de causa",
   action_plan: "plan de accion",
   execution_follow_up: "ejecucion y seguimiento",

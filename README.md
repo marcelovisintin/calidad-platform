@@ -285,3 +285,5 @@ URL recomendada en dispositivos de red interna:
 
 - `http://<IP_LAN_DEL_SERVIDOR>:8088/login`
 - `https://<IP_LAN_DEL_SERVIDOR>:8443/login` (TLS local, mostrara advertencia por certificado autofirmado)
+
+
