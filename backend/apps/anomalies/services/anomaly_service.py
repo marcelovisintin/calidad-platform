@@ -70,7 +70,7 @@ def _require_any_permission(user, permissions: set[str], message: str) -> None:
 def _can_create_anomaly(user) -> bool:
     if user.is_superuser:
         return True
-    if getattr(user, "access_level", "") == "usuario_activo":
+    if getattr(user, "access_level", "") in {"usuario_activo", "administrador", "desarrollador"}:
         return True
     return user.has_perm(PERMISSION_CREATE_ANOMALY)
 
@@ -379,7 +379,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     if severity_in_payload:
         access_level = getattr(user, "access_level", "")
         if not (user.is_superuser or access_level in {"administrador", "desarrollador"}):
-            raise PermissionDenied("Solo usuarios ADMIN pueden clasificar anomalias.")
+            raise PermissionDenied("Solo usuarios ADMIN pueden realizar REVICION DE HALLAZGOS de anomalias.")
 
     for field, value in data.items():
         setattr(locked, field, value)
@@ -392,10 +392,10 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     severity_changed = severity_in_payload and previous_severity_id != locked.severity_id
     if severity_changed:
         if locked.severity_id is None:
-            raise ValidationError({"severity": "Debe seleccionar una clasificacion valida."})
+            raise ValidationError({"severity": "Debe seleccionar una REVICION DE HALLAZGOS valida."})
 
         if not can_modify_classification(locked):
-            raise ValidationError({"severity": "No se puede modificar la clasificacion."})
+            raise ValidationError({"severity": "No se puede modificar la REVICION DE HALLAZGOS."})
 
         if previous_severity_id is not None:
             locked.classification_change_count = (locked.classification_change_count or 0) + 1
@@ -405,7 +405,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     should_sync_classification = severity_in_payload and locked.severity_id is not None
     if should_sync_classification:
         severity_name = locked.severity.name
-        locked.classification_summary = f"Criterio de clasificacion aplicado: {severity_name}."
+        locked.classification_summary = f"Criterio de REVICION DE HALLAZGOS aplicado: {severity_name}."
 
         if locked.current_status not in {AnomalyStatus.CANCELLED, AnomalyStatus.CLOSED} and locked.current_stage in {
             AnomalyStage.REGISTRATION,
@@ -418,7 +418,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
             locked.current_stage = AnomalyStage.CLASSIFICATION
             locked.current_status = resolve_status_for_stage(AnomalyStage.CLASSIFICATION)
             locked.last_transition_at = timezone.now()
-            transition_comment = f"Se registra verificacion inicial y clasificacion: {severity_name}."
+            transition_comment = f"Se registra verificacion inicial y REVICION DE HALLAZGOS: {severity_name}."
     locked.updated_by = user
     _bump_version(locked)
     locked.full_clean()
@@ -457,7 +457,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
         )
 
 
-        classification_summary = locked.classification_summary or f"Criterio de clasificacion aplicado: {locked.severity.name}."
+        classification_summary = locked.classification_summary or f"Criterio de REVICION DE HALLAZGOS aplicado: {locked.severity.name}."
         classification = _get_related_or_none(locked, "classification")
         if classification is None:
             classification = AnomalyClassification(
@@ -617,7 +617,7 @@ def save_initial_verification(*, anomaly: Anomaly, user, data: dict, request_id:
 
 @transaction.atomic
 def save_classification(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyClassification:
-    _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para clasificar la anomalia.")
+    _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para realizar REVICION DE HALLAZGOS de la anomalia.")
     classification = _get_related_or_none(anomaly, "classification") or AnomalyClassification(anomaly=anomaly)
     classification, created = _upsert_single_related(
         classification,
@@ -643,14 +643,14 @@ def save_classification(*, anomaly: Anomaly, user, data: dict, request_id: str =
 
 @transaction.atomic
 def unlock_classification_change(*, anomaly: Anomaly, user, request_id: str = "") -> Anomaly:
-    _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para habilitar cambio de clasificacion.")
+    _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para habilitar cambio de REVICION DE HALLAZGOS.")
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
 
     if not stage_allows_classification_change(locked):
-        raise ValidationError({"severity": "No se puede modificar la clasificacion."})
+        raise ValidationError({"severity": "No se puede modificar la REVICION DE HALLAZGOS."})
 
     if locked.severity_id is None:
-        raise ValidationError({"severity": "La anomalia no tiene clasificacion registrada."})
+        raise ValidationError({"severity": "La anomalia no tiene REVICION DE HALLAZGOS registrada."})
 
     if not can_unlock_classification_change(locked):
         return locked
@@ -670,7 +670,7 @@ def unlock_classification_change(*, anomaly: Anomaly, user, request_id: str = ""
         to_status=locked.current_status,
         from_stage=locked.current_stage,
         to_stage=locked.current_stage,
-        comment="Se habilita el cambio de clasificacion.",
+        comment="Se habilita el cambio de REVICION DE HALLAZGOS.",
         actor=user,
         changed_at=now,
     )
@@ -806,7 +806,7 @@ def save_immediate_action(*, anomaly: Anomaly, user, data: dict, request_id: str
     _require_permission(user, PERMISSION_CLOSE_ANOMALY, "No tiene permisos para gestionar accion inmediata.")
 
     if not is_immediate_action_anomaly(anomaly):
-        raise ValidationError({"anomaly": "La anomalia no esta clasificada como accion inmediata."})
+        raise ValidationError({"anomaly": "La anomalia no tiene REVICION DE HALLAZGOS como accion inmediata."})
 
     required_fields = {
         "observation": "Debe registrar una observacion.",

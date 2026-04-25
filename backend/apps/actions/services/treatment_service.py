@@ -354,7 +354,7 @@ def create_treatment(*, primary_anomaly, user, data: dict, request_id: str = "")
     _require_treatment_permission(user, "No tiene permisos para crear tratamientos.")
 
     if is_immediate_action_anomaly(primary_anomaly):
-        raise ValidationError({"primary_anomaly": "Las anomalias clasificadas como accion inmediata no pueden crear tratamiento."})
+        raise ValidationError({"primary_anomaly": "Las anomalias con REVICION DE HALLAZGOS como accion inmediata no pueden crear tratamiento."})
 
     if Treatment.objects.filter(primary_anomaly=primary_anomaly).exists():
         raise ValidationError({"primary_anomaly": "La anomalia ya tiene un tratamiento principal asociado."})
@@ -475,7 +475,7 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
 def add_treatment_anomaly(*, treatment: Treatment, anomaly, user, request_id: str = "") -> TreatmentAnomaly:
     _require_treatment_permission(user, "No tiene permisos para asociar anomalias al tratamiento.", treatment=treatment)
     if is_immediate_action_anomaly(anomaly):
-        raise ValidationError({"anomaly": "Las anomalias clasificadas como accion inmediata no pueden vincularse a un tratamiento."})
+        raise ValidationError({"anomaly": "Las anomalias con REVICION DE HALLAZGOS como accion inmediata no pueden vincularse a un tratamiento."})
     link, created = TreatmentAnomaly.objects.get_or_create(
         treatment=treatment,
         anomaly=anomaly,

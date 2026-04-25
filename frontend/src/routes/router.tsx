@@ -6,6 +6,7 @@ import { ChangePasswordPage } from "../modules/accounts/pages/ChangePasswordPage
 import { LoginPage } from "../modules/accounts/pages/LoginPage";
 import { CatalogManagementPage } from "../modules/admin/pages/CatalogManagementPage";
 import { UserManagementPage } from "../modules/admin/pages/UserManagementPage";
+import { UserScopesPage } from "../modules/admin/pages/UserScopesPage";
 import { MyActionsPage } from "../modules/actions/pages/MyActionsPage";
 import { AnomalyCreatedPage } from "../modules/anomalies/pages/AnomalyCreatedPage";
 import { AnomalyDetailPage } from "../modules/anomalies/pages/AnomalyDetailPage";
@@ -50,6 +51,7 @@ export const router = createBrowserRouter([
       { path: "tasks", element: <PendingTasksPage /> },
       { path: "notifications/inbox", element: <InboxPage /> },
       { path: "management/users", element: <UserManagementPage /> },
+      { path: "management/user-scopes", element: <UserScopesPage /> },
       { path: "management/catalogs", element: <CatalogManagementPage /> },
     ],
   },

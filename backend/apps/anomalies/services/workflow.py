@@ -107,7 +107,7 @@ def ensure_transition_permission(*, user, target_status: str, target_stage: str)
         return
 
     if target_stage in {AnomalyStage.INITIAL_VERIFICATION, AnomalyStage.CLASSIFICATION}:
-        _require_any_permission(user, {PERMISSION_CLASSIFY_ANOMALY}, "No tiene permisos para clasificar la anomalia.")
+        _require_any_permission(user, {PERMISSION_CLASSIFY_ANOMALY}, "No tiene permisos para realizar REVICION DE HALLAZGOS de la anomalia.")
         return
 
     if target_stage in {AnomalyStage.TREATMENT_CREATED, AnomalyStage.CAUSE_ANALYSIS, AnomalyStage.PROPOSALS}:
@@ -203,7 +203,7 @@ def validate_closure_requirements(anomaly) -> None:
     if not hasattr(anomaly, "initial_verification"):
         missing_items.append("verificacion inicial")
     if not hasattr(anomaly, "classification"):
-        missing_items.append("clasificacion")
+        missing_items.append("REVICION DE HALLAZGOS")
     if not hasattr(anomaly, "cause_analysis"):
         missing_items.append("analisis de causa")
     if not anomaly.effectiveness_checks.filter(is_effective=True).exists():

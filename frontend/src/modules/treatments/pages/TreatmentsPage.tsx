@@ -726,7 +726,7 @@ return (
     <section className="page-shell">
       <PageHeader
         title="Tratamientos"
-        description="Gestion de tratamientos por anomalia clasificada: convocatoria, analisis de causa y tareas asociadas."
+      description="Gestion de tratamientos por anomalia con REVICION DE HALLAZGOS: convocatoria, analisis de causa y tareas asociadas."
       />
 
       <div className="toolbar-card treatment-toolbar">
@@ -738,7 +738,7 @@ return (
         />
         <div className="treatment-toolbar-actions">
           <select onChange={(event) => setSelectedCandidateId(event.target.value)} value={selectedCandidateId}>
-            <option value="">Seleccionar anomalia clasificada...</option>
+                    <option value="">Seleccionar anomalia con REVICION DE HALLAZGOS...</option>
             {(supportData?.createCandidates ?? []).map((candidate) => (
               <option key={candidate.id} value={candidate.id}>{`${candidate.code} - ${candidate.title}`}</option>
             ))}
@@ -1000,7 +1000,7 @@ return (
                           Limpiar filtros
                         </button>
                         <label className="field">
-                          <span>Anomalias clasificadas disponibles</span>
+                  <span>Anomalias con REVICION DE HALLAZGOS disponibles</span>
                           <select onChange={(event) => setLinkAnomalyId(event.target.value)} value={linkAnomalyId}>
                             <option value="">Seleccionar...</option>
                             {unlinkedCandidates.map((candidate) => (
@@ -1278,7 +1278,7 @@ return (
 
                         <div className="stack-list compact">
                           {selectedTreatment.tasks.map((task) => (
-                            <button className="list-card compact treatment-task-item" key={task.id} onClick={() => handleSelectTask(task)} type="button">
+                            <div className="list-card compact" key={task.id}>
                               <div>
                                 <strong>{task.title}</strong>
                                 <p>{task.description || "Sin descripcion"}</p>
@@ -1287,133 +1287,14 @@ return (
                                 </small>
                               </div>
                               <StatusBadge compact value={task.status} />
-                            </button>
+                            </div>
                           ))}
                           {!selectedTreatment.tasks.length ? <p className="muted-copy">No hay tareas registradas para este tratamiento.</p> : null}
                         </div>
 
-                        {selectedTask ? (
-                          <form className="form-section nested-form" onSubmit={handleUpdateTask}>
-                            <div className="section-head compact">
-                              <h3>{`Editar tarea | ${selectedTask.code || selectedTask.title}`}</h3>
-                              <button className="button button-primary" disabled={busy} type="submit">
-                                Guardar tarea
-                              </button>
-                            </div>
-
-                            <p className="muted-copy">
-                              Tratamiento: {selectedTreatment.code} | Anomalias asociadas: {selectedTask.anomaly_links.map((item) => item.anomaly.code).join(", ") || "Sin asociar"}
-                            </p>
-
-                            <div className="form-grid">
-                              <label className="field">
-                                <span>Titulo</span>
-                                <input
-                                  onChange={(event) => handleTaskDraftChange("title", event.target.value)}
-                                  required
-                                  type="text"
-                                  value={taskDraft.title}
-                                />
-                              </label>
-                              <label className="field">
-                                <span>Estado</span>
-                                <select
-                                  onChange={(event) => handleTaskDraftChange("status", event.target.value)}
-                                  value={taskDraft.status}
-                                >
-                                  {TASK_STATUS_OPTIONS.map((status) => (
-                                    <option key={status.value} value={status.value}>
-                                      {status.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              <label className="field">
-                                <span>Responsable</span>
-                                <select
-                                  onChange={(event) => handleTaskDraftChange("responsible", event.target.value)}
-                                  value={taskDraft.responsible}
-                                >
-                                  <option value="">Sin asignar</option>
-                                  {(supportData?.users ?? []).map((user) => (
-                                    <option key={user.id} value={user.id}>
-                                      {buildUsersLabel(user)}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              <label className="field">
-                                <span>Fecha ejecucion</span>
-                                <input
-                                  onChange={(event) => handleTaskDraftChange("execution_date", event.target.value)}
-                                  type="date"
-                                  value={taskDraft.execution_date}
-                                />
-                              </label>
-                            </div>
-
-                            <label className="field">
-                              <span>Descripcion</span>
-                              <textarea
-                                onChange={(event) => handleTaskDraftChange("description", event.target.value)}
-                                rows={3}
-                                value={taskDraft.description}
-                              />
-                            </label>
-
-                            <section className="form-section nested-form">
-                              <div className="section-head compact">
-                                <h3>Evidencias de la tarea</h3>
-                                <button
-                                  className="button button-primary"
-                                  disabled={busy || !taskEvidenceFile}
-                                  onClick={() => void handleAddTaskEvidence()}
-                                  type="button"
-                                >
-                                  Cargar evidencia
-                                </button>
-                              </div>
-                              <div className="form-grid">
-                                <label className="field field-span-2">
-                                  <span>Archivo (imagen, PDF, Word, Excel, texto o ZIP)</span>
-                                  <input
-                                    accept={EVIDENCE_ACCEPT}
-                                    key={taskEvidenceInputKey}
-                                    onChange={handleTaskEvidenceFileChange}
-                                    type="file"
-                                  />
-                                </label>
-                                <label className="field field-span-2">
-                                  <span>Nota de evidencia (opcional)</span>
-                                  <textarea
-                                    onChange={(event) => setTaskEvidenceNote(event.target.value)}
-                                    rows={3}
-                                    value={taskEvidenceNote}
-                                  />
-                                </label>
-                              </div>
-                              <div className="stack-list compact">
-                                {selectedTask.evidences.length ? (
-                                  selectedTask.evidences.map((evidence) => (
-                                    <div className="list-card compact" key={evidence.id}>
-                                      <div className="evidence-block">
-                                        <a href={normalizeEvidenceUrl(evidence.file_url)} onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)} rel="noopener noreferrer" target="_blank">
-                                          {evidence.original_name}
-                                        </a>
-                                        <small>
-                                          {normalizeEvidenceType(evidence.content_type)} | {formatDate(evidence.created_at)}
-                                        </small>
-                                        <p>{evidence.note || "Sin nota"}</p>
-                                      </div>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <p className="muted-copy">Todavia no hay evidencias cargadas en esta tarea.</p>
-                                )}
-                              </div>
-                            </section>
-                          </form>
-                        ) : null}
+                        <p className="muted-copy">
+                          La edicion de tareas y carga de evidencias ahora se realiza desde la pagina Acciones.
+                        </p>
                       </div>
                     </div>
                   ) : null}
@@ -1431,6 +1312,8 @@ return (
     </section>
   );
 }
+
+
 
 
 

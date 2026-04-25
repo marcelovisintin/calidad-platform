@@ -13,7 +13,7 @@ Hoy el sistema ya tiene implementado y validado:
 - Catalogos maestros para sitios, areas, tipos de anomalia, origenes, severidad, prioridad y tipos de accion
 - Modulo completo de anomalias con workflow de 12 etapas
 - Verificacion inicial con enfoque 6M
-- Clasificacion, analisis de causa, propuestas, planes de accion, ejecucion, resultados, verificacion de eficacia, cierre y aprendizaje
+- REVICION DE HALLAZGOS, analisis de causa, propuestas, planes de accion, ejecucion, resultados, verificacion de eficacia, cierre y aprendizaje
 - Planes de accion, acciones, evidencias y trazabilidad de cambios
 - Bandeja interna, tareas pendientes y notificaciones por usuario
 - Auditoria transversal de eventos
@@ -28,7 +28,7 @@ El modulo principal contempla estas etapas:
 1. Registro
 2. Contencion
 3. Verificacion inicial
-4. Clasificacion
+4. REVICION DE HALLAZGOS
 5. Analisis de causa
 6. Propuestas
 7. Plan de accion
@@ -62,7 +62,7 @@ Toda transicion relevante registra usuario, fecha y hora, comentario, estado ant
   Catalogos reutilizables de negocio.
 
 - `backend/apps/anomalies`
-  Entidad principal de anomalia, workflow, verificacion inicial, clasificacion, analisis de causa, propuestas, verificaciones de eficacia, aprendizaje, comentarios, adjuntos, participantes e historial.
+  Entidad principal de anomalia, workflow, verificacion inicial, REVICION DE HALLAZGOS, analisis de causa, propuestas, verificaciones de eficacia, aprendizaje, comentarios, adjuntos, participantes e historial.
 
 - `backend/apps/actions`
   Planes de accion, acciones individuales, prioridades, evidencia esperada, evidencia cargada, comentario de cierre e historial de acciones.

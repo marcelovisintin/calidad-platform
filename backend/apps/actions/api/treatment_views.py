@@ -76,6 +76,13 @@ def _visible_treatments_queryset(user):
     ).distinct()
 
 
+def _visible_treatment_tasks_queryset(user):
+    queryset = TreatmentTask.objects.all()
+    if _is_admin_access(user):
+        return queryset
+    return queryset.filter(responsible=user)
+
+
 class TreatmentEvidenceDownloadAPIView(APIView):
     def get(self, request, evidence_id):
         visible_treatments = _visible_treatments_queryset(request.user)
@@ -99,11 +106,11 @@ class TreatmentEvidenceDownloadAPIView(APIView):
 
 class TreatmentTaskEvidenceDownloadAPIView(APIView):
     def get(self, request, evidence_id):
-        visible_treatments = _visible_treatments_queryset(request.user)
+        visible_tasks = _visible_treatment_tasks_queryset(request.user)
         evidence = get_object_or_404(
             TreatmentTaskEvidence.objects.select_related("treatment_task", "treatment_task__treatment"),
             pk=evidence_id,
-            treatment_task__treatment_id__in=visible_treatments.values("id"),
+            treatment_task_id__in=visible_tasks.values("id"),
         )
         if not evidence.file:
             raise Http404("Evidencia sin archivo asociado.")
@@ -304,12 +311,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         )
 
         if not self._is_admin_access(request.user):
-            queryset = queryset.filter(
-                Q(responsible=request.user)
-                | Q(treatment__created_by=request.user)
-                | Q(treatment__participants__user=request.user)
-                | Q(treatment__primary_anomaly__reporter=request.user)
-            )
+            queryset = queryset.filter(responsible=request.user)
 
         if query_text := (request.query_params.get("q") or "").strip():
             queryset = queryset.filter(
@@ -537,6 +539,8 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         task = TreatmentTask.objects.filter(treatment=treatment, pk=task_id).first()
         if not task:
             raise ValidationError({"task": "La tarea no pertenece al tratamiento indicado."})
+        if not self._is_admin_access(request.user) and task.responsible_id != request.user.id:
+            raise PermissionDenied("Solo puede modificar tareas asignadas a su usuario.")
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -586,6 +590,8 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         task = TreatmentTask.objects.filter(treatment=treatment, pk=task_id).first()
         if not task:
             raise ValidationError({"task": "La tarea no pertenece al tratamiento indicado."})
+        if not self._is_admin_access(request.user) and task.responsible_id != request.user.id:
+            raise PermissionDenied("Solo puede cargar evidencias en tareas asignadas a su usuario.")
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)

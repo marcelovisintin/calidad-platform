@@ -54,7 +54,7 @@ Despliegue:
 - Comentarios
 - Adjuntos
 - Verificacion inicial 6M
-- Clasificacion
+- REVICION DE HALLAZGOS
 - Analisis de causa
 - Propuestas
 - Resultados
@@ -91,7 +91,7 @@ Etapas:
 1. Registro
 2. Contencion
 3. Verificacion inicial
-4. Clasificacion
+4. REVICION DE HALLAZGOS
 5. Analisis de causa
 6. Propuestas
 7. Plan de accion
@@ -267,7 +267,7 @@ secciones principales acciones y pendientes,  en el panel izq. "mis acciones" qu
  paginacion como las otras listas.
 __________________________________________________________________________________________________________________________
 
- cuando una anomalia es clasificada como accion inmediata, no se debe permitir crear tratamiento, se deberia abrir 
+cuando una anomalia tiene REVICION DE HALLAZGOS como accion inmediata, no se debe permitir crear tratamiento, se deberia abrir
  nueva pantalla para anomalias con accion inmediata y dentro de esta poner una observacion un responsable fecha y acciones 
  a tomar o que se tomaron. fecha verificacion de eficacia y luego cierre directo sin mas.
 
@@ -318,23 +318,35 @@ usuario comun no ve tratamientos directamente , mando medio los ve y puede edita
 ni aprobar verificacion e 
 
 _21/04________________________________________________________________________________________________________
-En seguimiento de anomalias el campo clasificacion solo se puede cambiar una vez agregar
- cartel de " esta seguro de la clasificacion? " , si la anomalia no ha pasado aun a una siguiente etapa se podra
-  habilitar nuevamente el cambio poner cartel " se habilita el cambiode clasificacion" si la anomalia ya paso
-   a otra etapa   cartel " no se puede modificar la clasificacion".   ECHO CON DETALLES
+En seguimiento de anomalias el campo REVICION DE HALLAZGOS solo se puede cambiar una vez agregar
+ cartel de " esta seguro de la REVICION DE HALLAZGOS? " , si la anomalia no ha pasado aun a una siguiente etapa se podra
+  habilitar nuevamente el cambio poner cartel " se habilita el cambio de REVICION DE HALLAZGOS" si la anomalia ya paso
+   a otra etapa   cartel " no se puede modificar la REVICION DE HALLAZGOS".   ECHO QUEDO BIEN
 ...........................................................................................................
 cuando creamos tratamiento,(boton crear tratamiento en tratamientos, se le asigna un Id eso es correcto lo
  que falta es que ahi cambie el estado de la anomalia a tratameinto creado e impacte en detalle de
- anomalia historial y en participacion y verificaciones,entre clasificacion y antes de analisis de causa ) 
- tambien este cambio servira para bloquear cambio de clasificacion
+ anomalia historial y en participacion y verificaciones,entre REVICION DE HALLAZGOS y antes de analisis de causa ) 
+tambien este cambio servira para bloquear cambio de REVICION DE HALLAZGOS. ECHO QUEDO BIEN
+_22/04__________________________________________________________________________________________________________
+revisar tareas y acciones son lo mismo?  
+................................................................................................................
+EN TRATAMIENTOS--ANOMALIAS ASOCIADAS A TRATAMEINTOS-------SELECCIONAR solo aparece la ultima anomalia y no todo
+el listado tambien seria necesario que se pueda filtrar anomalias por campos como ID ANOMALIA-SECTOR-AREA-USUARIO-Fecha
+para facilitar cuando el listado se haga extenso. ECHO OK
 .........................................................................................................
-revisar tareas y acciones son lo mismo?
-.........................................................................................................
+Vamos a comitear y pushear. nombre 2026-04-22.     ECHO OK
+...........................................................................................................
+en TRATAMIENTOS----VISTA 2 ANALISIS-----EDITAR TAREA, EVIDENCIA DE LA TAREA pasarlo a ACCIONES como un formulario que se despliega
+una vez que se hizo click en alguna de las tareas que figuran en el listado filtrado en la pagina ACCIONES.
+............................................................................................................
 aciones todo usuario puede entrar a acciones pero puede ver todas y solo modificar las que le pertenecen 
 (cargadas en el tratameinto, en analisis, tareas surgidas del tratameinto, responsable)
 ........................................................................................................
-
-
+en ACCIONES Y PENDIENTES en el filtro ESTADO cuando pongo VENCIDA da :
+<!doctype html> <html lang="en"> <head> <title>Server Error (500)</title> </head> <body> <h1>Server Error (500)</h1><p></p> </body> </html>
+..................................................................................................................
+El nombre REVICION DE HALLAZGOS cambiar por REVICION DE HALLAZGOS
+..................................................................................................................
 
 Permisos usuario revisar funcion de tarjeta rol y campo nivel de acceso en tarjeta usuarios.
 

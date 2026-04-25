@@ -167,7 +167,7 @@ export function ImmediateActionsPage() {
     <section className="page-shell">
       <PageHeader
         title="Accion inmediata"
-        description="Gestion directa para anomalias clasificadas como accion inmediata. No generan tratamiento: se ejecuta, verifica eficacia y se cierra en este flujo."
+      description="Gestion directa para anomalias con REVICION DE HALLAZGOS como accion inmediata. No generan tratamiento: se ejecuta, verifica eficacia y se cierra en este flujo."
       />
 
       <div className="toolbar-card">
@@ -189,7 +189,7 @@ export function ImmediateActionsPage() {
         onRetry={reload}
         empty={totalCount === 0}
         emptyTitle="No hay anomalias de accion inmediata"
-        emptyDescription="Clasifica una anomalia con criterio de accion inmediata para gestionarla desde aqui."
+        emptyDescription="Realiza REVICION DE HALLAZGOS de una anomalia con criterio de accion inmediata para gestionarla desde aqui."
       >
         <div className="treatment-layout">
           <article className="panel">
@@ -321,7 +321,7 @@ export function ImmediateActionsPage() {
               ) : (
                 <div className="panel muted">
                   <h2>Selecciona una anomalia</h2>
-                  <p>Elige una anomalia clasificada como accion inmediata para cargar ejecucion, eficacia y cierre directo.</p>
+                        <p>Elige una anomalia con REVICION DE HALLAZGOS como accion inmediata para cargar ejecucion, eficacia y cierre directo.</p>
                 </div>
               )}
             </DataState>

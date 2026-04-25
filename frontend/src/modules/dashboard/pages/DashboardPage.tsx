@@ -29,7 +29,7 @@ const primarySectionsBase = [
   },
   {
     title: "Tratamientos",
-    description: "Gestiona convocatorias, analisis de causa raiz y tareas surgidas de anomalias clasificadas para tratamiento.",
+    description: "Gestiona convocatorias, analisis de causa raiz y tareas surgidas de anomalias con REVICION DE HALLAZGOS para tratamiento.",
     to: "/treatments",
     label: "Ver tratamientos",
   },
@@ -49,7 +49,7 @@ const primarySectionsBase = [
 
 const immediateActionSection = {
   title: "Accion inmediata",
-  description: "Cierre directo de anomalias clasificadas como accion inmediata, con responsable, evidencia y verificacion de eficacia.",
+  description: "Cierre directo de anomalias con REVICION DE HALLAZGOS como accion inmediata, con responsable, evidencia y verificacion de eficacia.",
   to: "/anomalies/immediate-actions",
   label: "Gestionar accion inmediata",
 };
@@ -61,8 +61,8 @@ const workflowSections = [
     helper: "Se trabaja desde Nueva anomalia y el detalle del caso.",
   },
   {
-    title: "Clasificacion y causa",
-    description: "Analisis tecnico, criterio de clasificacion, origen y determinacion de causa raiz.",
+    title: "REVICION DE HALLAZGOS y causa",
+    description: "Analisis tecnico, criterio de REVICION DE HALLAZGOS, origen y determinacion de causa raiz.",
     helper: "Ideal para perfiles de calidad, supervision e ingenieria.",
   },
   {
@@ -80,13 +80,13 @@ const workflowSections = [
 const adminSections = [
   { title: "Usuarios", description: "Alta, baja y edicion de usuarios del sistema.", to: "/management/users" },
   { title: "Roles y alcances", description: "Roles, permisos y alcance por sitio o proceso.", href: "/admin/accounts/role/" },
-  { title: "Alcances de usuario", description: "Asignacion operativa de roles por sector y sitio.", href: "/admin/accounts/userrolescope/" },
+  { title: "Alcances de usuario", description: "Nivel, rol y checklist de permisos por usuario.", to: "/management/user-scopes" },
   { title: "Areas", description: "Areas principales de la empresa donde opera el sistema.", to: "/management/catalogs?entity=sites" },
   { title: "Procesos", description: "Procesos o subsectores de trabajo disponibles para el registro.", to: "/management/catalogs?entity=areas" },
   { title: "Lineas", description: "Lineas o puestos productivos, si el proceso las utiliza.", to: "/management/catalogs?entity=lines" },
   { title: "Tipos de anomalia", description: "Catalogo de defectos, desvios o eventos de calidad.", to: "/management/catalogs?entity=anomaly-types" },
   { title: "Origenes", description: "Origen o fuente primaria asociada a la anomalia.", to: "/management/catalogs?entity=anomaly-origins" },
-  { title: "Criterios de clasificacion", description: "Criterios usados para clasificar cada anomalia.", to: "/management/catalogs?entity=severities" },
+  { title: "Criterios de REVICION DE HALLAZGOS", description: "Criterios usados para la REVICION DE HALLAZGOS de cada anomalia.", to: "/management/catalogs?entity=severities" },
   { title: "Prioridades", description: "Prioridades operativas y de tratamiento.", to: "/management/catalogs?entity=priorities" },
   { title: "Tipos de accion", description: "Contencion, correctiva, preventiva o mejora.", to: "/management/catalogs?entity=action-types" },
   { title: "Panel admin Django", description: "Acceso completo al panel tecnico y maestros.", href: "/admin/" },

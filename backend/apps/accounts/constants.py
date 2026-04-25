@@ -15,7 +15,7 @@ ROLE_DEFINITIONS = {
     },
     ROLE_CALIDAD: {
         "name": "Calidad",
-        "description": "Clasifica, verifica eficacia y formaliza cierres del modulo.",
+        "description": "Realiza REVICION DE HALLAZGOS, verifica eficacia y formaliza cierres del modulo.",
     },
     ROLE_INGENIERIA: {
         "name": "Ingenieria",
@@ -31,6 +31,7 @@ PERMISSION_ADD_USER = "accounts.add_user"
 PERMISSION_CHANGE_USER = "accounts.change_user"
 PERMISSION_DELETE_USER = "accounts.delete_user"
 PERMISSION_VIEW_USER = "accounts.view_user"
+PERMISSION_VIEW_CONTEXT_MENU = "accounts.view_context_menu"
 
 PERMISSION_CREATE_ANOMALY = "anomalies.add_anomaly"
 PERMISSION_EDIT_ANOMALY = "anomalies.change_anomaly"
@@ -77,6 +78,12 @@ PERMISSION_DEFINITIONS = {
         "codename": "view_user",
         "name": "Puede ver usuarios",
     },
+    PERMISSION_VIEW_CONTEXT_MENU: {
+        "app_label": "accounts",
+        "model": "user",
+        "codename": "view_context_menu",
+        "name": "Puede ver menu contextual",
+    },
     PERMISSION_CREATE_ANOMALY: {
         "app_label": "anomalies",
         "model": "anomaly",
@@ -99,7 +106,7 @@ PERMISSION_DEFINITIONS = {
         "app_label": "anomalies",
         "model": "anomaly",
         "codename": "classify_anomaly",
-        "name": "Puede clasificar anomalias",
+        "name": "Puede realizar REVICION DE HALLAZGOS de anomalias",
     },
     PERMISSION_ANALYZE_ANOMALY: {
         "app_label": "anomalies",
@@ -233,3 +240,72 @@ ROLE_PERMISSION_MATRIX = {
     ],
     ROLE_ADMINISTRADOR: sorted(PERMISSION_DEFINITIONS.keys()),
 }
+
+USER_SCOPE_OPTIONS = [
+    {
+        "key": "context_menu",
+        "label": "Menu contextual",
+        "description": "Acceso al menu contextual del Panel de Gestion.",
+        "permission_keys": [PERMISSION_VIEW_CONTEXT_MENU],
+    },
+    {
+        "key": "new_anomaly",
+        "label": "Nueva anomalia",
+        "description": "Carga inicial de anomalias.",
+        "permission_keys": [PERMISSION_CREATE_ANOMALY],
+    },
+    {
+        "key": "anomaly_tracking",
+        "label": "Seguimiento de anomalia",
+        "description": "Consulta y seguimiento de anomalias segun alcance.",
+        "permission_keys": [PERMISSION_VIEW_ANOMALY, PERMISSION_VIEW_SECTOR_ANOMALY],
+    },
+    {
+        "key": "immediate_action",
+        "label": "Accion inmediata",
+        "description": "Gestion directa de anomalias con accion inmediata.",
+        "permission_keys": [PERMISSION_CLASSIFY_ANOMALY, PERMISSION_CLOSE_ANOMALY],
+    },
+    {
+        "key": "treatments",
+        "label": "Tratamientos",
+        "description": "Acceso general al modulo de tratamientos.",
+        "permission_keys": [PERMISSION_VIEW_ACTION_PLAN, PERMISSION_ASSIGN_ACTION],
+    },
+    {
+        "key": "treatment_creation",
+        "label": "Creacion de tratamientos",
+        "description": "Crear tratamientos desde anomalias habilitadas.",
+        "permission_keys": [PERMISSION_ASSIGN_ACTION],
+    },
+    {
+        "key": "treatment_convocation",
+        "label": "Convocatoria",
+        "description": "Gestionar convocatoria y participantes del tratamiento.",
+        "permission_keys": [PERMISSION_ASSIGN_ACTION],
+    },
+    {
+        "key": "analysis",
+        "label": "Analisis",
+        "description": "Registrar analisis tecnico y causa raiz.",
+        "permission_keys": [PERMISSION_ANALYZE_ANOMALY],
+    },
+    {
+        "key": "actions",
+        "label": "Acciones",
+        "description": "Ver, asignar y ejecutar acciones.",
+        "permission_keys": [PERMISSION_VIEW_ACTION_ITEM, PERMISSION_EXECUTE_ACTION, PERMISSION_ASSIGN_ACTION],
+    },
+    {
+        "key": "pending_tasks",
+        "label": "Pendientes",
+        "description": "Ver pendientes y tareas operativas.",
+        "permission_keys": [PERMISSION_VIEW_ACTION_ITEM, PERMISSION_EXECUTE_ACTION],
+    },
+    {
+        "key": "effectiveness_verification",
+        "label": "Verificacion de eficacia",
+        "description": "Verificar eficacia de anomalias y acciones.",
+        "permission_keys": [PERMISSION_VERIFY_EFFECTIVENESS_ANOMALY, PERMISSION_VERIFY_ACTION_EFFECTIVENESS],
+    },
+]

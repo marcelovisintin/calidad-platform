@@ -41,6 +41,10 @@ const toneMap: Record<string, string> = {
   standardization_learning: "neutral",
 };
 
+const labelMap: Record<string, string> = {
+  classification: "REVICION DE HALLAZGOS",
+};
+
 export function StatusBadge({ value, compact = false }: StatusBadgeProps) {
   if (!value) {
     return <span className="status-badge neutral">Sin dato</span>;
@@ -49,7 +53,7 @@ export function StatusBadge({ value, compact = false }: StatusBadgeProps) {
   const tone = toneMap[value] ?? "neutral";
   return (
     <span className={`status-badge ${tone}${compact ? " compact" : ""}`}>
-      {humanizeToken(value)}
+      {labelMap[value] ?? humanizeToken(value)}
     </span>
   );
 }

@@ -22,7 +22,7 @@ class AnomalyStage(models.TextChoices):
     REGISTRATION = "registration", "Registro"
     CONTAINMENT = "containment", "Contencion"
     INITIAL_VERIFICATION = "initial_verification", "Verificacion inicial"
-    CLASSIFICATION = "classification", "Clasificacion"
+    CLASSIFICATION = "classification", "REVICION DE HALLAZGOS"
     TREATMENT_CREATED = "treatment_created", "Tratamiento creado"
     CAUSE_ANALYSIS = "cause_analysis", "Analisis de causa"
     PROPOSALS = "proposals", "Propuestas"
@@ -325,8 +325,8 @@ class AnomalyClassification(AuditBaseModel):
     summary = models.TextField(blank=True)
 
     class Meta:
-        verbose_name = "Clasificacion de anomalia"
-        verbose_name_plural = "Clasificaciones de anomalia"
+        verbose_name = "REVICION DE HALLAZGOS de anomalia"
+        verbose_name_plural = "REVICION DE HALLAZGOS de anomalia"
 
 
 class AnomalyCauseAnalysis(AuditBaseModel):

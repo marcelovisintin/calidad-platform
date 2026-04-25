@@ -265,7 +265,7 @@ export function AnomalyDetailPage() {
               <div className="section-head"><h2>Participacion y verificaciones</h2></div>
               <dl className="key-grid">
                 <div><dt>Verificacion inicial</dt><dd>{initialVerificationLabel}</dd></div>
-                <div><dt>Clasificacion</dt><dd>{classificationLabel}</dd></div>
+                <div><dt>REVICION DE HALLAZGOS</dt><dd>{classificationLabel}</dd></div>
                 <div><dt>Tratamiento creado</dt><dd>{treatmentCreatedLabel}</dd></div>
                 <div><dt>Analisis de causa</dt><dd>{causeAnalysisLabel}</dd></div>
                 <div><dt>Eficacia</dt><dd>{data.effectiveness_summary || "Sin verificacion de eficacia"}</dd></div>

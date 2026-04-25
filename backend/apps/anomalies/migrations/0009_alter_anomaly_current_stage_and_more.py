@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='anomaly',
             name='current_stage',
-            field=models.CharField(choices=[('registration', 'Registro'), ('containment', 'Contencion'), ('initial_verification', 'Verificacion inicial'), ('classification', 'Clasificacion'), ('treatment_created', 'Tratamiento creado'), ('cause_analysis', 'Analisis de causa'), ('proposals', 'Propuestas'), ('action_plan', 'Plan de accion'), ('execution_follow_up', 'Ejecucion y seguimiento'), ('results', 'Resultados'), ('effectiveness_verification', 'Verificacion de eficacia'), ('closure', 'Cierre'), ('standardization_learning', 'Estandarizacion y aprendizaje')], default='registration', max_length=40),
+            field=models.CharField(choices=[('registration', 'Registro'), ('containment', 'Contencion'), ('initial_verification', 'Verificacion inicial'), ('classification', 'REVICION DE HALLAZGOS'), ('treatment_created', 'Tratamiento creado'), ('cause_analysis', 'Analisis de causa'), ('proposals', 'Propuestas'), ('action_plan', 'Plan de accion'), ('execution_follow_up', 'Ejecucion y seguimiento'), ('results', 'Resultados'), ('effectiveness_verification', 'Verificacion de eficacia'), ('closure', 'Cierre'), ('standardization_learning', 'Estandarizacion y aprendizaje')], default='registration', max_length=40),
         ),
         migrations.AlterField(
             model_name='anomalycodereservation',
@@ -31,16 +31,16 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='anomalyeffectivenesscheck',
             name='recommended_stage',
-            field=models.CharField(blank=True, choices=[('registration', 'Registro'), ('containment', 'Contencion'), ('initial_verification', 'Verificacion inicial'), ('classification', 'Clasificacion'), ('treatment_created', 'Tratamiento creado'), ('cause_analysis', 'Analisis de causa'), ('proposals', 'Propuestas'), ('action_plan', 'Plan de accion'), ('execution_follow_up', 'Ejecucion y seguimiento'), ('results', 'Resultados'), ('effectiveness_verification', 'Verificacion de eficacia'), ('closure', 'Cierre'), ('standardization_learning', 'Estandarizacion y aprendizaje')], max_length=40),
+            field=models.CharField(blank=True, choices=[('registration', 'Registro'), ('containment', 'Contencion'), ('initial_verification', 'Verificacion inicial'), ('classification', 'REVICION DE HALLAZGOS'), ('treatment_created', 'Tratamiento creado'), ('cause_analysis', 'Analisis de causa'), ('proposals', 'Propuestas'), ('action_plan', 'Plan de accion'), ('execution_follow_up', 'Ejecucion y seguimiento'), ('results', 'Resultados'), ('effectiveness_verification', 'Verificacion de eficacia'), ('closure', 'Cierre'), ('standardization_learning', 'Estandarizacion y aprendizaje')], max_length=40),
         ),
         migrations.AlterField(
             model_name='anomalystatushistory',
             name='from_stage',
-            field=models.CharField(choices=[('registration', 'Registro'), ('containment', 'Contencion'), ('initial_verification', 'Verificacion inicial'), ('classification', 'Clasificacion'), ('treatment_created', 'Tratamiento creado'), ('cause_analysis', 'Analisis de causa'), ('proposals', 'Propuestas'), ('action_plan', 'Plan de accion'), ('execution_follow_up', 'Ejecucion y seguimiento'), ('results', 'Resultados'), ('effectiveness_verification', 'Verificacion de eficacia'), ('closure', 'Cierre'), ('standardization_learning', 'Estandarizacion y aprendizaje')], max_length=40),
+            field=models.CharField(choices=[('registration', 'Registro'), ('containment', 'Contencion'), ('initial_verification', 'Verificacion inicial'), ('classification', 'REVICION DE HALLAZGOS'), ('treatment_created', 'Tratamiento creado'), ('cause_analysis', 'Analisis de causa'), ('proposals', 'Propuestas'), ('action_plan', 'Plan de accion'), ('execution_follow_up', 'Ejecucion y seguimiento'), ('results', 'Resultados'), ('effectiveness_verification', 'Verificacion de eficacia'), ('closure', 'Cierre'), ('standardization_learning', 'Estandarizacion y aprendizaje')], max_length=40),
         ),
         migrations.AlterField(
             model_name='anomalystatushistory',
             name='to_stage',
-            field=models.CharField(choices=[('registration', 'Registro'), ('containment', 'Contencion'), ('initial_verification', 'Verificacion inicial'), ('classification', 'Clasificacion'), ('treatment_created', 'Tratamiento creado'), ('cause_analysis', 'Analisis de causa'), ('proposals', 'Propuestas'), ('action_plan', 'Plan de accion'), ('execution_follow_up', 'Ejecucion y seguimiento'), ('results', 'Resultados'), ('effectiveness_verification', 'Verificacion de eficacia'), ('closure', 'Cierre'), ('standardization_learning', 'Estandarizacion y aprendizaje')], max_length=40),
+            field=models.CharField(choices=[('registration', 'Registro'), ('containment', 'Contencion'), ('initial_verification', 'Verificacion inicial'), ('classification', 'REVICION DE HALLAZGOS'), ('treatment_created', 'Tratamiento creado'), ('cause_analysis', 'Analisis de causa'), ('proposals', 'Propuestas'), ('action_plan', 'Plan de accion'), ('execution_follow_up', 'Ejecucion y seguimiento'), ('results', 'Resultados'), ('effectiveness_verification', 'Verificacion de eficacia'), ('closure', 'Cierre'), ('standardization_learning', 'Estandarizacion y aprendizaje')], max_length=40),
         ),
     ]

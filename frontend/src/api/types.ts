@@ -93,6 +93,50 @@ export interface UserDirectoryItem {
   role_codes: string[];
 }
 
+export interface AccessLevelOption {
+  value: "usuario_activo" | "mando_medio_activo" | "administrador" | "desarrollador";
+  label: string;
+}
+
+export interface RoleOption {
+  id: UUID;
+  code: string;
+  name: string;
+  permissions: string[];
+}
+
+export interface UserScopeOption {
+  key: string;
+  label: string;
+  description: string;
+  permission_keys: string[];
+}
+
+export interface UserAccessOptions {
+  access_levels: AccessLevelOption[];
+  roles: RoleOption[];
+  scope_options: UserScopeOption[];
+}
+
+export interface UserAccessProfile {
+  id: UUID;
+  username: string;
+  full_name: string;
+  email: string;
+  access_level: AccessLevelOption["value"];
+  primary_sector?: AreaSummary | null;
+  role?: RoleOption | null;
+  manual_scope_keys: string[];
+  role_permissions: string[];
+  effective_permissions: string[];
+}
+
+export interface UserAccessProfilePayload {
+  access_level: AccessLevelOption["value"];
+  role?: UUID | null;
+  manual_scope_keys: string[];
+}
+
 export interface UserWritePayload {
   username: string;
   email: string;

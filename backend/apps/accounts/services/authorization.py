@@ -45,6 +45,8 @@ def can_access_area(user, area_id=None, site_id=None) -> bool:
         return False
     if user.is_superuser:
         return True
+    if getattr(user, "access_level", "") in {"administrador", "desarrollador"}:
+        return True
 
     accessible_area_ids = get_user_accessible_area_ids(user)
     if area_id and area_id in accessible_area_ids:

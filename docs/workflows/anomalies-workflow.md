@@ -10,7 +10,7 @@ Definir el flujo base del primer modulo con reglas aptas para una operacion corp
 |---|---|---|
 | Borrador | `draft` | Registro inicial aun no presentado |
 | Reportada | `reported` | Alta formal realizada |
-| En revision | `under_review` | Clasificacion y analisis inicial |
+| En revision | `under_review` | REVICION DE HALLAZGOS y analisis inicial |
 | Plan pendiente | `action_plan_pending` | Requiere plan o definicion de acciones |
 | En ejecucion | `in_progress` | Acciones en curso |
 | Pendiente de verificacion | `pending_verification` | Acciones ejecutadas, esperando validacion |
@@ -54,7 +54,7 @@ stateDiagram-v2
 
 Una anomalia no puede cerrarse si falta cualquiera de los siguientes puntos:
 
-- clasificacion completa
+- REVICION DE HALLAZGOS completa
 - responsable funcional asignado
 - severidad y prioridad definidas
 - comentario final de resolucion

@@ -170,7 +170,7 @@ Debe contemplar como mínimo:
 Debe contemplarse quién puede:
 - crear anomalías
 - editar
-- clasificar
+- realizar REVICION DE HALLAZGOS
 - analizar
 - asignar acciones
 - ejecutar acciones
@@ -214,7 +214,7 @@ El módulo debe contemplar estas etapas:
 1. Registro
 2. Contención
 3. Verificación inicial
-4. Clasificación
+4. REVICION DE HALLAZGOS
 5. Análisis de causa
 6. Propuestas
 7. Plan de acción
@@ -256,7 +256,7 @@ DATOS MÍNIMOS DE LA ANOMALÍA
 
 OTROS COMPONENTES
 - verificación inicial con enfoque 6M o 4 porque
-- clasificación
+- REVICION DE HALLAZGOS
 - análisis de causa con método utilizado
 - propuestas
 - historial de comentarios

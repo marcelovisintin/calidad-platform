@@ -1,6 +1,6 @@
-import { ChangeEvent, MouseEvent, useDeferredValue, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { fetchUsers } from "../../../api/accounts";
-import { fetchTreatmentTasksHistory } from "../../../api/treatments";
+import { addTreatmentTaskEvidence, fetchTreatmentTasksHistory, updateTreatmentTask } from "../../../api/treatments";
 import { formatDate, formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
@@ -8,6 +8,33 @@ import { PaginationControls } from "../../../components/PaginationControls";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
+
+type TaskDraft = {
+  title: string;
+  description: string;
+  responsible: string;
+  execution_date: string;
+  status: "pending" | "in_progress" | "completed" | "cancelled";
+  anomaly_ids: string[];
+};
+
+const TASK_STATUS_OPTIONS = [
+  { value: "pending", label: "Pendiente" },
+  { value: "in_progress", label: "En curso" },
+  { value: "completed", label: "Completada" },
+  { value: "cancelled", label: "Cancelada" },
+] as const;
+
+const EVIDENCE_ACCEPT = "image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.odt,.ods,.zip";
+
+const EMPTY_TASK_DRAFT: TaskDraft = {
+  title: "",
+  description: "",
+  responsible: "",
+  execution_date: "",
+  status: "pending",
+  anomaly_ids: [],
+};
 
 function getUserLabel(user: { full_name?: string; username: string }) {
   return user.full_name?.trim() || user.username;
@@ -34,6 +61,13 @@ export function MyActionsPage() {
   const [performedBy, setPerformedBy] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [taskDraft, setTaskDraft] = useState<TaskDraft>(EMPTY_TASK_DRAFT);
+  const [taskEvidenceFile, setTaskEvidenceFile] = useState<File | null>(null);
+  const [taskEvidenceNote, setTaskEvidenceNote] = useState("");
+  const [taskEvidenceInputKey, setTaskEvidenceInputKey] = useState(0);
 
   const deferredQuery = useDeferredValue(query);
   const deferredAnomalyFilter = useDeferredValue(anomalyFilter);
@@ -65,6 +99,11 @@ export function MyActionsPage() {
     [page, deferredQuery, deferredAnomalyFilter, deferredTreatmentFilter, completedOn, performedBy, statusFilter],
   );
 
+  const selectedTask = useMemo(
+    () => data?.results.find((item) => item.id === selectedTaskId) ?? null,
+    [data?.results, selectedTaskId],
+  );
+
   useEffect(() => {
     const firstId = data?.results?.[0]?.id || "";
     if (!data?.results?.length) {
@@ -82,12 +121,115 @@ export function MyActionsPage() {
     }
   }, [data?.results, selectedTaskId]);
 
-  const handleCardClick = (event: MouseEvent<HTMLElement>, taskId: string) => {
-    const target = event.target as HTMLElement;
-    if (target.closest("button") || target.closest("a")) {
+  useEffect(() => {
+    if (!selectedTask) {
+      setTaskDraft(EMPTY_TASK_DRAFT);
+      setTaskEvidenceFile(null);
+      setTaskEvidenceNote("");
+      setTaskEvidenceInputKey((current) => current + 1);
       return;
     }
-    setSelectedTaskId(taskId);
+
+    setTaskDraft({
+      title: selectedTask.title,
+      description: selectedTask.description || "",
+      responsible: selectedTask.responsible?.id || "",
+      execution_date: selectedTask.execution_date || "",
+      status: selectedTask.status as TaskDraft["status"],
+      anomaly_ids: selectedTask.anomalies.map((item) => item.id),
+    });
+    setTaskEvidenceFile(null);
+    setTaskEvidenceNote("");
+    setTaskEvidenceInputKey((current) => current + 1);
+  }, [selectedTask?.id, selectedTask?.updated_at]);
+
+  const handleTaskDraftChange = <K extends keyof TaskDraft>(field: K, value: TaskDraft[K]) => {
+    setTaskDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const runMutation = async (task: () => Promise<void>, successMessage: string) => {
+    setBusy(true);
+    setFormError(null);
+    setMessage(null);
+    try {
+      await task();
+      setMessage(successMessage);
+      await reload();
+    } catch (mutationError) {
+      const mutationMessage = mutationError instanceof Error ? mutationError.message : "No se pudo guardar la tarea.";
+      setFormError(mutationMessage);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleUpdateTask = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedTask) {
+      return;
+    }
+
+    if (!selectedTask.treatment?.id) {
+      setFormError("No se encontro el tratamiento asociado a la tarea.");
+      return;
+    }
+
+    if (!taskDraft.title.trim()) {
+      setFormError("El titulo de la tarea es obligatorio.");
+      return;
+    }
+
+    await runMutation(
+      async () => {
+        await updateTreatmentTask(selectedTask.treatment.id, selectedTask.id, {
+          title: taskDraft.title.trim(),
+          description: taskDraft.description.trim(),
+          responsible: taskDraft.responsible || null,
+          execution_date: taskDraft.execution_date || null,
+          status: taskDraft.status,
+          root_cause: selectedTask.root_cause?.id || null,
+          anomaly_ids: taskDraft.anomaly_ids,
+        });
+      },
+      "Tarea actualizada.",
+    );
+  };
+
+  const handleTaskEvidenceFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0] ?? null;
+    setTaskEvidenceFile(selectedFile);
+  };
+
+  const handleAddTaskEvidence = async () => {
+    if (!selectedTask) {
+      return;
+    }
+
+    if (!selectedTask.treatment?.id) {
+      setFormError("No se encontro el tratamiento asociado a la tarea.");
+      return;
+    }
+
+    if (!taskEvidenceFile) {
+      setFormError("Debes seleccionar una evidencia para cargar en la tarea.");
+      return;
+    }
+
+    await runMutation(
+      async () => {
+        await addTreatmentTaskEvidence(selectedTask.treatment.id, selectedTask.id, {
+          file: taskEvidenceFile,
+          note: taskEvidenceNote,
+        });
+        setTaskEvidenceFile(null);
+        setTaskEvidenceNote("");
+        setTaskEvidenceInputKey((current) => current + 1);
+      },
+      "Evidencia cargada en la tarea.",
+    );
   };
 
   const totalCount = data?.count ?? 0;
@@ -199,6 +341,9 @@ export function MyActionsPage() {
         ) : null}
       </section>
 
+      {message ? <div className="panel">{message}</div> : null}
+      {formError ? <div className="panel danger">{formError}</div> : null}
+
       <DataState
         loading={loading || usersLoading}
         error={error}
@@ -207,6 +352,151 @@ export function MyActionsPage() {
         emptyTitle="No hay acciones para mostrar"
         emptyDescription="Ajusta los filtros para revisar el historico de tareas."
       >
+        {selectedTask ? (
+          <section className="panel action-detail-fixed">
+            <div className="section-head compact">
+              <h2>{`Editar tarea | ${selectedTask.code || selectedTask.title}`}</h2>
+              <StatusBadge value={selectedTask.is_overdue ? "overdue" : selectedTask.status} />
+            </div>
+
+            <p className="muted-copy">
+              Tratamiento: {selectedTask.treatment?.code || "Sin tratamiento"} | Anomalias asociadas: {selectedTask.anomalies.map((anomaly) => anomaly.code).join(", ") || "Sin asociar"}
+            </p>
+
+            <dl className="key-grid compact">
+              <div>
+                <dt>Estado tratamiento</dt>
+                <dd>{selectedTask.treatment?.status || "-"}</dd>
+              </div>
+              <div>
+                <dt>Fecha de ejecucion</dt>
+                <dd>{formatDate(selectedTask.execution_date)}</dd>
+              </div>
+              <div>
+                <dt>Causa raiz</dt>
+                <dd>{selectedTask.root_cause?.description || "Sin causa raiz"}</dd>
+              </div>
+              <div>
+                <dt>Responsable actual</dt>
+                <dd>{selectedTask.responsible?.full_name || selectedTask.responsible?.username || "Sin asignar"}</dd>
+              </div>
+            </dl>
+
+            <form className="form-section nested-form" onSubmit={handleUpdateTask}>
+              <div className="section-head compact">
+                <h3>Datos de la tarea</h3>
+                <button className="button button-primary" disabled={busy} type="submit">
+                  Guardar tarea
+                </button>
+              </div>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Titulo</span>
+                  <input
+                    onChange={(event) => handleTaskDraftChange("title", event.target.value)}
+                    required
+                    type="text"
+                    value={taskDraft.title}
+                  />
+                </label>
+                <label className="field">
+                  <span>Estado</span>
+                  <select
+                    onChange={(event) => handleTaskDraftChange("status", event.target.value as TaskDraft["status"])}
+                    value={taskDraft.status}
+                  >
+                    {TASK_STATUS_OPTIONS.map((status) => (
+                      <option key={status.value} value={status.value}>
+                        {status.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Responsable</span>
+                  <select
+                    onChange={(event) => handleTaskDraftChange("responsible", event.target.value)}
+                    value={taskDraft.responsible}
+                  >
+                    <option value="">Sin asignar</option>
+                    {(usersData?.results ?? []).map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {getUserLabel(user)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Fecha ejecucion</span>
+                  <input
+                    onChange={(event) => handleTaskDraftChange("execution_date", event.target.value)}
+                    type="date"
+                    value={taskDraft.execution_date}
+                  />
+                </label>
+              </div>
+              <label className="field">
+                <span>Descripcion</span>
+                <textarea
+                  onChange={(event) => handleTaskDraftChange("description", event.target.value)}
+                  rows={3}
+                  value={taskDraft.description}
+                />
+              </label>
+            </form>
+
+            <section className="form-section nested-form">
+              <div className="section-head compact">
+                <h3>Evidencias de la tarea</h3>
+                <button
+                  className="button button-primary"
+                  disabled={busy || !taskEvidenceFile}
+                  onClick={() => void handleAddTaskEvidence()}
+                  type="button"
+                >
+                  Cargar evidencia
+                </button>
+              </div>
+              <div className="form-grid">
+                <label className="field field-span-2">
+                  <span>Archivo (imagen, PDF, Word, Excel, texto o ZIP)</span>
+                  <input
+                    accept={EVIDENCE_ACCEPT}
+                    key={taskEvidenceInputKey}
+                    onChange={handleTaskEvidenceFileChange}
+                    type="file"
+                  />
+                </label>
+                <label className="field field-span-2">
+                  <span>Nota de evidencia (opcional)</span>
+                  <textarea
+                    onChange={(event) => setTaskEvidenceNote(event.target.value)}
+                    rows={3}
+                    value={taskEvidenceNote}
+                  />
+                </label>
+              </div>
+              <div className="stack-list compact">
+                {selectedTask.evidences.length ? (
+                  selectedTask.evidences.map((evidence) => (
+                    <div className="list-card compact" key={evidence.id}>
+                      <div className="evidence-block">
+                        <a href={getEvidenceUrl(evidence.file_url)} rel="noopener noreferrer" target="_blank">
+                          {evidence.original_name}
+                        </a>
+                        <small>{formatDateTime(evidence.created_at)}</small>
+                        <p>{evidence.note || "Sin nota"}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="muted-copy">Todavia no hay evidencias cargadas en esta tarea.</p>
+                )}
+              </div>
+            </section>
+          </section>
+        ) : null}
+
         <div className="stack-list">
           {data?.results.map((item) => {
             const isSelected = selectedTaskId === item.id;
@@ -218,7 +508,7 @@ export function MyActionsPage() {
               <article
                 className={`panel action-card${isSelected ? " active" : ""}`}
                 key={item.id}
-                onClick={(event) => handleCardClick(event, item.id)}
+                onClick={() => setSelectedTaskId(item.id)}
                 role="button"
                 tabIndex={0}
               >
@@ -249,55 +539,12 @@ export function MyActionsPage() {
                     <dd>{item.status === "completed" ? formatDate(item.execution_date) : "-"}</dd>
                   </div>
                 </dl>
-
-                {isSelected ? (
-                  <div className="action-detail-inline">
-                    <dl className="key-grid compact">
-                      <div>
-                        <dt>Tratamiento</dt>
-                        <dd>{item.treatment?.code || "-"}</dd>
-                      </div>
-                      <div>
-                        <dt>Estado tratamiento</dt>
-                        <dd>{item.treatment?.status || "-"}</dd>
-                      </div>
-                      <div>
-                        <dt>Fecha de ejecucion</dt>
-                        <dd>{formatDate(item.execution_date)}</dd>
-                      </div>
-                      <div>
-                        <dt>Causa raiz</dt>
-                        <dd>{item.root_cause?.description || "Sin causa raiz"}</dd>
-                      </div>
-                    </dl>
-
-                    {item.evidences.length ? (
-                      <section className="form-section">
-                        <div className="section-head compact">
-                          <h3>Evidencias de la tarea</h3>
-                        </div>
-                        <div className="stack-list compact">
-                          {item.evidences.map((evidence) => (
-                            <div className="list-card compact" key={evidence.id}>
-                              <div>
-                                <a href={getEvidenceUrl(evidence.file_url)} rel="noopener noreferrer" target="_blank">
-                                  {evidence.note || evidence.original_name || "Abrir evidencia"}
-                                </a>
-                                <small>{formatDateTime(evidence.created_at)}</small>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </section>
-                    ) : null}
-                  </div>
-                ) : null}
               </article>
             );
           })}
         </div>
 
-        <PaginationControls page={page} totalCount={totalCount} onPageChange={setPage} disabled={loading} />
+        <PaginationControls page={page} totalCount={totalCount} onPageChange={setPage} disabled={loading || busy} />
       </DataState>
     </section>
   );

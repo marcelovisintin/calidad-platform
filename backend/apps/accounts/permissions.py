@@ -72,7 +72,7 @@ class CanCreateAnomaly(HasBusinessPermission):
             return False
         if user.is_superuser:
             return True
-        if getattr(user, "access_level", "") == "usuario_activo":
+        if getattr(user, "access_level", "") in {"usuario_activo", "administrador", "desarrollador"}:
             return True
         return bool(self.required_permission and user.has_perm(self.required_permission))
 

@@ -12,11 +12,15 @@ from apps.accounts.api.serializers import (
     CurrentUserSerializer,
     LoginSerializer,
     LogoutSerializer,
+    RoleSummarySerializer,
+    UserAccessProfileSerializer,
+    UserAccessProfileWriteSerializer,
     UserDetailSerializer,
     UserListSerializer,
     UserWriteSerializer,
 )
-from apps.accounts.models import User
+from apps.accounts.constants import USER_SCOPE_OPTIONS
+from apps.accounts.models import Role, User
 from apps.accounts.permissions import CanCreateUsers, CanDeleteUsers, CanEditUsers, CanListUsers
 from apps.accounts.services.authorization import filter_user_directory_queryset
 from apps.accounts.throttling import LoginRateThrottle
@@ -151,3 +155,52 @@ class UserDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         if instance.pk == self.request.user.pk:
             raise ValidationError({"detail": "No puede eliminar su propio usuario."})
         instance.delete()
+
+
+class UserAccessOptionsAPIView(APIView):
+    permission_classes = [CanListUsers]
+
+    def get(self, request):
+        return Response(
+            {
+                "access_levels": [
+                    {"value": value, "label": label}
+                    for value, label in User.AccessLevel.choices
+                ],
+                "roles": RoleSummarySerializer(Role.objects.filter(is_active=True).order_by("name"), many=True).data,
+                "scope_options": USER_SCOPE_OPTIONS,
+            }
+        )
+
+
+class UserAccessProfileAPIView(APIView):
+    def get_permissions(self):
+        if self.request.method == "PATCH":
+            return [CanEditUsers()]
+        return [CanListUsers()]
+
+    def get_user(self, pk):
+        queryset = build_user_queryset(self.request.user).prefetch_related("user_permissions__content_type", "role_scopes__role__permissions__content_type")
+        try:
+            return queryset.get(pk=pk)
+        except User.DoesNotExist as exc:
+            raise ValidationError({"user": "Usuario no encontrado o fuera de alcance."}) from exc
+
+    def get(self, request, pk):
+        user = self.get_user(pk)
+        return Response(UserAccessProfileSerializer(user).data)
+
+    def patch(self, request, pk):
+        user = self.get_user(pk)
+        serializer = UserAccessProfileWriteSerializer(
+            data=request.data,
+            context={"request": request, "user": user},
+        )
+        serializer.is_valid(raise_exception=True)
+        updated_user = serializer.save()
+        refreshed_user = (
+            build_user_queryset(request.user)
+            .prefetch_related("user_permissions__content_type", "role_scopes__role__permissions__content_type")
+            .get(pk=updated_user.pk)
+        )
+        return Response(UserAccessProfileSerializer(refreshed_user).data)

@@ -51,11 +51,11 @@ export function MyAnomaliesPage() {
 
     if (!canModifyClassification) {
       setClassificationMessage(null);
-      setClassificationError("No se puede modificar la clasificacion.");
+      setClassificationError("No se puede modificar la REVICION DE HALLAZGOS.");
       return;
     }
 
-    if (!window.confirm("Esta seguro de la clasificacion?")) {
+    if (!window.confirm("Esta seguro de la REVICION DE HALLAZGOS?")) {
       return;
     }
 
@@ -65,10 +65,10 @@ export function MyAnomaliesPage() {
 
     try {
       await classifyAnomalyBySeverity(anomalyId, severityId);
-      setClassificationMessage("Clasificacion actualizada.");
+      setClassificationMessage("REVICION DE HALLAZGOS actualizada.");
       await reload();
     } catch (err) {
-      setClassificationError(err instanceof Error ? err.message : "No se pudo actualizar la clasificacion.");
+      setClassificationError(err instanceof Error ? err.message : "No se pudo actualizar la REVICION DE HALLAZGOS.");
     } finally {
       setUpdatingAnomalyId(null);
     }
@@ -85,10 +85,10 @@ export function MyAnomaliesPage() {
 
     try {
       await unlockAnomalyClassificationChange(anomalyId);
-      setClassificationMessage("Se habilita el cambio de clasificacion.");
+      setClassificationMessage("Se habilita el cambio de REVICION DE HALLAZGOS.");
       await reload();
     } catch (err) {
-      setClassificationError(err instanceof Error ? err.message : "No se pudo habilitar el cambio de clasificacion.");
+      setClassificationError(err instanceof Error ? err.message : "No se pudo habilitar el cambio de REVICION DE HALLAZGOS.");
     } finally {
       setUpdatingAnomalyId(null);
     }
@@ -144,9 +144,9 @@ export function MyAnomaliesPage() {
 
                   {adminUser ? (
                     <label className="anomaly-classification-control">
-                      <span>Clasificacion</span>
+                      <span>REVICION DE HALLAZGOS</span>
                       <select
-                        aria-label={`Clasificacion de ${item.code}`}
+                        aria-label={`REVICION DE HALLAZGOS de ${item.code}`}
                         disabled={disableClassificationSelect}
                         onChange={(event) => void handleClassificationChange(item.id, event.target.value, canModifyClassification)}
                         value={item.severity?.id || ""}
@@ -169,11 +169,11 @@ export function MyAnomaliesPage() {
                         </button>
                       ) : null}
                       {!canModifyClassification && !canUnlockClassification ? (
-                        <small className="muted-copy">No se puede modificar la clasificacion.</small>
+                        <small className="muted-copy">No se puede modificar la REVICION DE HALLAZGOS.</small>
                       ) : null}
                     </label>
                   ) : (
-                    <span className="status-badge info compact">{item.severity?.name || "Sin clasificar"}</span>
+                    <span className="status-badge info compact">{item.severity?.name || "Sin REVICION DE HALLAZGOS"}</span>
                   )}
                 </div>
               </article>

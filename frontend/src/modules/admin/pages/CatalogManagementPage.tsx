@@ -63,8 +63,8 @@ const ENTITY_META: EntityMeta[] = [
   },
   {
     key: "severities",
-    title: "Criterios de clasificacion",
-    description: "Criterios usados para clasificar cada anomalia.",
+    title: "Criterios de REVICION DE HALLAZGOS",
+    description: "Criterios usados para la REVICION DE HALLAZGOS de cada anomalia.",
   },
   {
     key: "priorities",

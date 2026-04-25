@@ -285,7 +285,7 @@ class AnomalyCreateApiTests(APITestCase):
 
         self.assertIsNotNone(patch_response.data["initial_verification"])
         self.assertIsNotNone(patch_response.data["classification"])
-        self.assertIn("Criterio de clasificacion aplicado", patch_response.data["classification"]["summary"])
+        self.assertIn("Criterio de REVICION DE HALLAZGOS aplicado", patch_response.data["classification"]["summary"])
         self.assertIn(self.severity.name, patch_response.data["classification"]["summary"])
 
         participant_exists = AnomalyParticipant.objects.filter(
@@ -330,7 +330,7 @@ class AnomalyCreateApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(blocked_change.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("No se puede modificar la clasificacion", str(blocked_change.data))
+        self.assertIn("No se puede modificar la REVICION DE HALLAZGOS", str(blocked_change.data))
 
         unlock_response = self.client.post(f"/api/v1/anomalies/{anomaly_id}/classification/unlock/", {}, format="json")
         self.assertEqual(unlock_response.status_code, status.HTTP_200_OK)
@@ -358,7 +358,7 @@ class AnomalyCreateApiTests(APITestCase):
 
         unlock_response = self.client.post(f"/api/v1/anomalies/{anomaly.pk}/classification/unlock/", {}, format="json")
         self.assertEqual(unlock_response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("No se puede modificar la clasificacion", str(unlock_response.data))
+        self.assertIn("No se puede modificar la REVICION DE HALLAZGOS", str(unlock_response.data))
 
 
     def test_create_treatment_moves_anomaly_to_treatment_created_and_blocks_classification(self):

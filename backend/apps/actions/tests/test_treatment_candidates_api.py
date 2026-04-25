@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import User
-from apps.actions.models import Treatment, TreatmentAnomaly
+from apps.actions.models import Treatment, TreatmentAnomaly, TreatmentParticipant, TreatmentTask
 from apps.anomalies.models import Anomaly, AnomalyStage, AnomalyStatus
 from apps.catalog.models import AnomalyOrigin, AnomalyType, Area, Priority, Severity, Site
 
@@ -27,6 +27,16 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.reporter_two = User.objects.create_user(
             username="reporter_two",
             email="reporter_two@example.com",
+            password="secret123",
+        )
+        self.task_user = User.objects.create_user(
+            username="mechi",
+            email="mechi@example.com",
+            password="secret123",
+        )
+        self.other_task_user = User.objects.create_user(
+            username="other_task_user",
+            email="other_task_user@example.com",
             password="secret123",
         )
 
@@ -141,3 +151,65 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["id"], str(self.anomaly_two.pk))
+
+    def test_tasks_history_for_participant_only_returns_own_tasks(self):
+        TreatmentParticipant.objects.create(
+            treatment=self.treatment_one,
+            user=self.task_user,
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+        own_task = TreatmentTask.objects.create(
+            treatment=self.treatment_one,
+            code="TRT-TASK-001",
+            title="Tarea de Mechi",
+            responsible=self.task_user,
+            execution_date=timezone.localdate(),
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+        other_task = TreatmentTask.objects.create(
+            treatment=self.treatment_one,
+            code="TRT-TASK-002",
+            title="Tarea de otro usuario",
+            responsible=self.other_task_user,
+            execution_date=timezone.localdate(),
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+
+        self.client.force_authenticate(user=self.task_user)
+        response = self.client.get("/api/v1/actions/treatments/tasks-history/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        task_ids = {item["id"] for item in response.data["results"]}
+        self.assertIn(str(own_task.pk), task_ids)
+        self.assertNotIn(str(other_task.pk), task_ids)
+
+    def test_admin_tasks_history_can_return_all_tasks(self):
+        own_task = TreatmentTask.objects.create(
+            treatment=self.treatment_one,
+            code="TRT-TASK-003",
+            title="Tarea visible admin 1",
+            responsible=self.task_user,
+            execution_date=timezone.localdate(),
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+        other_task = TreatmentTask.objects.create(
+            treatment=self.treatment_one,
+            code="TRT-TASK-004",
+            title="Tarea visible admin 2",
+            responsible=self.other_task_user,
+            execution_date=timezone.localdate(),
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get("/api/v1/actions/treatments/tasks-history/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        task_ids = {item["id"] for item in response.data["results"]}
+        self.assertIn(str(own_task.pk), task_ids)
+        self.assertIn(str(other_task.pk), task_ids)

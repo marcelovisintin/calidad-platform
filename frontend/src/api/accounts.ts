@@ -1,5 +1,14 @@
 import { apiRequest } from "./http";
-import type { CurrentUser, LoginResponse, PagedResponse, UserDirectoryItem, UserWritePayload } from "./types";
+import type {
+  CurrentUser,
+  LoginResponse,
+  PagedResponse,
+  UserAccessOptions,
+  UserAccessProfile,
+  UserAccessProfilePayload,
+  UserDirectoryItem,
+  UserWritePayload,
+} from "./types";
 
 export function login(identifier: string, password: string) {
   return apiRequest<LoginResponse>("/accounts/login/", {
@@ -59,5 +68,20 @@ export function updateUser(userId: string, payload: UserWritePayload) {
 export function deleteUser(userId: string) {
   return apiRequest<void>(`/accounts/users/${userId}/`, {
     method: "DELETE",
+  });
+}
+
+export function fetchUserAccessOptions() {
+  return apiRequest<UserAccessOptions>("/accounts/users/access-options/");
+}
+
+export function fetchUserAccessProfile(userId: string) {
+  return apiRequest<UserAccessProfile>(`/accounts/users/${userId}/access-profile/`);
+}
+
+export function updateUserAccessProfile(userId: string, payload: UserAccessProfilePayload) {
+  return apiRequest<UserAccessProfile>(`/accounts/users/${userId}/access-profile/`, {
+    method: "PATCH",
+    body: payload,
   });
 }
