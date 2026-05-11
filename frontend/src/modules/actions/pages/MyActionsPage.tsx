@@ -1,5 +1,6 @@
-import { ChangeEvent, FormEvent, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, MouseEvent, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { fetchUsers } from "../../../api/accounts";
+import { readStoredSession } from "../../../api/http";
 import { addTreatmentTaskEvidence, fetchTreatmentTasksHistory, updateTreatmentTask } from "../../../api/treatments";
 import { formatDate, formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
@@ -44,10 +45,49 @@ function getEvidenceUrl(fileUrl?: string) {
   if (!fileUrl) {
     return "#";
   }
-  if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://") || fileUrl.startsWith("/")) {
-    return fileUrl;
+
+  const trimmed = fileUrl.trim();
+  if (!trimmed) {
+    return "#";
   }
-  return `/${fileUrl}`;
+
+  if (trimmed.startsWith("/")) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    try {
+      const parsed = new URL(trimmed);
+      const hostname = parsed.hostname.toLowerCase();
+      const isLoopbackHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+      if (isLoopbackHost || parsed.pathname.startsWith("/api/") || parsed.pathname.startsWith("/media/")) {
+        return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+      }
+      return parsed.toString();
+    } catch {
+      return trimmed;
+    }
+  }
+
+  return `/${trimmed}`;
+}
+
+function extractFilenameFromDisposition(contentDisposition: string | null, fallback = "evidencia") {
+  if (!contentDisposition) {
+    return fallback;
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+
+  const regularMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+  return regularMatch?.[1] || fallback;
 }
 
 export function MyActionsPage() {
@@ -63,10 +103,12 @@ export function MyActionsPage() {
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [statusEvidenceError, setStatusEvidenceError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [taskDraft, setTaskDraft] = useState<TaskDraft>(EMPTY_TASK_DRAFT);
   const [taskEvidenceFile, setTaskEvidenceFile] = useState<File | null>(null);
   const [taskEvidenceNote, setTaskEvidenceNote] = useState("");
+  const [taskStatusEvidenceNote, setTaskStatusEvidenceNote] = useState("");
   const [taskEvidenceInputKey, setTaskEvidenceInputKey] = useState(0);
 
   const deferredQuery = useDeferredValue(query);
@@ -126,6 +168,8 @@ export function MyActionsPage() {
       setTaskDraft(EMPTY_TASK_DRAFT);
       setTaskEvidenceFile(null);
       setTaskEvidenceNote("");
+      setTaskStatusEvidenceNote("");
+      setStatusEvidenceError(null);
       setTaskEvidenceInputKey((current) => current + 1);
       return;
     }
@@ -140,6 +184,8 @@ export function MyActionsPage() {
     });
     setTaskEvidenceFile(null);
     setTaskEvidenceNote("");
+    setTaskStatusEvidenceNote("");
+    setStatusEvidenceError(null);
     setTaskEvidenceInputKey((current) => current + 1);
   }, [selectedTask?.id, selectedTask?.updated_at]);
 
@@ -157,10 +203,15 @@ export function MyActionsPage() {
     try {
       await task();
       setMessage(successMessage);
+      setStatusEvidenceError(null);
       await reload();
     } catch (mutationError) {
       const mutationMessage = mutationError instanceof Error ? mutationError.message : "No se pudo guardar la tarea.";
-      setFormError(mutationMessage);
+      if (mutationMessage.toLowerCase().startsWith("evidence_note:")) {
+        setStatusEvidenceError(mutationMessage.replace(/^evidence_note:\s*/i, ""));
+      } else {
+        setFormError(mutationMessage);
+      }
     } finally {
       setBusy(false);
     }
@@ -182,6 +233,13 @@ export function MyActionsPage() {
       return;
     }
 
+    const statusChanged = taskDraft.status !== selectedTask.status;
+    if (statusChanged && !taskStatusEvidenceNote.trim()) {
+      setFormError(null);
+      setStatusEvidenceError("Debes cargar una nota de evidencia para cambiar el estado de la tarea.");
+      return;
+    }
+
     await runMutation(
       async () => {
         await updateTreatmentTask(selectedTask.treatment.id, selectedTask.id, {
@@ -190,9 +248,15 @@ export function MyActionsPage() {
           responsible: taskDraft.responsible || null,
           execution_date: taskDraft.execution_date || null,
           status: taskDraft.status,
-          root_cause: selectedTask.root_cause?.id || null,
+          evidence_note: statusChanged ? taskStatusEvidenceNote.trim() : undefined,
+          root_cause_ids: selectedTask.root_causes?.length
+            ? selectedTask.root_causes.map((cause) => cause.id)
+            : selectedTask.root_cause
+              ? [selectedTask.root_cause.id]
+              : [],
           anomaly_ids: taskDraft.anomaly_ids,
         });
+        setTaskStatusEvidenceNote("");
       },
       "Tarea actualizada.",
     );
@@ -201,6 +265,56 @@ export function MyActionsPage() {
   const handleTaskEvidenceFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0] ?? null;
     setTaskEvidenceFile(selectedFile);
+  };
+
+  const handleOpenEvidence = async (event: MouseEvent<HTMLAnchorElement>, rawFileUrl: string, fallbackName = "evidencia") => {
+    event.preventDefault();
+
+    const fileUrl = getEvidenceUrl(rawFileUrl);
+    if (!fileUrl || fileUrl === "#") {
+      setFormError("La evidencia no tiene una URL valida.");
+      return;
+    }
+
+    const session = readStoredSession();
+    if (!session?.access) {
+      setFormError("Tu sesion vencio. Inicia sesion nuevamente para abrir evidencias.");
+      return;
+    }
+
+    try {
+      const response = await fetch(fileUrl, {
+        method: "GET",
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${session.access}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error HTTP ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const contentType = (response.headers.get("content-type") || blob.type || "").toLowerCase();
+      const canPreview = contentType.startsWith("image/") || contentType.includes("pdf") || contentType.startsWith("text/");
+
+      if (canPreview) {
+        window.open(blobUrl, "_blank", "noopener,noreferrer");
+      } else {
+        const tempLink = document.createElement("a");
+        tempLink.href = blobUrl;
+        tempLink.download = extractFilenameFromDisposition(response.headers.get("content-disposition"), fallbackName);
+        document.body.appendChild(tempLink);
+        tempLink.click();
+        tempLink.remove();
+      }
+
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch {
+      setFormError("No se pudo abrir la evidencia. Verifica que tu sesion siga activa e intenta nuevamente.");
+    }
   };
 
   const handleAddTaskEvidence = async () => {
@@ -363,6 +477,37 @@ export function MyActionsPage() {
               Tratamiento: {selectedTask.treatment?.code || "Sin tratamiento"} | Anomalias asociadas: {selectedTask.anomalies.map((anomaly) => anomaly.code).join(", ") || "Sin asociar"}
             </p>
 
+            <div className="form-section nested-form">
+              <div className="section-head compact">
+                <h3>Evidencias cargadas</h3>
+              </div>
+              <div className="stack-list compact">
+                {selectedTask.evidences.length ? (
+                  selectedTask.evidences.map((evidence) => (
+                    <div className="list-card compact" key={`summary-${evidence.id}`}>
+                      <div className="evidence-block">
+                        <a
+                          href={getEvidenceUrl(evidence.file_url)}
+                          onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)}
+                          rel="noopener noreferrer"
+                          target="_blank"
+                        >
+                          {evidence.original_name}
+                        </a>
+                        <small>
+                          {formatDateTime(evidence.created_at)}
+                          {evidence.uploaded_by?.full_name ? ` - ${evidence.uploaded_by.full_name}` : ""}
+                        </small>
+                        <p>{evidence.note || "Sin nota"}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="muted-copy">Todavia no hay evidencias cargadas en esta tarea.</p>
+                )}
+              </div>
+            </div>
+
             <dl className="key-grid compact">
               <div>
                 <dt>Estado tratamiento</dt>
@@ -373,8 +518,12 @@ export function MyActionsPage() {
                 <dd>{formatDate(selectedTask.execution_date)}</dd>
               </div>
               <div>
-                <dt>Causa raiz</dt>
-                <dd>{selectedTask.root_cause?.description || "Sin causa raiz"}</dd>
+                <dt>Causas raiz</dt>
+                <dd>
+                  {selectedTask.root_causes?.length
+                    ? selectedTask.root_causes.map((cause) => `Causa ${cause.sequence}: ${cause.description}`).join(" | ")
+                    : selectedTask.root_cause?.description || "Sin causa raiz"}
+                </dd>
               </div>
               <div>
                 <dt>Responsable actual</dt>
@@ -385,9 +534,16 @@ export function MyActionsPage() {
             <form className="form-section nested-form" onSubmit={handleUpdateTask}>
               <div className="section-head compact">
                 <h3>Datos de la tarea</h3>
-                <button className="button button-primary" disabled={busy} type="submit">
-                  Guardar tarea
-                </button>
+                <div className="task-save-controls">
+                  {statusEvidenceError ? (
+                    <span className="inline-form-alert" role="alert">
+                      {statusEvidenceError}
+                    </span>
+                  ) : null}
+                  <button className="button button-primary" disabled={busy} type="submit">
+                    Guardar tarea
+                  </button>
+                </div>
               </div>
               <div className="form-grid">
                 <label className="field">
@@ -402,7 +558,10 @@ export function MyActionsPage() {
                 <label className="field">
                   <span>Estado</span>
                   <select
-                    onChange={(event) => handleTaskDraftChange("status", event.target.value as TaskDraft["status"])}
+                    onChange={(event) => {
+                      setStatusEvidenceError(null);
+                      handleTaskDraftChange("status", event.target.value as TaskDraft["status"]);
+                    }}
                     value={taskDraft.status}
                   >
                     {TASK_STATUS_OPTIONS.map((status) => (
@@ -443,6 +602,25 @@ export function MyActionsPage() {
                   value={taskDraft.description}
                 />
               </label>
+              {taskDraft.status !== selectedTask.status ? (
+                <label className="field">
+                  <span>Nota de evidencia del cambio de estado</span>
+                  <textarea
+                    onChange={(event) => {
+                      setTaskStatusEvidenceNote(event.target.value);
+                      if (event.target.value.trim()) {
+                        setStatusEvidenceError(null);
+                      }
+                    }}
+                    required
+                    rows={3}
+                    value={taskStatusEvidenceNote}
+                  />
+                  <small className="muted-copy">
+                    Obligatoria para registrar el cambio de estado en el historial de la anomalia.
+                  </small>
+                </label>
+              ) : null}
             </form>
 
             <section className="form-section nested-form">
@@ -481,7 +659,12 @@ export function MyActionsPage() {
                   selectedTask.evidences.map((evidence) => (
                     <div className="list-card compact" key={evidence.id}>
                       <div className="evidence-block">
-                        <a href={getEvidenceUrl(evidence.file_url)} rel="noopener noreferrer" target="_blank">
+                        <a
+                          href={getEvidenceUrl(evidence.file_url)}
+                          onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)}
+                          rel="noopener noreferrer"
+                          target="_blank"
+                        >
                           {evidence.original_name}
                         </a>
                         <small>{formatDateTime(evidence.created_at)}</small>

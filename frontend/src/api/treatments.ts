@@ -11,15 +11,45 @@ import type {
   TreatmentTaskEvidence,
   TreatmentTaskHistory,
   TreatmentUpdatePayload,
+  TreatmentValidationPayload,
   TreatmentWritePayload,
 } from "./types";
 
-export function fetchTreatments(page = 1, search = "") {
+export function fetchTreatments(page = 1, search = "", options: { validationReady?: boolean } = {}) {
   const params = new URLSearchParams({ page: String(page), page_size: "10" });
   if (search.trim()) {
     params.set("search", search.trim());
   }
+  if (options.validationReady) {
+    params.set("validation_ready", "1");
+  }
   return apiRequest<PagedResponse<TreatmentSummary>>(`/actions/treatments/?${params.toString()}`);
+}
+
+export function fetchTreatmentTracking(filters: {
+  page?: number;
+  code?: string;
+  user?: string;
+  process?: string;
+} = {}) {
+  const params = new URLSearchParams({
+    page: String(filters.page ?? 1),
+    page_size: "10",
+  });
+  if (filters.code?.trim()) {
+    params.set("code", filters.code.trim());
+  }
+  if (filters.user?.trim()) {
+    params.set("user", filters.user.trim());
+  }
+  if (filters.process?.trim()) {
+    params.set("process", filters.process.trim());
+  }
+  return apiRequest<PagedResponse<TreatmentSummary>>(`/actions/treatment-tracking/?${params.toString()}`);
+}
+
+export function fetchTreatmentTrackingDetail(treatmentId: string) {
+  return apiRequest<TreatmentDetail>(`/actions/treatment-tracking/${treatmentId}/`);
 }
 
 export function fetchTreatmentTasksHistory(filters: {
@@ -72,6 +102,13 @@ export function createTreatment(payload: TreatmentWritePayload) {
 export function updateTreatment(treatmentId: string, payload: TreatmentUpdatePayload) {
   return apiRequest<TreatmentDetail>(`/actions/treatments/${treatmentId}/`, {
     method: "PATCH",
+    body: payload,
+  });
+}
+
+export function validateTreatmentEffectiveness(treatmentId: string, payload: TreatmentValidationPayload) {
+  return apiRequest<TreatmentDetail>(`/actions/treatments/${treatmentId}/validation/`, {
+    method: "POST",
     body: payload,
   });
 }
@@ -147,9 +184,11 @@ export function addTreatmentTask(
     title: string;
     description?: string;
     root_cause?: string | null;
+    root_cause_ids?: string[];
     responsible?: string | null;
     execution_date?: string | null;
     status?: string;
+    evidence_note?: string;
     anomaly_ids?: string[];
   },
 ) {
@@ -166,9 +205,11 @@ export function updateTreatmentTask(
     title?: string;
     description?: string;
     root_cause?: string | null;
+    root_cause_ids?: string[];
     responsible?: string | null;
     execution_date?: string | null;
     status?: string;
+    evidence_note?: string;
     anomaly_ids?: string[];
   },
 ) {

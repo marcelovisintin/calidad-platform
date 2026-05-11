@@ -12,6 +12,8 @@ const TOKEN_LABELS: Record<string, string> = {
   in_progress: "en curso",
   overdue: "vencido",
   completed: "completado",
+  validated_effective: "validado eficaz",
+  not_effective: "no eficaz",
   active: "activo",
   inactive: "inactivo",
   staff: "equipo",

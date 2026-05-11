@@ -28,6 +28,12 @@ const primarySectionsBase = [
     label: "Ver mis anomalias",
   },
   {
+    title: "Seguimiento de tratamientos",
+    description: "Consulta readonly de procedimientos, tareas, responsables, evidencias y validaciones.",
+    to: "/treatments/tracking",
+    label: "Auditar tratamientos",
+  },
+  {
     title: "Tratamientos",
     description: "Gestiona convocatorias, analisis de causa raiz y tareas surgidas de anomalias con REVICION DE HALLAZGOS para tratamiento.",
     to: "/treatments",
@@ -38,6 +44,12 @@ const primarySectionsBase = [
     description: "Accede a acciones asignadas, tareas abiertas y bandeja interna del usuario.",
     to: "/actions/mine",
     label: "Ver acciones",
+  },
+  {
+    title: "Validacion",
+    description: "Evalua si los tratamientos completados fueron eficaces o deben reabrirse.",
+    to: "/validation",
+    label: "Validar eficacia",
   },
   {
     title: "Bandeja interna",
@@ -84,7 +96,7 @@ const adminSections = [
   { title: "Areas", description: "Areas principales de la empresa donde opera el sistema.", to: "/management/catalogs?entity=sites" },
   { title: "Procesos", description: "Procesos o subsectores de trabajo disponibles para el registro.", to: "/management/catalogs?entity=areas" },
   { title: "Lineas", description: "Lineas o puestos productivos, si el proceso las utiliza.", to: "/management/catalogs?entity=lines" },
-  { title: "Tipos de anomalia", description: "Catalogo de defectos, desvios o eventos de calidad.", to: "/management/catalogs?entity=anomaly-types" },
+  { title: "Tipos de desvio", description: "Catalogo de defectos, desvios o eventos de calidad.", to: "/management/catalogs?entity=anomaly-types" },
   { title: "Origenes", description: "Origen o fuente primaria asociada a la anomalia.", to: "/management/catalogs?entity=anomaly-origins" },
   { title: "Criterios de REVICION DE HALLAZGOS", description: "Criterios usados para la REVICION DE HALLAZGOS de cada anomalia.", to: "/management/catalogs?entity=severities" },
   { title: "Prioridades", description: "Prioridades operativas y de tratamiento.", to: "/management/catalogs?entity=priorities" },

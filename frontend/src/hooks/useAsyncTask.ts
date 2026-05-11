@@ -15,6 +15,7 @@ export function useAsyncTask<T>(task: () => Promise<T>, deps: unknown[] = []): A
   const run = async () => {
     try {
       setLoading(true);
+      setData(null);
       setError(null);
       const result = await task();
       setData(result);

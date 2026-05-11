@@ -53,7 +53,7 @@ const ENTITY_META: EntityMeta[] = [
   },
   {
     key: "anomaly-types",
-    title: "Tipos de anomalia",
+    title: "Tipos de desvio",
     description: "Catalogo de defectos, desvios o eventos de calidad.",
   },
   {

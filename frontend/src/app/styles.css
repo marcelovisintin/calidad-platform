@@ -507,6 +507,26 @@ small {
   align-items: center;
 }
 
+.task-save-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.inline-form-alert {
+  max-width: 460px;
+  border: 1px solid rgba(183, 68, 60, 0.24);
+  border-radius: 999px;
+  padding: 0.55rem 0.8rem;
+  background: rgba(183, 68, 60, 0.08);
+  color: var(--danger);
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
 .submit-bar {
   display: flex;
   align-items: center;
@@ -608,6 +628,64 @@ small {
 .anomaly-row-main p,
 .anomaly-row-main small {
   margin: 0;
+}
+
+.anomaly-toolbar,
+.repetition-study-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.8rem;
+}
+
+.anomaly-toolbar input[type="search"],
+.repetition-study-toolbar label {
+  flex: 1;
+  min-width: 0;
+}
+
+.repetition-study-toolbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  font-weight: 700;
+}
+
+.repetition-study-row {
+  align-items: center;
+}
+
+.repetition-study-row small {
+  display: block;
+  color: var(--muted);
+}
+
+.data-table-wrap {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.85rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(15, 76, 92, 0.1);
+}
+
+.data-table th {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.data-table td:nth-child(3) {
+  max-width: 360px;
 }
 
 .anomaly-row-actions {
@@ -729,6 +807,18 @@ small {
   margin: 0 0 0.5rem;
 }
 
+.timeline-evidence {
+  margin: 0 0 0.55rem 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid rgba(86, 114, 123, 0.18);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.timeline-evidence strong {
+  color: var(--text);
+}
+
 .login-shell {
   min-height: 100vh;
   display: grid;
@@ -845,6 +935,12 @@ small {
   .anomaly-classification-control select {
     width: 100%;
     min-width: 0;
+  }
+
+  .anomaly-toolbar,
+  .repetition-study-toolbar {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .topbar {

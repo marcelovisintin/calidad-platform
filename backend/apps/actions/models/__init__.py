@@ -10,6 +10,7 @@ from .action import (
 from .treatment import (
     Treatment,
     TreatmentAnomaly,
+    TreatmentEffectivenessValidationResult,
     TreatmentEvidence,
     TreatmentMethod,
     TreatmentParticipant,
@@ -32,6 +33,7 @@ __all__ = [
     "ActionPlanStatus",
     "Treatment",
     "TreatmentAnomaly",
+    "TreatmentEffectivenessValidationResult",
     "TreatmentEvidence",
     "TreatmentMethod",
     "TreatmentParticipant",

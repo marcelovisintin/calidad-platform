@@ -40,7 +40,7 @@ Despliegue:
 3.2 Catalog
 - Sitios
 - Areas
-- Tipos de anomalia
+- Tipos de desvio
 - Origenes
 - Severidades
 - Prioridades
@@ -54,7 +54,7 @@ Despliegue:
 - Comentarios
 - Adjuntos
 - Verificacion inicial 6M
-- REVICION DE HALLAZGOS
+- Clasificacion
 - Analisis de causa
 - Propuestas
 - Resultados
@@ -91,7 +91,7 @@ Etapas:
 1. Registro
 2. Contencion
 3. Verificacion inicial
-4. REVICION DE HALLAZGOS
+4. Clasificacion
 5. Analisis de causa
 6. Propuestas
 7. Plan de accion
@@ -267,7 +267,7 @@ secciones principales acciones y pendientes,  en el panel izq. "mis acciones" qu
  paginacion como las otras listas.
 __________________________________________________________________________________________________________________________
 
-cuando una anomalia tiene REVICION DE HALLAZGOS como accion inmediata, no se debe permitir crear tratamiento, se deberia abrir
+ cuando una anomalia es clasificada como accion inmediata, no se debe permitir crear tratamiento, se deberia abrir 
  nueva pantalla para anomalias con accion inmediata y dentro de esta poner una observacion un responsable fecha y acciones 
  a tomar o que se tomaron. fecha verificacion de eficacia y luego cierre directo sin mas.
 
@@ -318,15 +318,15 @@ usuario comun no ve tratamientos directamente , mando medio los ve y puede edita
 ni aprobar verificacion e 
 
 _21/04________________________________________________________________________________________________________
-En seguimiento de anomalias el campo REVICION DE HALLAZGOS solo se puede cambiar una vez agregar
- cartel de " esta seguro de la REVICION DE HALLAZGOS? " , si la anomalia no ha pasado aun a una siguiente etapa se podra
-  habilitar nuevamente el cambio poner cartel " se habilita el cambio de REVICION DE HALLAZGOS" si la anomalia ya paso
-   a otra etapa   cartel " no se puede modificar la REVICION DE HALLAZGOS".   ECHO QUEDO BIEN
+En seguimiento de anomalias el campo clasificacion solo se puede cambiar una vez agregar
+ cartel de " esta seguro de la clasificacion? " , si la anomalia no ha pasado aun a una siguiente etapa se podra
+  habilitar nuevamente el cambio poner cartel " se habilita el cambiode clasificacion" si la anomalia ya paso
+   a otra etapa   cartel " no se puede modificar la clasificacion".   ECHO QUEDO BIEN
 ...........................................................................................................
 cuando creamos tratamiento,(boton crear tratamiento en tratamientos, se le asigna un Id eso es correcto lo
  que falta es que ahi cambie el estado de la anomalia a tratameinto creado e impacte en detalle de
- anomalia historial y en participacion y verificaciones,entre REVICION DE HALLAZGOS y antes de analisis de causa ) 
-tambien este cambio servira para bloquear cambio de REVICION DE HALLAZGOS. ECHO QUEDO BIEN
+ anomalia historial y en participacion y verificaciones,entre clasificacion y antes de analisis de causa ) 
+ tambien este cambio servira para bloquear cambio de clasificacion. ECHO QUEDO BIEN
 _22/04__________________________________________________________________________________________________________
 revisar tareas y acciones son lo mismo?  
 ................................................................................................................
@@ -339,36 +339,210 @@ Vamos a comitear y pushear. nombre 2026-04-22.     ECHO OK
 en TRATAMIENTOS----VISTA 2 ANALISIS-----EDITAR TAREA, EVIDENCIA DE LA TAREA pasarlo a ACCIONES como un formulario que se despliega
 una vez que se hizo click en alguna de las tareas que figuran en el listado filtrado en la pagina ACCIONES.
 ............................................................................................................
-aciones todo usuario puede entrar a acciones pero puede ver todas y solo modificar las que le pertenecen 
+aciones todo usuario puede entrar a acciones pero debe ver solo las que le pertencen y debe poder modificarlas.
+ Usuarios con nivel administrador o desarrollador pueden ver todas pero solo modificar las suyas. 
+ (esto a modo de idea porque en permisos se debe poder establecer y cambiar esto.)
 (cargadas en el tratameinto, en analisis, tareas surgidas del tratameinto, responsable)
 ........................................................................................................
 en ACCIONES Y PENDIENTES en el filtro ESTADO cuando pongo VENCIDA da :
 <!doctype html> <html lang="en"> <head> <title>Server Error (500)</title> </head> <body> <h1>Server Error (500)</h1><p></p> </body> </html>
+-24/04____________________________________________________________________________________________________________________________
+
+El nombre CLASIFICACION cambiar por REVICION DE HALLAZGOS       ECHO OK
 ..................................................................................................................
-El nombre REVICION DE HALLAZGOS cambiar por REVICION DE HALLAZGOS
-..................................................................................................................
-
-Permisos usuario revisar funcion de tarjeta rol y campo nivel de acceso en tarjeta usuarios.
 
 
-Nivel de acceso:  Usuario activo 
-                  Mando medio activo
-                  Administrador
-                  Desarrollador
-                 
+Contexto/Rol:
+Actuá como desarrollador senior full-stack especializado en sistemas de gestión de calidad, permisos de usuarios y aplicaciones web empresariales.
 
+Estamos trabajando en un sistema de gestión de anomalías / calidad. Dentro del sistema ya existe un Panel de Gestión con tarjetas o secciones relacionadas a usuarios, roles y alcances.
 
-Rol por usauario y niveles de acceso
+Objetivo:
+Revisar y mejorar la funcionalidad de permisos de usuario dentro del Panel de Gestión.
 
-    1 menu contextual
-    2 nueva anomalia
-    3 seguimiento anomalia
-    4 accion inmediata
-    5 tratamientos
-      5a creacion de tratamientos
-      5b convocatoria
-      5c Analisis
-    6 acciones
-    7 pendientes
-    8 verificacion de eficacia
+Ubicación funcional:
+Panel de Gestión → Tarjetas:
+- Roles y alcances
+- Alcances de usuario
+- Usuarios
+
+Necesito que implementes o ajustes una interfaz para que el Administrador pueda asignar permisos y alcances a cada usuario mediante listas tipo checklist.
+
+Concepto funcional:
+Cada usuario debe tener:
+1. Nivel de acceso
+2. Rol asignado
+3. Permisos o alcances específicos habilitados manualmente
+
+Niveles de acceso:
+- Usuario activo
+- Mando medio activo
+- Administrador
+- Desarrollador
+
+Permisos / alcances disponibles:
+1. Menú contextual
+2. Nueva anomalía
+3. Seguimiento de anomalía
+4. Acción inmediata
+5. Tratamientos
+   5a. Creación de tratamientos
+   5b. Convocatoria
+   5c. Análisis
+6. Acciones
+7. Pendientes
+8. Verificación de eficacia
+
+Requerimiento principal:
+En la tarjeta o sección "Alcances de usuario", el Administrador debe poder:
+- Seleccionar un usuario
+- Ver su nivel de acceso actual
+- Ver su rol actual
+- Ver una lista tipo checklist con todos los permisos disponibles
+- Marcar o desmarcar permisos
+- Guardar los cambios
+- Ver una confirmación clara luego de guardar
+
+Reglas recomendadas:
+- El nivel de acceso define una base jerárquica.
+- Los permisos checklist definen los alcances reales.
+- No hardcodear permisos en condicionales dispersos.
+- Centralizar la lógica de permisos para que sea fácil de mantener.
+- Evitar sobreingeniería.
+- Mantener compatibilidad con la estructura actual del proyecto.
+
+Criterios de calidad:
+- Antes de modificar código, analizá la estructura actual del proyecto.
+- Identificá modelos, vistas, templates, formularios y rutas relacionadas con usuarios, roles y permisos.
+- Proponé un breve plan de implementación.
+- Luego implementá por etapas.
+- No rompas funcionalidades existentes.
+- Reutilizá componentes existentes cuando sea posible.
+- El código debe quedar claro, mantenible y preparado para crecer.
+- Agregá validaciones básicas.
+- Si hay migraciones de base de datos necesarias, generarlas correctamente.
+- Si detectás inconsistencias en el modelo actual de permisos, explicalas antes de cambiar.
+
+Formato de trabajo:
+1. Primero inspeccioná el proyecto.
+2. Luego explicá qué encontraste.
+3. Proponé el plan.
+4. Implementá los cambios.
+5. Indicá qué archivos modificaste.
+6. Indicá cómo probar la funcionalidad.
+
+Prompt operativo:
+Revisá el sistema actual de permisos de usuario en el Panel de Gestión, especialmente las tarjetas "Roles y alcances", "Alcances de usuario" 
+y "Usuarios". Necesito que en "Alcances de usuario" exista una interfaz tipo checklist para que el Administrador pueda asignar permisos
+ específicos a cada usuario.
+
+El sistema debe contemplar los niveles de acceso: Usuario activo, Mando medio activo, Administrador y Desarrollador.
+
+Los permisos disponibles deben incluir: Menú contextual, Nueva anomalía, Seguimiento de anomalía, Acción inmediata, Tratamientos, 
+Creación de tratamientos, Convocatoria, Análisis, Acciones, Pendientes y Verificación de eficacia.
+
+Primero analizá la estructura existente y no modifiques nada hasta tener claro cómo está armado. Después implementá la mejora de forma limpia 
+y mantenible.
+Permisos usuario revisar funcion de tarjeta rol y campo nivel de acceso en tarjeta usuarios.  ECHO OK
+__25/04___________________________________________________________________________________________________________
+he detectado que cargo un usuario administrador con todo los permisos y no permite registrar anomalias 
+no se si hay relacion. ECHO OK
+
 ................................................................................................................
+quedo bastante bien detecto un problemita cuando un usuario (ej mechi) que participa de un tratameinto se le asigna tarea al entrar en  
+en acciones se ven todas las tareas del tratameinto la que es para ella y la que es para otro usuario. 
+solo deberia de ver tareas que sean para ella. ECHO OK
+............................................................................................................................................
+cuando un usuario cambia el estado de una tarea se le debe obligar a cargar la nota de la evidencia. este cambio se debe registrar
+ en el historial de seguimiento de anomalias en el .el usuario puede volver a cambiar el estado pero siempre con la obligacion de carga la nota 
+ en la evidencia.Consulta/Tarea:
+Modificar la lógica de cambio de estado de tareas para que sea obligatorio cargar una nota de evidencia en cada cambio, registrar esa información en el historial de la anomalía y mejorar la visualización del historial agregando dicha evidencia debajo del evento.
+
+Especificaciones funcionales:
+1. Cada vez que un usuario cambie el estado de una tarea, el sistema debe exigir una nota de evidencia obligatoria.
+2. La nota de evidencia:
+   - No puede estar vacía ni contener solo espacios.
+   - Debe ser obligatoria en todos los cambios de estado, sin excepción.
+3. El usuario puede cambiar el estado múltiples veces, pero en cada cambio debe ingresar una nueva nota de evidencia.
+4. Si no se ingresa la nota, el sistema debe impedir el cambio de estado y mostrar un mensaje claro al usuario.
+5. Esta validación debe implementarse en backend (obligatorio), y opcionalmente reforzarse en frontend.
+6. Cada cambio de estado debe generar un registro en el historial de seguimiento de la anomalía asociada, incluyendo:
+   - tarea afectada
+   - estado anterior
+   - nuevo estado
+   - usuario que realizó el cambio
+   - fecha y hora
+   - nota de evidencia
+
+Especificaciones de datos:
+7. La nota de evidencia debe persistirse (en el modelo de historial o donde corresponda según la arquitectura actual).
+8. El historial debe estar asociado a la anomalía (no solo a la tarea), respetando el diseño existente.
+
+Especificaciones de interfaz (historial):
+9. Mantener la línea actual del historial como resumen, por ejemplo:
+   “Tratamiento TRT-2026-0012: se actualiza la tarea TRT-2026-0012-T02 a estado completed.”
+10. Debajo de esa línea, agregar la evidencia cargada en el cambio de estado.
+11. Formato visual esperado:
+
+   Línea principal (sin cambios)
+   ↓
+   Evidencia: [texto ingresado por el usuario]
+   ↓
+   Fecha y usuario (como está actualmente)
+
+12. Si el registro histórico no tiene evidencia (por datos antiguos):
+   - Mostrar “Evidencia: Sin evidencia registrada” o
+   - Ocultarlo si se considera mejor para no ensuciar la vista.
+13. La evidencia debe mostrarse con un estilo visual secundario:
+   - texto más pequeño o color más tenue
+   - leve indentación o separación visual
+14. No modificar ni romper el diseño actual de las tarjetas del historial, solo enriquecerlo.
+
+Criterios de calidad:
+- No permitir cambios de estado sin evidencia (regla crítica).
+- Validación robusta en backend.
+- Mantener compatibilidad con funcionalidades existentes.
+- Código limpio, reutilizable y consistente con los modelos actuales.
+- Evitar duplicación de lógica.
+- Asegurar que cada cambio de estado genera su propio registro de historial (no sobrescribir).
+
+Testing:
+- Caso 1: cambio de estado sin evidencia → debe fallar.
+- Caso 2: cambio de estado con evidencia → debe guardarse correctamente.
+- Caso 3: múltiples cambios de estado → deben generar múltiples registros con sus respectivas evidencias.
+- Caso 4: visualización del historial → debe mostrar evidencia debajo del evento.
+
+Formato de respuesta esperado:
+1. Analizar la implementación actual.
+2. Indicar qué modelos, vistas y templates se deben modificar.
+3. Implementar la validación y persistencia de evidencia.
+4. Implementar el registro en historial.
+5. Ajustar el template del historial para mostrar la evidencia.
+6. Explicar brevemente la solución.
+7. Indicar cómo probar man         ECHO OK
+ ............................................................................................................................................
+ en seguimiento de anomalias ---- historial -- se debe de ver para cada movimiento las notas observaciones
+  causas etc que se carguen en dicho movimiento.  ECHO OK
+ ....................................................................................................................................................
+ en seguimiento de anomalias en la tarjeta de la imagen deberia estar tambien el campo descripcion detallada. ECHO OK
+.......................................................................................................................
+__27/04____________________________________________________________________________________________________________________________
+
+Agregar como obligatoria en: tratameinto---vista 2---- analisis, luego de causa raiz encontradas y antes de tareas surgidas del tratameinto
+una tarjetacon  campo que diga " Fecha de evaluacion de eficacia " y otro que diga "Responsable" el responsable se eligira de una lista desplegable en las que esten todos los convocados 
+al tratamiento. ECHO OK
+-___28/04________________________________________________________________________________________________________________
+Si un tratamiento  paso de la fecha de tratamiento agendada, esta realizado ya que  se le cargo al menos una causa raiz,
+con su respectivo detalle y tiene cargada la evaluacion de eficacia y si las tareas que se agregaron estan en estado 
+completada, se debe validar, agreguemos en la barra lateral luego de acciones y antes de pendiente una opcion Validacion,
+en el menu contextual----secciones principales agregar tarjeta validacion. la validacion la realiza el responszable designado,
+se debe cargar eficaz o no eficaz, si no es eficaz el tratameinto se vuelve a reabrir, si es eficaz el tratameinto se cierra,
+todo esto debe reflejarce en seguimiento anomalias historial.  
+ ..........................................................................................................................
+VER HAY UNA CONFUCOIN ENTRE PROCESOS AREAS SECRTOR PRINCIPAL CUANDO VOY A ALCANCES DE USUARIOS... 
+PENSAR NO ME QUEDA MUY EN CLARO QUE QUICE HACER!!!
+...........................................................................................................................
+tratamiento guardar agenda borra la fecha agendada deberia quedar visible.
+...........................................................................................................................
+en tratamientos--analisis--primer paso elegir metodo y cargar observaciones, guardar analisis, segundo paso si hubiera 
+seleccionar archivo y cargar nota de evidencias 

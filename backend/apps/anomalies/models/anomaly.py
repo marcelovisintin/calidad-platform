@@ -223,6 +223,7 @@ class AnomalyStatusHistory(AuditBaseModel):
     from_stage = models.CharField(max_length=40, choices=AnomalyStage.choices)
     to_stage = models.CharField(max_length=40, choices=AnomalyStage.choices)
     comment = models.TextField()
+    evidence_note = models.TextField(blank=True)
     changed_by = models.ForeignKey(
         "accounts.User",
         on_delete=models.PROTECT,

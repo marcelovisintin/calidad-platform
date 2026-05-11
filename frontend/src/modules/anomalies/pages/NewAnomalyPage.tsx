@@ -353,7 +353,7 @@ export function NewAnomalyPage() {
               </select>
             </label>
             <label className="field">
-              <span>Tipo de anomalia</span>
+              <span>Tipo de desvio</span>
               <select disabled={!catalogsReady} name="anomaly_type" onChange={handleChange} required value={form.anomaly_type}>
                 <option value="">Seleccionar</option>
                 {bootstrap?.anomalyTypes.map((item) => (

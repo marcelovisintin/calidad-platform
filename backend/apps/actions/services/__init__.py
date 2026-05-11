@@ -15,8 +15,11 @@ from .treatment_service import (
     add_treatment_task,
     add_treatment_task_evidence,
     create_treatment,
+    ensure_treatment_is_editable,
+    is_treatment_closed_by_effective_validation,
     update_treatment,
     update_treatment_task,
+    validate_treatment_effectiveness,
 )
 
 __all__ = [
@@ -34,6 +37,9 @@ __all__ = [
     "add_treatment_task",
     "add_treatment_task_evidence",
     "create_treatment",
+    "ensure_treatment_is_editable",
+    "is_treatment_closed_by_effective_validation",
     "update_treatment",
     "update_treatment_task",
+    "validate_treatment_effectiveness",
 ]

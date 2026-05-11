@@ -1,6 +1,10 @@
 ﻿from django.db.models import Q
+from datetime import date, datetime, time
+
+from django.db.models import Count
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -99,6 +103,111 @@ class AnomalyAttachmentDownloadAPIView(APIView):
         if attachment.content_type:
             response["Content-Type"] = attachment.content_type
         return response
+
+
+class AnomalyRepetitionStudyAPIView(APIView):
+    http_method_names = ["get", "head", "options"]
+
+    def _is_admin_user(self, user) -> bool:
+        if not user or not user.is_authenticated:
+            return False
+        access_level = getattr(user, "access_level", "")
+        return user.is_superuser or access_level in {"administrador", "desarrollador"}
+
+    def get(self, request):
+        if not self._is_admin_user(request.user):
+            return Response(
+                {"detail": "Esta consulta esta disponible solo para usuarios administradores."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        date_from_value = (request.query_params.get("date_from") or "").strip()
+        if not date_from_value:
+            return Response(
+                {"date_from": "Debe seleccionar Desde fecha antes de ejecutar el analisis."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            date_from = date.fromisoformat(date_from_value)
+        except ValueError:
+            return Response(
+                {"date_from": "La fecha ingresada no es valida."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        current_date = timezone.localdate()
+        if date_from > current_date:
+            return Response(
+                {"date_from": "Desde fecha no puede ser posterior al dia actual."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        current_timezone = timezone.get_current_timezone()
+        start_at = timezone.make_aware(datetime.combine(date_from, time.min), current_timezone)
+        end_at = timezone.now()
+        queryset = (
+            filter_anomaly_queryset_for_user(build_anomaly_queryset(detailed=False), request.user)
+            .filter(created_at__gte=start_at, created_at__lte=end_at)
+            .order_by("-created_at", "-detected_at")
+        )
+
+        by_type = list(
+            queryset.values("anomaly_type_id", "anomaly_type__name")
+            .annotate(count=Count("id"))
+            .order_by("-count", "anomaly_type__name")
+        )
+        by_type_sector = list(
+            queryset.values("anomaly_type_id", "anomaly_type__name", "area_id", "area__name")
+            .annotate(count=Count("id"))
+            .order_by("-count", "anomaly_type__name", "area__name")
+        )
+
+        anomalies = [
+            {
+                "id": str(anomaly.id),
+                "code": anomaly.code,
+                "title": anomaly.title,
+                "observations": anomaly.description,
+                "anomaly_type": {
+                    "id": str(anomaly.anomaly_type_id),
+                    "name": anomaly.anomaly_type.name,
+                },
+                "sector": {
+                    "id": str(anomaly.area_id),
+                    "name": anomaly.area.name,
+                },
+                "registered_at": anomaly.created_at,
+            }
+            for anomaly in queryset
+        ]
+
+        return Response(
+            {
+                "date_from": date_from.isoformat(),
+                "date_to": current_date.isoformat(),
+                "total": queryset.count(),
+                "by_type": [
+                    {
+                        "type_id": str(item["anomaly_type_id"]),
+                        "type_name": item["anomaly_type__name"] or "Sin tipo de desvio",
+                        "count": item["count"],
+                    }
+                    for item in by_type
+                ],
+                "by_type_sector": [
+                    {
+                        "type_id": str(item["anomaly_type_id"]),
+                        "type_name": item["anomaly_type__name"] or "Sin tipo de desvio",
+                        "sector_id": str(item["area_id"]),
+                        "sector_name": item["area__name"] or "Sin sector",
+                        "count": item["count"],
+                    }
+                    for item in by_type_sector
+                ],
+                "anomalies": anomalies,
+            }
+        )
 
 
 class AnomalyViewSet(viewsets.ModelViewSet):

@@ -35,6 +35,11 @@ class TreatmentTaskStatus(models.TextChoices):
     CANCELLED = "cancelled", "Cancelada"
 
 
+class TreatmentEffectivenessValidationResult(models.TextChoices):
+    EFFECTIVE = "effective", "Eficaz"
+    NOT_EFFECTIVE = "not_effective", "No eficaz"
+
+
 class Treatment(AuditBaseModel):
     code = models.CharField(max_length=40, unique=True)
     primary_anomaly = models.ForeignKey(
@@ -46,6 +51,29 @@ class Treatment(AuditBaseModel):
     scheduled_for = models.DateTimeField(null=True, blank=True)
     method_used = models.CharField(max_length=20, choices=TreatmentMethod.choices, blank=True, default="")
     observations = models.TextField(blank=True)
+    effectiveness_evaluation_date = models.DateField(null=True, blank=True)
+    effectiveness_responsible = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="treatment_effectiveness_responsibilities",
+        null=True,
+        blank=True,
+    )
+    effectiveness_validation_result = models.CharField(
+        max_length=20,
+        choices=TreatmentEffectivenessValidationResult.choices,
+        blank=True,
+        default="",
+    )
+    effectiveness_validated_at = models.DateTimeField(null=True, blank=True)
+    effectiveness_validated_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="treatment_effectiveness_validations",
+        null=True,
+        blank=True,
+    )
+    effectiveness_validation_comment = models.TextField(blank=True)
 
     class Meta:
         ordering = ("-created_at",)
@@ -108,6 +136,11 @@ class TreatmentTask(AuditBaseModel):
         on_delete=models.SET_NULL,
         related_name="tasks",
         null=True,
+        blank=True,
+    )
+    root_causes = models.ManyToManyField(
+        "actions.TreatmentRootCause",
+        related_name="task_links",
         blank=True,
     )
     code = models.CharField(max_length=60, blank=True)

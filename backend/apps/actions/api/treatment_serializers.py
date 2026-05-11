@@ -8,6 +8,7 @@ from apps.accounts.models import User
 from apps.actions.models import (
     Treatment,
     TreatmentAnomaly,
+    TreatmentEffectivenessValidationResult,
     TreatmentEvidence,
     TreatmentMethod,
     TreatmentParticipant,
@@ -19,6 +20,7 @@ from apps.actions.models import (
     TreatmentTaskEvidence,
     TreatmentTaskStatus,
 )
+from apps.audit.models import AuditEvent
 from apps.anomalies.models import Anomaly, AnomalyAttachment
 
 ALLOWED_EVIDENCE_CONTENT_TYPES = {
@@ -174,11 +176,18 @@ class TreatmentTaskAnomalySerializer(serializers.ModelSerializer):
         fields = ("id", "anomaly")
 
 
+class TreatmentTaskHistoryRootCauseSerializer(serializers.Serializer):
+    id = serializers.UUIDField(read_only=True)
+    sequence = serializers.IntegerField(read_only=True)
+    description = serializers.CharField(read_only=True)
+
+
 class TreatmentTaskSerializer(serializers.ModelSerializer):
     responsible = UserSummarySerializer(read_only=True)
     anomaly_links = TreatmentTaskAnomalySerializer(many=True, read_only=True)
     is_overdue = serializers.BooleanField(read_only=True)
     evidences = TreatmentTaskEvidenceSerializer(many=True, read_only=True)
+    root_causes = TreatmentTaskHistoryRootCauseSerializer(many=True, read_only=True)
 
     class Meta:
         model = TreatmentTask
@@ -191,19 +200,13 @@ class TreatmentTaskSerializer(serializers.ModelSerializer):
             "execution_date",
             "responsible",
             "root_cause",
+            "root_causes",
             "is_overdue",
             "anomaly_links",
             "evidences",
             "created_at",
             "updated_at",
         )
-
-
-
-class TreatmentTaskHistoryRootCauseSerializer(serializers.Serializer):
-    id = serializers.UUIDField(read_only=True)
-    sequence = serializers.IntegerField(read_only=True)
-    description = serializers.CharField(read_only=True)
 
 
 class TreatmentTaskHistoryTreatmentSerializer(serializers.Serializer):
@@ -218,6 +221,7 @@ class TreatmentTaskHistorySerializer(serializers.ModelSerializer):
     treatment = TreatmentTaskHistoryTreatmentSerializer(read_only=True)
     anomalies = serializers.SerializerMethodField()
     root_cause = TreatmentTaskHistoryRootCauseSerializer(read_only=True)
+    root_causes = TreatmentTaskHistoryRootCauseSerializer(many=True, read_only=True)
     evidences = TreatmentTaskEvidenceSerializer(many=True, read_only=True)
     is_overdue = serializers.BooleanField(read_only=True)
 
@@ -235,6 +239,7 @@ class TreatmentTaskHistorySerializer(serializers.ModelSerializer):
             "treatment",
             "anomalies",
             "root_cause",
+            "root_causes",
             "evidences",
             "created_at",
             "updated_at",
@@ -245,6 +250,16 @@ class TreatmentTaskHistorySerializer(serializers.ModelSerializer):
         if not anomalies and getattr(obj.treatment, "primary_anomaly", None):
             anomalies = [obj.treatment.primary_anomaly]
         return TreatmentAnomalySummarySerializer(anomalies, many=True, context=self.context).data
+
+
+class TreatmentAuditEventSerializer(serializers.ModelSerializer):
+    actor = UserSummarySerializer(read_only=True)
+
+    class Meta:
+        model = AuditEvent
+        fields = ("id", "action", "actor", "created_at")
+
+
 class TreatmentRootCauseSerializer(serializers.ModelSerializer):
     tasks = TreatmentTaskSerializer(many=True, read_only=True)
 
@@ -271,6 +286,10 @@ class TreatmentAnomalyLinkSerializer(serializers.ModelSerializer):
 
 class TreatmentListSerializer(serializers.ModelSerializer):
     primary_anomaly = TreatmentAnomalySummarySerializer(read_only=True)
+    effectiveness_responsible = UserSummarySerializer(read_only=True)
+    effectiveness_validated_by = UserSummarySerializer(read_only=True)
+    validation_state = serializers.SerializerMethodField()
+    is_locked = serializers.SerializerMethodField()
 
     class Meta:
         model = Treatment
@@ -281,19 +300,42 @@ class TreatmentListSerializer(serializers.ModelSerializer):
             "scheduled_for",
             "method_used",
             "observations",
+            "effectiveness_evaluation_date",
+            "effectiveness_responsible",
+            "effectiveness_validation_result",
+            "effectiveness_validated_at",
+            "effectiveness_validated_by",
+            "effectiveness_validation_comment",
+            "validation_state",
+            "is_locked",
             "primary_anomaly",
             "created_at",
             "updated_at",
         )
 
+    def get_validation_state(self, obj):
+        from apps.actions.services.treatment_service import get_treatment_validation_state
+
+        return get_treatment_validation_state(obj)
+
+    def get_is_locked(self, obj):
+        from apps.actions.services.treatment_service import is_treatment_closed_by_effective_validation
+
+        return is_treatment_closed_by_effective_validation(obj)
+
 
 class TreatmentDetailSerializer(serializers.ModelSerializer):
     primary_anomaly = TreatmentAnomalySummarySerializer(read_only=True)
+    effectiveness_responsible = UserSummarySerializer(read_only=True)
+    effectiveness_validated_by = UserSummarySerializer(read_only=True)
+    validation_state = serializers.SerializerMethodField()
+    is_locked = serializers.SerializerMethodField()
     participants = TreatmentParticipantSerializer(many=True, read_only=True)
     anomaly_links = TreatmentAnomalyLinkSerializer(many=True, read_only=True)
     root_causes = TreatmentRootCauseSerializer(many=True, read_only=True)
     tasks = TreatmentTaskSerializer(many=True, read_only=True)
     evidences = TreatmentEvidenceSerializer(many=True, read_only=True)
+    audit_events = serializers.SerializerMethodField()
 
     class Meta:
         model = Treatment
@@ -304,16 +346,42 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
             "scheduled_for",
             "method_used",
             "observations",
+            "effectiveness_evaluation_date",
+            "effectiveness_responsible",
+            "effectiveness_validation_result",
+            "effectiveness_validated_at",
+            "effectiveness_validated_by",
+            "effectiveness_validation_comment",
+            "validation_state",
+            "is_locked",
             "primary_anomaly",
             "participants",
             "anomaly_links",
             "root_causes",
             "tasks",
             "evidences",
+            "audit_events",
             "created_at",
             "updated_at",
             "row_version",
         )
+
+    def get_validation_state(self, obj):
+        from apps.actions.services.treatment_service import get_treatment_validation_state
+
+        return get_treatment_validation_state(obj)
+
+    def get_is_locked(self, obj):
+        from apps.actions.services.treatment_service import is_treatment_closed_by_effective_validation
+
+        return is_treatment_closed_by_effective_validation(obj)
+
+    def get_audit_events(self, obj):
+        queryset = AuditEvent.objects.select_related("actor").filter(
+            entity_type="actions.treatment",
+            entity_id=obj.pk,
+        ).order_by("-created_at")[:50]
+        return TreatmentAuditEventSerializer(queryset, many=True, context=self.context).data
 
 
 class TreatmentCreateSerializer(serializers.Serializer):
@@ -329,6 +397,12 @@ class TreatmentUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=TreatmentStatus.choices, required=False)
     method_used = serializers.ChoiceField(choices=TreatmentMethod.choices, required=False, allow_blank=True)
     observations = serializers.CharField(required=False, allow_blank=True)
+    effectiveness_evaluation_date = serializers.DateField(required=False, allow_null=True)
+    effectiveness_responsible = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
 
 
 class TreatmentAddAnomalySerializer(serializers.Serializer):
@@ -346,7 +420,12 @@ class TreatmentAddRootCauseSerializer(serializers.Serializer):
 
 
 class TreatmentAddTaskSerializer(serializers.Serializer):
-    root_cause = serializers.PrimaryKeyRelatedField(queryset=TreatmentRootCause.objects.all())
+    root_cause = serializers.PrimaryKeyRelatedField(queryset=TreatmentRootCause.objects.all(), required=False, allow_null=True)
+    root_cause_ids = serializers.ListField(
+        child=serializers.PrimaryKeyRelatedField(queryset=TreatmentRootCause.objects.all()),
+        required=False,
+        allow_empty=False,
+    )
     title = serializers.CharField(allow_blank=False)
     description = serializers.CharField(allow_blank=False)
     responsible = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True))
@@ -357,12 +436,23 @@ class TreatmentAddTaskSerializer(serializers.Serializer):
 
 class TreatmentUpdateTaskSerializer(serializers.Serializer):
     root_cause = serializers.PrimaryKeyRelatedField(queryset=TreatmentRootCause.objects.all(), required=False, allow_null=True)
+    root_cause_ids = serializers.ListField(
+        child=serializers.PrimaryKeyRelatedField(queryset=TreatmentRootCause.objects.all()),
+        required=False,
+        allow_empty=False,
+    )
     title = serializers.CharField(required=False)
     description = serializers.CharField(required=False, allow_blank=True)
     responsible = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True), required=False, allow_null=True)
     execution_date = serializers.DateField(required=False, allow_null=True)
     status = serializers.ChoiceField(choices=TreatmentTaskStatus.choices, required=False)
+    evidence_note = serializers.CharField(required=False, allow_blank=True)
     anomaly_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
+
+
+class TreatmentValidateSerializer(serializers.Serializer):
+    result = serializers.ChoiceField(choices=TreatmentEffectivenessValidationResult.choices, required=True)
+    comment = serializers.CharField(required=False, allow_blank=True)
 
 
 class TreatmentEvidenceWriteSerializer(serializers.Serializer):

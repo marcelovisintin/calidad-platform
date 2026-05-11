@@ -10,7 +10,7 @@ Hoy el sistema ya tiene implementado y validado:
 
 - Autenticacion JWT con login, refresh, logout y usuario actual
 - Roles, permisos y scopes por usuario
-- Catalogos maestros para sitios, areas, tipos de anomalia, origenes, severidad, prioridad y tipos de accion
+- Catalogos maestros para sitios, areas, tipos de desvio, origenes, severidad, prioridad y tipos de accion
 - Modulo completo de anomalias con workflow de 12 etapas
 - Verificacion inicial con enfoque 6M
 - REVICION DE HALLAZGOS, analisis de causa, propuestas, planes de accion, ejecucion, resultados, verificacion de eficacia, cierre y aprendizaje

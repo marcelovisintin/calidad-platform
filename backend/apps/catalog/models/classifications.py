@@ -5,8 +5,8 @@ from apps.core.models import ActiveCatalogModel
 
 class AnomalyType(ActiveCatalogModel):
     class Meta(ActiveCatalogModel.Meta):
-        verbose_name = "Tipo de anomalia"
-        verbose_name_plural = "Tipos de anomalia"
+        verbose_name = "Tipo de desvio"
+        verbose_name_plural = "Tipos de desvio"
         constraints = [models.UniqueConstraint(fields=["code"], name="catalog_unique_anomaly_type_code")]
 
 

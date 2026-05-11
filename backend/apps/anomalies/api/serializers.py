@@ -249,6 +249,9 @@ class TreatmentTaskPlanSerializer(serializers.ModelSerializer):
         }
 
     def get_root_cause_description(self, obj):
+        root_causes = list(obj.root_causes.all())
+        if root_causes:
+            return " | ".join(f"Causa {cause.sequence}: {cause.description}" for cause in root_causes)
         root_cause = getattr(obj, "root_cause", None)
         return getattr(root_cause, "description", "") if root_cause else ""
 
@@ -264,6 +267,7 @@ class AnomalyStatusHistorySerializer(serializers.ModelSerializer):
             "from_stage",
             "to_stage",
             "comment",
+            "evidence_note",
             "changed_at",
             "changed_by",
         )
@@ -451,6 +455,12 @@ class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin
     priority = CatalogSummarySerializer(read_only=True)
     can_modify_classification = serializers.SerializerMethodField()
     can_unlock_classification = serializers.SerializerMethodField()
+    is_locked_by_effective_treatment = serializers.SerializerMethodField()
+
+    def get_is_locked_by_effective_treatment(self, obj):
+        from apps.anomalies.services.anomaly_service import is_anomaly_locked_by_effective_treatment
+
+        return is_anomaly_locked_by_effective_treatment(obj)
 
     class Meta:
         model = Anomaly
@@ -473,6 +483,7 @@ class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin
             "priority",
             "can_modify_classification",
             "can_unlock_classification",
+            "is_locked_by_effective_treatment",
             "classification_change_count",
             "classification_change_unlocked",
             "manufacturing_order_number",
@@ -498,6 +509,7 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
     priority = CatalogSummarySerializer(read_only=True)
     can_modify_classification = serializers.SerializerMethodField()
     can_unlock_classification = serializers.SerializerMethodField()
+    is_locked_by_effective_treatment = serializers.SerializerMethodField()
     comments = AnomalyCommentSerializer(many=True, read_only=True)
     attachments = AnomalyAttachmentSerializer(many=True, read_only=True)
     participants = AnomalyParticipantSerializer(many=True, read_only=True)
@@ -512,6 +524,11 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
     action_plans = ActionPlanSummarySerializer(many=True, read_only=True)
     treatment_tasks = serializers.SerializerMethodField()
 
+    def get_is_locked_by_effective_treatment(self, obj):
+        from apps.anomalies.services.anomaly_service import is_anomaly_locked_by_effective_treatment
+
+        return is_anomaly_locked_by_effective_treatment(obj)
+
     def get_treatment_tasks(self, obj):
         queryset = (
             TreatmentTask.objects.filter(
@@ -520,6 +537,7 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
                 | Q(anomaly_links__anomaly=obj)
             )
             .select_related("responsible", "root_cause", "treatment")
+            .prefetch_related("root_causes")
             .distinct()
             .order_by("execution_date", "created_at")
         )
@@ -548,6 +566,7 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
             "priority",
             "can_modify_classification",
             "can_unlock_classification",
+            "is_locked_by_effective_treatment",
             "classification_change_count",
             "classification_change_unlocked",
             "manufacturing_order_number",

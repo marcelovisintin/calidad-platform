@@ -1,4 +1,4 @@
-﻿const CACHE_NAME = "calidad-platform-shell-v1";
+const CACHE_NAME = "calidad-platform-shell-v2";
 const APP_SHELL = [
   "/",
   "/manifest.webmanifest",
@@ -25,21 +25,20 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
+  const requestUrl = new URL(event.request.url);
+  const isAppAsset = requestUrl.origin === self.location.origin;
+  const isHtmlNavigation = event.request.mode === "navigate";
+  const isBuildAsset = requestUrl.pathname.startsWith("/assets/");
 
-      return fetch(event.request)
-        .then((response) => {
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        if (isAppAsset && response.ok && !isHtmlNavigation && !isBuildAsset) {
           const cloned = response.clone();
-          if (event.request.url.startsWith(self.location.origin) && response.ok) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
-          }
-          return response;
-        })
-        .catch(() => caches.match("/"));
-    })
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/")))
   );
 });

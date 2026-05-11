@@ -1,9 +1,11 @@
 from datetime import date
 from uuid import UUID
 
-from django.db.models import Prefetch, Q
+from django.db.models import Exists, OuterRef, Prefetch, Q
+from django.db.models.functions import Trim
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -30,10 +32,12 @@ from apps.actions.api.treatment_serializers import (
     TreatmentTaskHistorySerializer,
     TreatmentUpdateSerializer,
     TreatmentUpdateTaskSerializer,
+    TreatmentValidateSerializer,
 )
 from apps.actions.models import (
     Treatment,
     TreatmentAnomaly,
+    TreatmentEffectivenessValidationResult,
     TreatmentEvidence,
     TreatmentParticipant,
     TreatmentRootCause,
@@ -51,6 +55,7 @@ from apps.actions.services import (
     create_treatment,
     update_treatment,
     update_treatment_task,
+    validate_treatment_effectiveness,
 )
 from apps.anomalies.models import AnomalyAttachment, AnomalyStage, AnomalyStatus
 from apps.anomalies.selectors import build_anomaly_queryset, filter_anomaly_queryset_for_user
@@ -59,7 +64,11 @@ from apps.anomalies.services.classification_rules import immediate_action_q
 
 
 def _is_admin_access(user) -> bool:
-    return bool(user and user.is_authenticated and (user.is_superuser or getattr(user, "access_level", "") in {"administrador", "desarrollador"}))
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser or getattr(user, "access_level", "") in {"administrador", "desarrollador"}:
+        return True
+    return user.role_scopes.filter(role__code__iexact="ADMINISTRADOR").exists()
 
 
 
@@ -81,6 +90,36 @@ def _visible_treatment_tasks_queryset(user):
     if _is_admin_access(user):
         return queryset
     return queryset.filter(responsible=user)
+
+
+def _validation_ready_treatments_queryset(queryset, user):
+    blank_root_causes = (
+        TreatmentRootCause.objects.filter(treatment=OuterRef("pk"))
+        .annotate(clean_description=Trim("description"))
+        .filter(clean_description="")
+    )
+    incomplete_tasks = TreatmentTask.objects.filter(treatment=OuterRef("pk")).exclude(status="completed")
+
+    queryset = (
+        queryset.filter(
+            scheduled_for__lt=timezone.now(),
+            root_causes__isnull=False,
+            effectiveness_evaluation_date__isnull=False,
+            effectiveness_responsible__isnull=False,
+        )
+        .exclude(effectiveness_validation_result=TreatmentEffectivenessValidationResult.EFFECTIVE)
+        .annotate(
+            has_blank_root_cause=Exists(blank_root_causes),
+            has_incomplete_tasks=Exists(incomplete_tasks),
+        )
+        .filter(has_blank_root_cause=False, has_incomplete_tasks=False)
+        .distinct()
+    )
+
+    if not _is_admin_access(user):
+        queryset = queryset.filter(effectiveness_responsible=user)
+
+    return queryset
 
 
 class TreatmentEvidenceDownloadAPIView(APIView):
@@ -148,6 +187,8 @@ class TreatmentViewSet(viewsets.ModelViewSet):
                 "primary_anomaly__reporter",
                 "primary_anomaly__area",
                 "primary_anomaly__anomaly_origin",
+                "effectiveness_responsible",
+                "effectiveness_validated_by",
             )
             .prefetch_related(
                 Prefetch(
@@ -180,6 +221,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
                 Prefetch(
                     "tasks",
                     queryset=TreatmentTask.objects.select_related("responsible", "root_cause").prefetch_related(
+                        "root_causes",
                         Prefetch(
                             "evidences",
                             queryset=TreatmentTaskEvidence.objects.select_related("uploaded_by").order_by("-created_at"),
@@ -213,15 +255,18 @@ class TreatmentViewSet(viewsets.ModelViewSet):
             )
 
         user = self.request.user
-        if self._is_admin_access(user):
-            return queryset
+        if not self._is_admin_access(user):
+            queryset = queryset.filter(
+                Q(created_by=user)
+                | Q(primary_anomaly__reporter=user)
+                | Q(participants__user=user)
+                | Q(tasks__responsible=user)
+            ).distinct()
 
-        return queryset.filter(
-            Q(created_by=user)
-            | Q(primary_anomaly__reporter=user)
-            | Q(participants__user=user)
-            | Q(tasks__responsible=user)
-        ).distinct()
+        if self.request.query_params.get("validation_ready") in {"1", "true", "True"}:
+            queryset = _validation_ready_treatments_queryset(queryset, user)
+
+        return queryset
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -244,6 +289,8 @@ class TreatmentViewSet(viewsets.ModelViewSet):
             return TreatmentEvidenceWriteSerializer
         if self.action == "add_task_evidence":
             return TreatmentTaskEvidenceWriteSerializer
+        if self.action == "validate_effectiveness":
+            return TreatmentValidateSerializer
         return TreatmentDetailSerializer
 
     def _detail_response(self, treatment_id, *, response_status=status.HTTP_200_OK):
@@ -295,6 +342,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
             "responsible",
             "root_cause",
         ).prefetch_related(
+            "root_causes",
             Prefetch(
                 "evidences",
                 queryset=TreatmentTaskEvidence.objects.select_related("uploaded_by").order_by("-created_at"),
@@ -520,9 +568,13 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
 
-        root_cause = data.get("root_cause")
-        if root_cause and root_cause.treatment_id != treatment.id:
-            raise ValidationError({"root_cause": "La causa raiz no pertenece al tratamiento."})
+        root_causes = list(data.get("root_cause_ids") or [])
+        if data.get("root_cause"):
+            root_causes.append(data["root_cause"])
+        if not root_causes:
+            raise ValidationError({"root_cause_ids": "Debe seleccionar al menos una causa raiz."})
+        if any(root_cause.treatment_id != treatment.id for root_cause in root_causes):
+            raise ValidationError({"root_cause_ids": "Todas las causas raiz deben pertenecer al tratamiento."})
 
         task = add_treatment_task(
             treatment=treatment,
@@ -546,9 +598,14 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
 
-        root_cause = data.get("root_cause")
-        if root_cause and root_cause.treatment_id != treatment.id:
-            raise ValidationError({"root_cause": "La causa raiz no pertenece al tratamiento."})
+        root_causes = list(data.get("root_cause_ids") or [])
+        if data.get("root_cause"):
+            root_causes.append(data["root_cause"])
+        if "root_cause_ids" in data or "root_cause" in data:
+            if not root_causes:
+                raise ValidationError({"root_cause_ids": "Debe seleccionar al menos una causa raiz."})
+            if any(root_cause.treatment_id != treatment.id for root_cause in root_causes):
+                raise ValidationError({"root_cause_ids": "Todas las causas raiz deben pertenecer al tratamiento."})
 
         updated = update_treatment_task(
             treatment_task=task,
@@ -558,6 +615,21 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         )
         output = TreatmentTaskSerializer(updated, context=self.get_serializer_context())
         return Response(output.data)
+
+    @action(detail=True, methods=["post"], url_path="validation")
+    def validate_effectiveness(self, request, pk=None):
+        treatment = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        validated = validate_treatment_effectiveness(
+            treatment=treatment,
+            user=request.user,
+            result=serializer.validated_data["result"],
+            comment=serializer.validated_data.get("comment", ""),
+            request_id=self._request_id(),
+        )
+        return self._detail_response(validated.pk)
 
     @action(
         detail=True,
@@ -604,6 +676,138 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         )
         output = TreatmentTaskEvidenceSerializer(evidence, context=self.get_serializer_context())
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+
+class TreatmentTrackingViewSet(viewsets.ReadOnlyModelViewSet):
+    http_method_names = ["get", "head", "options"]
+    serializer_class = TreatmentDetailSerializer
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return TreatmentListSerializer
+        return TreatmentDetailSerializer
+
+    def get_queryset(self):
+        anomaly_attachment_prefetch = Prefetch(
+            "anomaly__attachments",
+            queryset=AnomalyAttachment.objects.select_related("uploaded_by").order_by("-created_at"),
+        )
+        queryset = (
+            _visible_treatments_queryset(self.request.user)
+            .select_related(
+                "primary_anomaly",
+                "primary_anomaly__reporter",
+                "primary_anomaly__area",
+                "primary_anomaly__anomaly_origin",
+                "effectiveness_responsible",
+                "effectiveness_validated_by",
+            )
+            .prefetch_related(
+                Prefetch(
+                    "primary_anomaly__attachments",
+                    queryset=AnomalyAttachment.objects.select_related("uploaded_by").order_by("-created_at"),
+                ),
+                Prefetch(
+                    "evidences",
+                    queryset=TreatmentEvidence.objects.select_related("uploaded_by").order_by("-created_at"),
+                ),
+                Prefetch(
+                    "participants",
+                    queryset=TreatmentParticipant.objects.select_related("user").order_by("created_at"),
+                ),
+                Prefetch(
+                    "anomaly_links",
+                    queryset=TreatmentAnomaly.objects.select_related(
+                        "anomaly",
+                        "anomaly__reporter",
+                        "anomaly__area",
+                        "anomaly__anomaly_origin",
+                    )
+                    .prefetch_related(anomaly_attachment_prefetch)
+                    .order_by("-is_primary", "created_at"),
+                ),
+                Prefetch(
+                    "root_causes",
+                    queryset=TreatmentRootCause.objects.order_by("sequence", "created_at"),
+                ),
+                Prefetch(
+                    "tasks",
+                    queryset=TreatmentTask.objects.select_related("responsible", "root_cause")
+                    .prefetch_related(
+                        "root_causes",
+                        Prefetch(
+                            "evidences",
+                            queryset=TreatmentTaskEvidence.objects.select_related("uploaded_by").order_by("-created_at"),
+                        ),
+                        Prefetch(
+                            "anomaly_links",
+                            queryset=TreatmentTaskAnomaly.objects.select_related(
+                                "anomaly",
+                                "anomaly__reporter",
+                                "anomaly__area",
+                                "anomaly__anomaly_origin",
+                            ).prefetch_related(anomaly_attachment_prefetch),
+                        ),
+                    )
+                    .order_by("execution_date", "created_at"),
+                ),
+            )
+            .distinct()
+        )
+
+        if code := (self.request.query_params.get("code") or "").strip():
+            queryset = queryset.filter(Q(code__icontains=code) | Q(primary_anomaly__code__icontains=code))
+
+        if user_value := (self.request.query_params.get("user") or "").strip():
+            try:
+                user_uuid = UUID(user_value)
+                queryset = queryset.filter(
+                    Q(created_by_id=user_uuid)
+                    | Q(primary_anomaly__reporter_id=user_uuid)
+                    | Q(participants__user_id=user_uuid)
+                    | Q(tasks__responsible_id=user_uuid)
+                    | Q(effectiveness_responsible_id=user_uuid)
+                    | Q(effectiveness_validated_by_id=user_uuid)
+                )
+            except ValueError:
+                queryset = queryset.filter(
+                    Q(created_by__username__icontains=user_value)
+                    | Q(created_by__first_name__icontains=user_value)
+                    | Q(created_by__last_name__icontains=user_value)
+                    | Q(primary_anomaly__reporter__username__icontains=user_value)
+                    | Q(primary_anomaly__reporter__first_name__icontains=user_value)
+                    | Q(primary_anomaly__reporter__last_name__icontains=user_value)
+                    | Q(participants__user__username__icontains=user_value)
+                    | Q(participants__user__first_name__icontains=user_value)
+                    | Q(participants__user__last_name__icontains=user_value)
+                    | Q(tasks__responsible__username__icontains=user_value)
+                    | Q(tasks__responsible__first_name__icontains=user_value)
+                    | Q(tasks__responsible__last_name__icontains=user_value)
+                    | Q(effectiveness_responsible__username__icontains=user_value)
+                    | Q(effectiveness_responsible__first_name__icontains=user_value)
+                    | Q(effectiveness_responsible__last_name__icontains=user_value)
+                )
+
+        if process := (self.request.query_params.get("process") or "").strip():
+            try:
+                process_uuid = UUID(process)
+                queryset = queryset.filter(
+                    Q(primary_anomaly__area_id=process_uuid)
+                    | Q(anomaly_links__anomaly__area_id=process_uuid)
+                )
+            except ValueError:
+                queryset = queryset.filter(
+                    Q(primary_anomaly__area__code__icontains=process)
+                    | Q(primary_anomaly__area__name__icontains=process)
+                    | Q(primary_anomaly__anomaly_origin__code__icontains=process)
+                    | Q(primary_anomaly__anomaly_origin__name__icontains=process)
+                    | Q(anomaly_links__anomaly__area__code__icontains=process)
+                    | Q(anomaly_links__anomaly__area__name__icontains=process)
+                    | Q(anomaly_links__anomaly__anomaly_origin__code__icontains=process)
+                    | Q(anomaly_links__anomaly__anomaly_origin__name__icontains=process)
+                )
+
+        return queryset.distinct().order_by("-updated_at", "-created_at")
 
 
 

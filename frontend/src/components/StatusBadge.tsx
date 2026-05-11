@@ -19,6 +19,8 @@ const toneMap: Record<string, string> = {
   in_progress: "info",
   overdue: "danger",
   completed: "success",
+  validated_effective: "success",
+  not_effective: "warning",
   active: "success",
   inactive: "danger",
   staff: "accent",
@@ -43,6 +45,8 @@ const toneMap: Record<string, string> = {
 
 const labelMap: Record<string, string> = {
   classification: "REVICION DE HALLAZGOS",
+  validated_effective: "Validado eficaz",
+  not_effective: "No eficaz",
 };
 
 export function StatusBadge({ value, compact = false }: StatusBadgeProps) {

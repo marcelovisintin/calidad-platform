@@ -330,6 +330,7 @@ export interface TreatmentTask {
   execution_date?: string | null;
   responsible?: UserSummary | null;
   root_cause?: UUID | null;
+  root_causes: TreatmentTaskHistoryRootCause[];
   is_overdue?: boolean;
   anomaly_links: TreatmentTaskAnomalyLink[];
   evidences: TreatmentTaskEvidence[];
@@ -363,6 +364,7 @@ export interface TreatmentTaskHistory {
   treatment: TreatmentTaskHistoryTreatment;
   anomalies: TreatmentAnomalySummary[];
   root_cause?: TreatmentTaskHistoryRootCause | null;
+  root_causes: TreatmentTaskHistoryRootCause[];
   evidences: TreatmentTaskEvidence[];
   created_at: string;
   updated_at: string;
@@ -384,9 +386,32 @@ export interface TreatmentSummary {
   scheduled_for?: string | null;
   method_used?: string;
   observations?: string;
+  effectiveness_evaluation_date?: string | null;
+  effectiveness_responsible?: UserSummary | null;
+  effectiveness_validation_result?: "" | "effective" | "not_effective";
+  effectiveness_validated_at?: string | null;
+  effectiveness_validated_by?: UserSummary | null;
+  effectiveness_validation_comment?: string;
+  validation_state?: {
+    available: boolean;
+    blockers: string[];
+  };
+  is_locked?: boolean;
   primary_anomaly: TreatmentAnomalySummary;
   created_at: string;
   updated_at: string;
+}
+
+export interface TreatmentAuditEvent {
+  id: UUID;
+  action: string;
+  actor?: UserSummary | null;
+  created_at: string;
+}
+
+export interface TreatmentValidationPayload {
+  result: "effective" | "not_effective";
+  comment?: string;
 }
 
 export interface TreatmentDetail extends TreatmentSummary {
@@ -395,6 +420,7 @@ export interface TreatmentDetail extends TreatmentSummary {
   root_causes: TreatmentRootCause[];
   tasks: TreatmentTask[];
   evidences: TreatmentEvidence[];
+  audit_events?: TreatmentAuditEvent[];
   row_version: number;
 }
 
@@ -413,6 +439,8 @@ export interface TreatmentUpdatePayload {
   status?: "pending" | "scheduled" | "in_progress" | "completed" | "cancelled";
   method_used?: "" | "five_whys" | "6m" | "ishikawa" | "a3" | "8d" | "other";
   observations?: string;
+  effectiveness_evaluation_date?: string | null;
+  effectiveness_responsible?: UUID | null;
 }
 
 export interface NotificationInboxItem {
@@ -463,6 +491,7 @@ export interface AnomalyListItem {
   priority?: CatalogSummary;
   can_modify_classification?: boolean;
   can_unlock_classification?: boolean;
+  is_locked_by_effective_treatment?: boolean;
   classification_change_count?: number;
   classification_change_unlocked?: boolean;
   manufacturing_order_number?: string;
@@ -473,6 +502,42 @@ export interface AnomalyListItem {
   reopened_count?: number;
 }
 
+export interface AnomalyRepetitionStudyBucket {
+  type_id: UUID;
+  type_name: string;
+  count: number;
+}
+
+export interface AnomalyRepetitionStudySectorBucket extends AnomalyRepetitionStudyBucket {
+  sector_id: UUID;
+  sector_name: string;
+}
+
+export interface AnomalyRepetitionStudyItem {
+  id: UUID;
+  code: string;
+  title: string;
+  observations: string;
+  anomaly_type: {
+    id: UUID;
+    name: string;
+  };
+  sector: {
+    id: UUID;
+    name: string;
+  };
+  registered_at: string;
+}
+
+export interface AnomalyRepetitionStudyResponse {
+  date_from: string;
+  date_to: string;
+  total: number;
+  by_type: AnomalyRepetitionStudyBucket[];
+  by_type_sector: AnomalyRepetitionStudySectorBucket[];
+  anomalies: AnomalyRepetitionStudyItem[];
+}
+
 export interface AnomalyStatusHistory {
   id: UUID;
   from_status: string;
@@ -480,6 +545,7 @@ export interface AnomalyStatusHistory {
   from_stage: string;
   to_stage: string;
   comment: string;
+  evidence_note?: string;
   changed_at: string;
   changed_by?: UserSummary | null;
 }

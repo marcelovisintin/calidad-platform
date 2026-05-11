@@ -17,6 +17,7 @@ from apps.accounts.constants import (
     PERMISSION_VERIFY_EFFECTIVENESS_ANOMALY,
 )
 from apps.accounts.services.authorization import can_access_area
+from apps.actions.models import Treatment, TreatmentEffectivenessValidationResult, TreatmentStatus
 from apps.audit.services import record_audit_event
 from apps.notifications.services import notify_anomaly_created, notify_participation_request
 from apps.anomalies.models import (
@@ -99,6 +100,28 @@ def _get_related_or_none(instance, attr_name: str):
         return getattr(instance, attr_name)
     except ObjectDoesNotExist:
         return None
+
+
+def is_anomaly_locked_by_effective_treatment(anomaly: Anomaly) -> bool:
+    return (
+        Treatment.objects.filter(
+            anomaly_links__anomaly=anomaly,
+            status=TreatmentStatus.COMPLETED,
+            effectiveness_validation_result=TreatmentEffectivenessValidationResult.EFFECTIVE,
+        ).exists()
+        or Treatment.objects.filter(
+            primary_anomaly=anomaly,
+            status=TreatmentStatus.COMPLETED,
+            effectiveness_validation_result=TreatmentEffectivenessValidationResult.EFFECTIVE,
+        ).exists()
+    )
+
+
+def _ensure_anomaly_is_editable(anomaly: Anomaly) -> None:
+    if is_anomaly_locked_by_effective_treatment(anomaly):
+        raise ValidationError(
+            {"anomaly": "La anomalia esta cerrada por un tratamiento validado como eficaz y no admite modificaciones."}
+        )
 
 
 
@@ -367,6 +390,7 @@ def create_anomaly(*, user, data: dict, request_id: str = "") -> Anomaly:
 def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> Anomaly:
     _require_permission(user, PERMISSION_EDIT_ANOMALY, "No tiene permisos para editar anomalias.")
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
+    _ensure_anomaly_is_editable(locked)
     before = snapshot_anomaly(locked)
 
     next_site = data.get("site", locked.site)
@@ -502,6 +526,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
 
 @transaction.atomic
 def add_comment(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyComment:
+    _ensure_anomaly_is_editable(anomaly)
     if not data.get("body", "").strip():
         raise ValidationError({"body": "El comentario no puede estar vacio."})
 
@@ -528,6 +553,7 @@ def add_comment(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> 
 
 @transaction.atomic
 def add_attachment(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyAttachment:
+    _ensure_anomaly_is_editable(anomaly)
     _require_any_permission(
         user,
         {PERMISSION_EDIT_ANOMALY, PERMISSION_CREATE_ANOMALY, PERMISSION_ANALYZE_ANOMALY},
@@ -558,6 +584,7 @@ def add_attachment(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
 
 @transaction.atomic
 def add_participant(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyParticipant:
+    _ensure_anomaly_is_editable(anomaly)
     _require_any_permission(
         user,
         {PERMISSION_EDIT_ANOMALY, PERMISSION_ANALYZE_ANOMALY, PERMISSION_ASSIGN_ACTION},
@@ -589,6 +616,7 @@ def add_participant(*, anomaly: Anomaly, user, data: dict, request_id: str = "")
 
 @transaction.atomic
 def save_initial_verification(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyInitialVerification:
+    _ensure_anomaly_is_editable(anomaly)
     _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para registrar la verificacion inicial.")
     verification = _get_related_or_none(anomaly, "initial_verification") or AnomalyInitialVerification(anomaly=anomaly)
     verification, created = _upsert_single_related(
@@ -617,6 +645,7 @@ def save_initial_verification(*, anomaly: Anomaly, user, data: dict, request_id:
 
 @transaction.atomic
 def save_classification(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyClassification:
+    _ensure_anomaly_is_editable(anomaly)
     _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para realizar REVICION DE HALLAZGOS de la anomalia.")
     classification = _get_related_or_none(anomaly, "classification") or AnomalyClassification(anomaly=anomaly)
     classification, created = _upsert_single_related(
@@ -643,6 +672,7 @@ def save_classification(*, anomaly: Anomaly, user, data: dict, request_id: str =
 
 @transaction.atomic
 def unlock_classification_change(*, anomaly: Anomaly, user, request_id: str = "") -> Anomaly:
+    _ensure_anomaly_is_editable(anomaly)
     _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para habilitar cambio de REVICION DE HALLAZGOS.")
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
 
@@ -688,6 +718,7 @@ def unlock_classification_change(*, anomaly: Anomaly, user, request_id: str = ""
 
 @transaction.atomic
 def save_cause_analysis(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyCauseAnalysis:
+    _ensure_anomaly_is_editable(anomaly)
     _require_permission(user, PERMISSION_ANALYZE_ANOMALY, "No tiene permisos para registrar el analisis de causa.")
     analysis = _get_related_or_none(anomaly, "cause_analysis") or AnomalyCauseAnalysis(anomaly=anomaly)
     analysis, created = _upsert_single_related(
@@ -714,6 +745,7 @@ def save_cause_analysis(*, anomaly: Anomaly, user, data: dict, request_id: str =
 
 @transaction.atomic
 def add_proposal(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyProposal:
+    _ensure_anomaly_is_editable(anomaly)
     _require_permission(user, PERMISSION_ANALYZE_ANOMALY, "No tiene permisos para registrar propuestas.")
     proposal = AnomalyProposal(
         anomaly=anomaly,
@@ -741,6 +773,7 @@ def add_proposal(*, anomaly: Anomaly, user, data: dict, request_id: str = "") ->
 
 @transaction.atomic
 def record_effectiveness_check(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyEffectivenessCheck:
+    _ensure_anomaly_is_editable(anomaly)
     _require_permission(
         user,
         PERMISSION_VERIFY_EFFECTIVENESS_ANOMALY,
@@ -781,6 +814,7 @@ def record_effectiveness_check(*, anomaly: Anomaly, user, data: dict, request_id
 
 @transaction.atomic
 def save_learning(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyLearning:
+    _ensure_anomaly_is_editable(anomaly)
     _require_permission(user, PERMISSION_CLOSE_ANOMALY, "No tiene permisos para registrar aprendizaje.")
     learning = _get_related_or_none(anomaly, "learning") or AnomalyLearning(anomaly=anomaly)
     learning, created = _upsert_single_related(
@@ -803,6 +837,7 @@ def save_learning(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -
 
 @transaction.atomic
 def save_immediate_action(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyImmediateAction:
+    _ensure_anomaly_is_editable(anomaly)
     _require_permission(user, PERMISSION_CLOSE_ANOMALY, "No tiene permisos para gestionar accion inmediata.")
 
     if not is_immediate_action_anomaly(anomaly):
@@ -909,6 +944,7 @@ def save_immediate_action(*, anomaly: Anomaly, user, data: dict, request_id: str
 @transaction.atomic
 def transition_anomaly(*, anomaly: Anomaly, user, target_stage: str | None = None, target_status: str | None = None, comment: str, request_id: str = "") -> Anomaly:
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
+    _ensure_anomaly_is_editable(locked)
     _ensure_scope(locked.site_id, locked.area_id, user)
 
     if target_status == AnomalyStatus.CANCELLED:

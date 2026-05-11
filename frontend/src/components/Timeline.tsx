@@ -10,6 +10,19 @@ type TimelineProps = {
 
 const PAGE_SIZE = 10;
 
+function isTaskStatusHistory(item: AnomalyStatusHistory) {
+  const comment = item.comment.toLowerCase();
+  return comment.includes("se actualiza la tarea") && comment.includes("estado");
+}
+
+function getEvidenceText(item: AnomalyStatusHistory) {
+  const evidenceNote = item.evidence_note?.trim();
+  if (evidenceNote) {
+    return evidenceNote;
+  }
+  return isTaskStatusHistory(item) ? "Sin evidencia registrada" : "";
+}
+
 export function Timeline({ items }: TimelineProps) {
   const [page, setPage] = useState(1);
 
@@ -29,23 +42,31 @@ export function Timeline({ items }: TimelineProps) {
   return (
     <>
       <ol className="timeline">
-        {pagedItems.map((item) => (
-          <li key={item.id} className="timeline-item">
-            <div className="timeline-dot" />
-            <div className="timeline-content">
-              <div className="timeline-row">
-                <StatusBadge value={item.from_stage} compact />
-                <span className="timeline-arrow">a</span>
-                <StatusBadge value={item.to_stage} compact />
+        {pagedItems.map((item) => {
+          const evidenceText = getEvidenceText(item);
+          return (
+            <li key={item.id} className="timeline-item">
+              <div className="timeline-dot" />
+              <div className="timeline-content">
+                <div className="timeline-row">
+                  <StatusBadge value={item.from_stage} compact />
+                  <span className="timeline-arrow">a</span>
+                  <StatusBadge value={item.to_stage} compact />
+                </div>
+                <p className="timeline-comment">{item.comment}</p>
+                {evidenceText ? (
+                  <p className="timeline-evidence">
+                    <strong>Evidencia:</strong> {evidenceText}
+                  </p>
+                ) : null}
+                <small>
+                  {formatDateTime(item.changed_at)}
+                  {item.changed_by?.full_name ? ` - ${item.changed_by.full_name}` : ""}
+                </small>
               </div>
-              <p className="timeline-comment">{item.comment}</p>
-              <small>
-                {formatDateTime(item.changed_at)}
-                {item.changed_by?.full_name ? ` - ${item.changed_by.full_name}` : ""}
-              </small>
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ol>
 
       <PaginationControls page={page} totalCount={items.length} pageSize={PAGE_SIZE} onPageChange={setPage} />

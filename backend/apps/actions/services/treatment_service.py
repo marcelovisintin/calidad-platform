@@ -11,6 +11,7 @@ from apps.accounts.models import User
 from apps.actions.models import (
     Treatment,
     TreatmentAnomaly,
+    TreatmentEffectivenessValidationResult,
     TreatmentEvidence,
     TreatmentParticipant,
     TreatmentRootCause,
@@ -172,10 +173,95 @@ def snapshot_treatment(treatment: Treatment) -> dict:
         "scheduled_for": treatment.scheduled_for.isoformat() if treatment.scheduled_for else "",
         "method_used": treatment.method_used,
         "observations": treatment.observations,
+        "effectiveness_evaluation_date": treatment.effectiveness_evaluation_date.isoformat() if treatment.effectiveness_evaluation_date else "",
+        "effectiveness_responsible_id": str(treatment.effectiveness_responsible_id or ""),
+        "effectiveness_validation_result": treatment.effectiveness_validation_result,
+        "effectiveness_validated_at": treatment.effectiveness_validated_at.isoformat() if treatment.effectiveness_validated_at else "",
+        "effectiveness_validated_by_id": str(treatment.effectiveness_validated_by_id or ""),
+        "effectiveness_validation_comment": treatment.effectiveness_validation_comment,
     }
 
 
-def _register_anomaly_history_event(*, anomaly, user, comment: str, changed_at=None) -> None:
+def _validate_effectiveness_assignment(*, treatment: Treatment, data: dict) -> None:
+    evaluation_date = data.get("effectiveness_evaluation_date", treatment.effectiveness_evaluation_date)
+    responsible = data.get("effectiveness_responsible", treatment.effectiveness_responsible)
+
+    if not evaluation_date:
+        raise ValidationError({"effectiveness_evaluation_date": "Debe indicar la fecha de evaluacion de eficacia."})
+    if not responsible:
+        raise ValidationError({"effectiveness_responsible": "Debe seleccionar el responsable de evaluacion de eficacia."})
+    if not treatment.participants.filter(user_id=responsible.pk).exists():
+        raise ValidationError(
+            {"effectiveness_responsible": "El responsable de evaluacion de eficacia debe estar convocado al tratamiento."}
+        )
+
+
+def is_treatment_closed_by_effective_validation(treatment: Treatment) -> bool:
+    return bool(
+        treatment.status == TreatmentStatus.COMPLETED
+        and treatment.effectiveness_validation_result == TreatmentEffectivenessValidationResult.EFFECTIVE
+    )
+
+
+def ensure_treatment_is_editable(treatment: Treatment) -> None:
+    if is_treatment_closed_by_effective_validation(treatment):
+        raise ValidationError(
+            {"treatment": "El tratamiento esta cerrado por validacion eficaz y no admite modificaciones."}
+        )
+
+
+def _effectiveness_history_comment(treatment: Treatment) -> str:
+    evaluation_date = treatment.effectiveness_evaluation_date.isoformat() if treatment.effectiveness_evaluation_date else "sin fecha"
+    responsible = treatment.effectiveness_responsible
+    responsible_name = responsible.full_name if responsible else "sin responsable"
+    return (
+        f"Tratamiento {treatment.code}: se registra la evaluacion de eficacia "
+        f"para fecha {evaluation_date}, responsable {responsible_name}."
+    )
+
+
+def get_treatment_validation_state(treatment: Treatment) -> dict:
+    blockers: list[str] = []
+
+    if not treatment.scheduled_for:
+        blockers.append("Debe tener fecha de tratamiento agendada.")
+    elif treatment.scheduled_for > timezone.now():
+        blockers.append("La fecha de tratamiento agendada aun no paso.")
+
+    root_causes = list(treatment.root_causes.all())
+    if not root_causes:
+        blockers.append("Debe tener al menos una causa raiz cargada.")
+    elif any(not (cause.description or "").strip() for cause in root_causes):
+        blockers.append("Todas las causas raiz deben tener detalle.")
+
+    if not treatment.effectiveness_evaluation_date or not treatment.effectiveness_responsible_id:
+        blockers.append("Debe tener cargada la evaluacion de eficacia con fecha y responsable.")
+
+    incomplete_tasks = [
+        task.code or task.title
+        for task in treatment.tasks.all()
+        if task.status != "completed"
+    ]
+    if incomplete_tasks:
+        blockers.append("Todas las tareas surgidas del tratamiento deben estar completadas.")
+
+    return {"available": not blockers, "blockers": blockers}
+
+
+def _validation_history_comment(*, treatment: Treatment, previous_status: str, result: str, comment: str = "") -> str:
+    result_label = "eficaz" if result == TreatmentEffectivenessValidationResult.EFFECTIVE else "no eficaz"
+    new_status = treatment.status
+    base = (
+        f"Tratamiento {treatment.code}: validacion de eficacia realizada con resultado {result_label}. "
+        f"El tratamiento cambia de estado {previous_status} a estado {new_status}."
+    )
+    clean_comment = (comment or "").strip()
+    if clean_comment:
+        return f"{base} Observacion: {clean_comment}"
+    return base
+
+
+def _register_anomaly_history_event(*, anomaly, user, comment: str, changed_at=None, evidence_note: str = "") -> None:
     AnomalyStatusHistory.objects.create(
         anomaly=anomaly,
         from_status=anomaly.current_status,
@@ -183,6 +269,7 @@ def _register_anomaly_history_event(*, anomaly, user, comment: str, changed_at=N
         from_stage=anomaly.current_stage,
         to_stage=anomaly.current_stage,
         comment=comment,
+        evidence_note=(evidence_note or "").strip(),
         changed_by=user,
         changed_at=changed_at or timezone.now(),
         created_by=user,
@@ -190,10 +277,77 @@ def _register_anomaly_history_event(*, anomaly, user, comment: str, changed_at=N
     )
 
 
-def _register_history_for_treatment(*, treatment: Treatment, user, comment: str) -> None:
+def _register_history_for_treatment(*, treatment: Treatment, user, comment: str, evidence_note: str = "") -> None:
     links = TreatmentAnomaly.objects.filter(treatment=treatment).select_related("anomaly")
-    for link in links:
-        _register_anomaly_history_event(anomaly=link.anomaly, user=user, comment=comment)
+    anomalies_by_id = {link.anomaly_id: link.anomaly for link in links}
+    if treatment.primary_anomaly_id and treatment.primary_anomaly_id not in anomalies_by_id:
+        anomalies_by_id[treatment.primary_anomaly_id] = treatment.primary_anomaly
+
+    for anomaly in anomalies_by_id.values():
+        _register_anomaly_history_event(
+            anomaly=anomaly,
+            user=user,
+            comment=comment,
+            evidence_note=evidence_note,
+        )
+
+
+def _close_anomalies_for_effective_treatment(*, treatment: Treatment, user, changed_at) -> None:
+    links = TreatmentAnomaly.objects.filter(treatment=treatment).select_related("anomaly")
+    anomalies_by_id = {link.anomaly_id: link.anomaly for link in links}
+    if treatment.primary_anomaly_id and treatment.primary_anomaly_id not in anomalies_by_id:
+        anomalies_by_id[treatment.primary_anomaly_id] = treatment.primary_anomaly
+
+    comment = (
+        "Tratamiento validado como eficaz. "
+        "Anomalia cerrada automaticamente por cierre efectivo del tratamiento."
+    )
+    for anomaly in anomalies_by_id.values():
+        if anomaly.current_status == AnomalyStatus.CLOSED:
+            _register_anomaly_history_event(
+                anomaly=anomaly,
+                user=user,
+                comment=comment,
+                changed_at=changed_at,
+            )
+            continue
+
+        previous_status = anomaly.current_status
+        previous_stage = anomaly.current_stage
+        anomaly.current_status = AnomalyStatus.CLOSED
+        anomaly.current_stage = AnomalyStage.CLOSURE
+        anomaly.closed_at = changed_at
+        anomaly.last_transition_at = changed_at
+        anomaly.effectiveness_summary = "Tratamiento validado como eficaz."
+        anomaly.closure_comment = comment
+        anomaly.updated_by = user
+        _bump_version(anomaly)
+        anomaly.full_clean()
+        anomaly.save(
+            update_fields=[
+                "current_status",
+                "current_stage",
+                "closed_at",
+                "last_transition_at",
+                "effectiveness_summary",
+                "closure_comment",
+                "updated_by",
+                "row_version",
+                "updated_at",
+            ]
+        )
+        AnomalyStatusHistory.objects.create(
+            anomaly=anomaly,
+            from_status=previous_status,
+            to_status=anomaly.current_status,
+            from_stage=previous_stage,
+            to_stage=anomaly.current_stage,
+            comment=comment,
+            changed_by=user,
+            changed_at=changed_at,
+            created_by=user,
+            updated_by=user,
+        )
 
 
 def _sync_treatment_analysis_to_anomalies(*, treatment: Treatment, user) -> None:
@@ -408,6 +562,7 @@ def create_treatment(*, primary_anomaly, user, data: dict, request_id: str = "")
 def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str = "") -> Treatment:
     _require_treatment_permission(user, "No tiene permisos para actualizar tratamientos.", treatment=treatment)
     locked = Treatment.objects.select_for_update().get(pk=treatment.pk)
+    ensure_treatment_is_editable(locked)
     before = snapshot_treatment(locked)
 
     status_changed = False
@@ -420,7 +575,16 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
         locked.status = target
         status_changed = True
 
-    for field in ("scheduled_for", "method_used", "observations"):
+    if (
+        "method_used" in data
+        or "observations" in data
+        or "effectiveness_evaluation_date" in data
+        or "effectiveness_responsible" in data
+        or data.get("status") == TreatmentStatus.COMPLETED
+    ):
+        _validate_effectiveness_assignment(treatment=locked, data=data)
+
+    for field in ("scheduled_for", "method_used", "observations", "effectiveness_evaluation_date", "effectiveness_responsible"):
         if field in data:
             setattr(locked, field, data[field])
 
@@ -462,6 +626,8 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
         comments.append(f"El tratamiento {locked.code} cambia a estado {locked.status}.")
     if "scheduled_for" in data:
         comments.append("Se actualiza la agenda del tratamiento.")
+    if "effectiveness_evaluation_date" in data or "effectiveness_responsible" in data:
+        comments.append(_effectiveness_history_comment(locked))
     if analysis_updated:
         comments.append("Se guarda el analisis de causa del tratamiento.")
 
@@ -472,8 +638,71 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
 
 
 @transaction.atomic
+def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str, comment: str = "", request_id: str = "") -> Treatment:
+    _require_treatment_permission(user, "No tiene permisos para validar tratamientos.", treatment=treatment)
+    locked = (
+        Treatment.objects.select_for_update(of=("self",))
+        .select_related("effectiveness_responsible")
+        .prefetch_related("root_causes", "tasks", "anomaly_links__anomaly")
+        .get(pk=treatment.pk)
+    )
+    ensure_treatment_is_editable(locked)
+    before = snapshot_treatment(locked)
+
+    if not locked.effectiveness_responsible_id:
+        raise ValidationError({"effectiveness_responsible": "El tratamiento no tiene responsable de evaluacion de eficacia."})
+    if locked.effectiveness_responsible_id != user.pk:
+        raise PermissionDenied("Solo el responsable designado puede validar la eficacia del tratamiento.")
+
+    validation_state = get_treatment_validation_state(locked)
+    if not validation_state["available"]:
+        raise ValidationError({"validation": validation_state["blockers"]})
+
+    previous_status = locked.status
+    now = timezone.now()
+    if result == TreatmentEffectivenessValidationResult.EFFECTIVE:
+        locked.status = TreatmentStatus.COMPLETED
+    elif result == TreatmentEffectivenessValidationResult.NOT_EFFECTIVE:
+        locked.status = TreatmentStatus.IN_PROGRESS
+    else:
+        raise ValidationError({"result": "Resultado de validacion invalido."})
+
+    locked.effectiveness_validation_result = result
+    locked.effectiveness_validated_at = now
+    locked.effectiveness_validated_by = user
+    locked.effectiveness_validation_comment = (comment or "").strip()
+    locked.updated_by = user
+    _bump_version(locked)
+    locked.full_clean()
+    locked.save()
+
+    record_audit_event(
+        entity=locked,
+        action="treatment.effectiveness_validated",
+        actor=user,
+        before_data=before,
+        after_data=snapshot_treatment(locked),
+        request_id=_request_id(request_id),
+    )
+    _register_history_for_treatment(
+        treatment=locked,
+        user=user,
+        comment=_validation_history_comment(
+            treatment=locked,
+            previous_status=previous_status,
+            result=result,
+            comment=comment,
+        ),
+    )
+    if result == TreatmentEffectivenessValidationResult.EFFECTIVE:
+        _close_anomalies_for_effective_treatment(treatment=locked, user=user, changed_at=timezone.now())
+    return locked
+
+
+@transaction.atomic
 def add_treatment_anomaly(*, treatment: Treatment, anomaly, user, request_id: str = "") -> TreatmentAnomaly:
     _require_treatment_permission(user, "No tiene permisos para asociar anomalias al tratamiento.", treatment=treatment)
+    ensure_treatment_is_editable(treatment)
     if is_immediate_action_anomaly(anomaly):
         raise ValidationError({"anomaly": "Las anomalias con REVICION DE HALLAZGOS como accion inmediata no pueden vincularse a un tratamiento."})
     link, created = TreatmentAnomaly.objects.get_or_create(
@@ -503,6 +732,7 @@ def add_treatment_anomaly(*, treatment: Treatment, anomaly, user, request_id: st
 @transaction.atomic
 def add_treatment_participant(*, treatment: Treatment, participant_user, role: str, note: str, user, request_id: str = "") -> TreatmentParticipant:
     _require_treatment_permission(user, "No tiene permisos para convocar participantes al tratamiento.", treatment=treatment)
+    ensure_treatment_is_editable(treatment)
     participant, created = TreatmentParticipant.objects.get_or_create(
         treatment=treatment,
         user=participant_user,
@@ -538,6 +768,7 @@ def add_treatment_participant(*, treatment: Treatment, participant_user, role: s
 @transaction.atomic
 def add_root_cause(*, treatment: Treatment, description: str, user, request_id: str = "") -> TreatmentRootCause:
     _require_treatment_permission(user, "No tiene permisos para registrar causas raiz.", treatment=treatment)
+    ensure_treatment_is_editable(treatment)
     if not description.strip():
         raise ValidationError({"description": "La descripcion de la causa raiz es obligatoria."})
 
@@ -583,6 +814,7 @@ def add_root_cause(*, treatment: Treatment, description: str, user, request_id: 
 @transaction.atomic
 def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: str = "") -> TreatmentTask:
     _require_treatment_permission(user, "No tiene permisos para registrar tareas de tratamiento.", treatment=treatment)
+    ensure_treatment_is_editable(treatment)
     title = (data.get("title") or "").strip()
     if not title:
         raise ValidationError({"title": "El titulo de la tarea es obligatorio."})
@@ -591,9 +823,11 @@ def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: st
     if not description:
         raise ValidationError({"description": "La descripcion de la tarea es obligatoria."})
 
-    root_cause = data.get("root_cause")
-    if not root_cause:
-        raise ValidationError({"root_cause": "Debe seleccionar una causa raiz."})
+    root_causes = list(data.get("root_cause_ids") or [])
+    if data.get("root_cause") and data["root_cause"] not in root_causes:
+        root_causes.append(data["root_cause"])
+    if not root_causes:
+        raise ValidationError({"root_cause_ids": "Debe seleccionar al menos una causa raiz."})
 
     responsible = data.get("responsible")
     if not responsible:
@@ -609,7 +843,7 @@ def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: st
 
     task = TreatmentTask(
         treatment=treatment,
-        root_cause=root_cause,
+        root_cause=root_causes[0],
         code=data.get("code") or _next_task_code(treatment),
         title=title,
         description=description,
@@ -621,6 +855,7 @@ def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: st
     )
     task.full_clean()
     task.save()
+    task.root_causes.set(root_causes)
 
     links = []
     for anomaly_id in anomaly_ids:
@@ -653,7 +888,24 @@ def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: st
 @transaction.atomic
 def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, request_id: str = "") -> TreatmentTask:
     _require_treatment_permission(user, "No tiene permisos para actualizar tareas de tratamiento.", treatment=treatment_task.treatment)
+    ensure_treatment_is_editable(treatment_task.treatment)
     locked = TreatmentTask.objects.select_for_update().get(pk=treatment_task.pk)
+    previous_status = locked.status
+    next_status = data.get("status", locked.status)
+    status_changed = "status" in data and next_status != previous_status
+    evidence_note = (data.pop("evidence_note", "") or "").strip()
+
+    if status_changed and not evidence_note:
+        raise ValidationError({"evidence_note": "Debe cargar una nota de evidencia para cambiar el estado de la tarea."})
+
+    root_causes = None
+    if "root_cause_ids" in data or "root_cause" in data:
+        root_causes = list(data.get("root_cause_ids") or [])
+        if data.get("root_cause") and data["root_cause"] not in root_causes:
+            root_causes.append(data["root_cause"])
+        if not root_causes:
+            raise ValidationError({"root_cause_ids": "Debe seleccionar al menos una causa raiz."})
+        data["root_cause"] = root_causes[0]
 
     for field in ("title", "description", "responsible", "execution_date", "status", "root_cause"):
         if field in data:
@@ -663,6 +915,8 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
     _bump_version(locked)
     locked.full_clean()
     locked.save()
+    if root_causes is not None:
+        locked.root_causes.set(root_causes)
 
     if "anomaly_ids" in data:
         TreatmentTaskAnomaly.objects.filter(task=locked).delete()
@@ -682,20 +936,37 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
         entity=locked.treatment,
         action="treatment.task_updated",
         actor=user,
-        after_data={"task_id": str(locked.pk), "status": locked.status},
+        after_data={
+            "task_id": str(locked.pk),
+            "previous_status": previous_status,
+            "status": locked.status,
+            "evidence_note": evidence_note if status_changed else "",
+        },
         request_id=_request_id(request_id),
     )
-    _register_history_for_treatment(
-        treatment=locked.treatment,
-        user=user,
-        comment=f"Tratamiento {locked.treatment.code}: se actualiza la tarea {locked.code or locked.title} a estado {locked.status}.",
-    )
+    if status_changed:
+        _register_history_for_treatment(
+            treatment=locked.treatment,
+            user=user,
+            comment=(
+                f"Tratamiento {locked.treatment.code}: se actualiza la tarea "
+                f"{locked.code or locked.title} de estado {previous_status} a estado {locked.status}."
+            ),
+            evidence_note=evidence_note,
+        )
+    else:
+        _register_history_for_treatment(
+            treatment=locked.treatment,
+            user=user,
+            comment=f"Tratamiento {locked.treatment.code}: se actualiza la tarea {locked.code or locked.title}.",
+        )
     return locked
 
 
 @transaction.atomic
 def add_treatment_evidence(*, treatment: Treatment, user, data: dict, request_id: str = "") -> TreatmentEvidence:
     _require_treatment_permission(user, "No tiene permisos para agregar evidencias al tratamiento.", treatment=treatment)
+    ensure_treatment_is_editable(treatment)
 
     file_obj = data.get("file")
     if not file_obj:
@@ -734,6 +1005,7 @@ def add_treatment_evidence(*, treatment: Treatment, user, data: dict, request_id
 def add_treatment_task_evidence(*, treatment_task: TreatmentTask, user, data: dict, request_id: str = "") -> TreatmentTaskEvidence:
     treatment = treatment_task.treatment
     _require_treatment_permission(user, "No tiene permisos para agregar evidencias a la tarea.", treatment=treatment)
+    ensure_treatment_is_editable(treatment)
 
     file_obj = data.get("file")
     if not file_obj:

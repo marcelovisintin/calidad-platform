@@ -30,7 +30,7 @@ type TreatmentTab = "agenda" | "analysis";
 type TaskDraft = {
   title: string;
   description: string;
-  root_cause: string;
+  root_cause_ids: string[];
   responsible: string;
   execution_date: string;
   status: "pending" | "in_progress" | "completed" | "cancelled";
@@ -65,7 +65,7 @@ const TASK_STATUS_OPTIONS = [
 const EMPTY_TASK_DRAFT: TaskDraft = {
   title: "",
   description: "",
-  root_cause: "",
+  root_cause_ids: [],
   responsible: "",
   execution_date: "",
   status: "pending",
@@ -167,6 +167,8 @@ export function TreatmentsPage() {
   const [scheduledFor, setScheduledFor] = useState("");
   const [methodUsed, setMethodUsed] = useState("");
   const [observations, setObservations] = useState("");
+  const [effectivenessEvaluationDate, setEffectivenessEvaluationDate] = useState("");
+  const [effectivenessResponsibleId, setEffectivenessResponsibleId] = useState("");
 
   const [participantUserId, setParticipantUserId] = useState("");
   const [participantRole, setParticipantRole] = useState("convoked");
@@ -287,6 +289,8 @@ export function TreatmentsPage() {
       setScheduledFor("");
       setMethodUsed("");
       setObservations("");
+      setEffectivenessEvaluationDate("");
+      setEffectivenessResponsibleId("");
       setTaskDraft(EMPTY_TASK_DRAFT);
       setSelectedTaskId("");
       setTreatmentEvidenceFile(null);
@@ -301,6 +305,8 @@ export function TreatmentsPage() {
     setScheduledFor(toDateTimeLocalValue(selectedTreatment.scheduled_for));
     setMethodUsed(selectedTreatment.method_used || "");
     setObservations(selectedTreatment.observations || "");
+    setEffectivenessEvaluationDate(selectedTreatment.effectiveness_evaluation_date || "");
+    setEffectivenessResponsibleId(selectedTreatment.effectiveness_responsible?.id || "");
   }, [selectedTreatment]);
 
   useEffect(() => {
@@ -367,10 +373,22 @@ export function TreatmentsPage() {
 
   const rootCauseOptions = selectedTreatment?.root_causes ?? [];
   const anomalyOptions = selectedTreatment?.anomaly_links ?? [];
+  const participantOptions = useMemo(
+    () => (selectedTreatment?.participants ?? []).filter((participant) => participant.user),
+    [selectedTreatment?.participants],
+  );
+  const hasEffectivenessAssignment = Boolean(effectivenessEvaluationDate) && Boolean(effectivenessResponsibleId);
+  const savedEffectivenessDate = selectedTreatment?.effectiveness_evaluation_date || "";
+  const savedEffectivenessResponsibleId = selectedTreatment?.effectiveness_responsible?.id || "";
+  const hasSavedEffectivenessAssignment = Boolean(savedEffectivenessDate) && Boolean(savedEffectivenessResponsibleId);
+  const hasPendingEffectivenessChanges =
+    Boolean(selectedTreatment) &&
+    (effectivenessEvaluationDate !== savedEffectivenessDate || effectivenessResponsibleId !== savedEffectivenessResponsibleId);
+  const hasTreatmentTasks = Boolean(selectedTreatment?.tasks.length);
   const canCreateTask =
     Boolean(taskDraft.title.trim()) &&
     Boolean(taskDraft.description.trim()) &&
-    Boolean(taskDraft.root_cause) &&
+    taskDraft.root_cause_ids.length > 0 &&
     Boolean(taskDraft.responsible) &&
     Boolean(taskDraft.execution_date) &&
     taskDraft.anomaly_ids.length > 0;
@@ -378,6 +396,7 @@ export function TreatmentsPage() {
     () => selectedTreatment?.tasks.find((task) => task.id === selectedTaskId) ?? null,
     [selectedTaskId, selectedTreatment?.tasks],
   );
+  const treatmentLocked = Boolean(selectedTreatment?.is_locked);
 
   useEffect(() => {
     if (!selectedTask) {
@@ -390,7 +409,11 @@ export function TreatmentsPage() {
     setTaskDraft({
       title: selectedTask.title,
       description: selectedTask.description || "",
-      root_cause: selectedTask.root_cause || "",
+      root_cause_ids: selectedTask.root_causes?.length
+        ? selectedTask.root_causes.map((cause) => cause.id)
+        : selectedTask.root_cause
+          ? [selectedTask.root_cause]
+          : [],
       responsible: selectedTask.responsible?.id || "",
       execution_date: selectedTask.execution_date || "",
       status: selectedTask.status as TaskDraft["status"],
@@ -480,16 +503,31 @@ export function TreatmentsPage() {
       return;
     }
 
-    await runMutation(async () => {
+    setBusy(true);
+    setFormError(null);
+    setMessage(null);
+
+    try {
       const created = await createTreatment({ primary_anomaly: selectedCandidateId, status: "pending" });
       setSelectedTreatmentId(created.id);
       setSelectedTab("agenda");
-    }, "Tratamiento creado correctamente.");
+      setSelectedTaskId("");
+      await reloadSupport();
+      setMessage("Tratamiento creado correctamente.");
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "No se pudo crear el tratamiento.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleSaveAgenda = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedTreatment) {
+      return;
+    }
+    if (treatmentLocked) {
+      setFormError("El tratamiento esta cerrado por validacion eficaz y no admite modificaciones.");
       return;
     }
 
@@ -503,6 +541,10 @@ export function TreatmentsPage() {
   const handleAddParticipant = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedTreatment || !participantUserId) {
+      return;
+    }
+    if (treatmentLocked) {
+      setFormError("El tratamiento esta cerrado por validacion eficaz y no admite modificaciones.");
       return;
     }
 
@@ -521,6 +563,10 @@ export function TreatmentsPage() {
     if (!selectedTreatment || !linkAnomalyId) {
       return;
     }
+    if (treatmentLocked) {
+      setFormError("El tratamiento esta cerrado por validacion eficaz y no admite modificaciones.");
+      return;
+    }
 
     await runMutation(async () => {
       await addTreatmentAnomaly(selectedTreatment.id, linkAnomalyId);
@@ -532,12 +578,28 @@ export function TreatmentsPage() {
     if (!selectedTreatment) {
       return;
     }
+    if (treatmentLocked) {
+      setFormError("El tratamiento esta cerrado por validacion eficaz y no admite modificaciones.");
+      return;
+    }
     if (!methodUsed) {
       setFormError("Debes seleccionar un metodo de analisis.");
       return;
     }
     if (!observations.trim()) {
       setFormError("Debes registrar observaciones para guardar el analisis.");
+      return;
+    }
+    if (!selectedTreatment.tasks.length) {
+      setFormError("Debes registrar al menos una tarea surgida del tratamiento antes de guardar el analisis.");
+      return;
+    }
+    if (!effectivenessEvaluationDate) {
+      setFormError("Debes indicar la fecha de evaluacion de eficacia.");
+      return;
+    }
+    if (!effectivenessResponsibleId) {
+      setFormError("Debes seleccionar el responsable de evaluacion de eficacia.");
       return;
     }
 
@@ -552,6 +614,8 @@ export function TreatmentsPage() {
       await updateTreatment(selectedTreatment.id, {
         method_used: methodUsed,
         observations: observations.trim(),
+        effectiveness_evaluation_date: effectivenessEvaluationDate,
+        effectiveness_responsible: effectivenessResponsibleId,
       });
     }, "Analisis de tratamiento guardado.");
   };
@@ -561,6 +625,10 @@ export function TreatmentsPage() {
     if (!selectedTreatment || !rootCauseDescription.trim()) {
       return;
     }
+    if (treatmentLocked) {
+      setFormError("El tratamiento esta cerrado por validacion eficaz y no admite modificaciones.");
+      return;
+    }
 
     await runMutation(async () => {
       await addTreatmentRootCause(selectedTreatment.id, rootCauseDescription.trim());
@@ -568,8 +636,20 @@ export function TreatmentsPage() {
     }, "Causa raiz registrada.");
   };
 
-  const handleTaskDraftChange = (field: keyof TaskDraft, value: string) => {
+  const handleTaskDraftChange = (field: Exclude<keyof TaskDraft, "root_cause_ids" | "anomaly_ids">, value: string) => {
     setTaskDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const toggleTaskRootCause = (rootCauseId: string) => {
+    setTaskDraft((current) => {
+      const selected = current.root_cause_ids.includes(rootCauseId);
+      return {
+        ...current,
+        root_cause_ids: selected
+          ? current.root_cause_ids.filter((id) => id !== rootCauseId)
+          : [...current.root_cause_ids, rootCauseId],
+      };
+    });
   };
 
   const handleTreatmentEvidenceFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -602,6 +682,10 @@ export function TreatmentsPage() {
     if (!selectedTreatment) {
       return;
     }
+    if (treatmentLocked) {
+      setFormError("El tratamiento esta cerrado por validacion eficaz y no admite modificaciones.");
+      return;
+    }
 
     if (!taskDraft.title.trim()) {
       setFormError("La tarea es obligatoria.");
@@ -611,8 +695,8 @@ export function TreatmentsPage() {
       setFormError("La descripcion de la tarea es obligatoria.");
       return;
     }
-    if (!taskDraft.root_cause) {
-      setFormError("Debes seleccionar la causa raiz asociada.");
+    if (!taskDraft.root_cause_ids.length) {
+      setFormError("Debes seleccionar al menos una causa raiz asociada.");
       return;
     }
     if (!taskDraft.responsible) {
@@ -632,7 +716,7 @@ export function TreatmentsPage() {
       await addTreatmentTask(selectedTreatment.id, {
         title: taskDraft.title.trim(),
         description: taskDraft.description.trim(),
-        root_cause: taskDraft.root_cause || null,
+        root_cause_ids: taskDraft.root_cause_ids,
         responsible: taskDraft.responsible || null,
         execution_date: taskDraft.execution_date || null,
         status: taskDraft.status,
@@ -647,7 +731,11 @@ export function TreatmentsPage() {
     setTaskDraft({
       title: task.title,
       description: task.description || "",
-      root_cause: task.root_cause || "",
+      root_cause_ids: task.root_causes?.length
+        ? task.root_causes.map((cause) => cause.id)
+        : task.root_cause
+          ? [task.root_cause]
+          : [],
       responsible: task.responsible?.id || "",
       execution_date: task.execution_date || "",
       status: task.status as TaskDraft["status"],
@@ -660,13 +748,17 @@ export function TreatmentsPage() {
     if (!selectedTreatment || !selectedTask || !taskDraft.title.trim()) {
       return;
     }
+    if (treatmentLocked) {
+      setFormError("El tratamiento esta cerrado por validacion eficaz y no admite modificaciones.");
+      return;
+    }
 
     await runMutation(
       async () => {
         await updateTreatmentTask(selectedTreatment.id, selectedTask.id, {
           title: taskDraft.title.trim(),
           description: taskDraft.description.trim(),
-          root_cause: taskDraft.root_cause || null,
+          root_cause_ids: taskDraft.root_cause_ids,
           responsible: taskDraft.responsible || null,
           execution_date: taskDraft.execution_date || null,
           status: taskDraft.status,
@@ -683,10 +775,19 @@ export function TreatmentsPage() {
     if (!selectedTreatment) {
       return;
     }
+    if (treatmentLocked) {
+      setFormError("El tratamiento esta cerrado por validacion eficaz y no admite modificaciones.");
+      return;
+    }
     if (!treatmentEvidenceFile) {
       setFormError("Debes seleccionar una evidencia (imagen o PDF) para cargar al tratamiento.");
       return;
     }
+
+    const currentMethodUsed = methodUsed;
+    const currentObservations = observations;
+    const currentEffectivenessEvaluationDate = effectivenessEvaluationDate;
+    const currentEffectivenessResponsibleId = effectivenessResponsibleId;
 
     await runMutation(async () => {
       await addTreatmentEvidence(selectedTreatment.id, {
@@ -697,10 +798,19 @@ export function TreatmentsPage() {
       setTreatmentEvidenceNote("");
       setTreatmentEvidenceInputKey((current) => current + 1);
     }, "Evidencia cargada en el tratamiento.");
+
+    setMethodUsed(currentMethodUsed);
+    setObservations(currentObservations);
+    setEffectivenessEvaluationDate(currentEffectivenessEvaluationDate);
+    setEffectivenessResponsibleId(currentEffectivenessResponsibleId);
   };
 
   const handleAddTaskEvidence = async () => {
     if (!selectedTreatment || !selectedTask) {
+      return;
+    }
+    if (treatmentLocked) {
+      setFormError("El tratamiento esta cerrado por validacion eficaz y no admite modificaciones.");
       return;
     }
     if (!taskEvidenceFile) {
@@ -809,6 +919,11 @@ return (
                     </div>
                     <StatusBadge value={selectedTreatment.status} />
                   </div>
+                  {treatmentLocked ? (
+                    <div className="panel info compact-inline-panel">
+                      <p>Tratamiento cerrado por validacion eficaz. Los datos quedan solo lectura y las anomalias asociadas fueron cerradas automaticamente.</p>
+                    </div>
+                  ) : null}
 
                   <div className="treatment-tab-row">
                     <button
@@ -832,7 +947,7 @@ return (
                       <form className="form-section" onSubmit={handleSaveAgenda}>
                         <div className="section-head compact">
                           <h3>Fecha de tratamiento</h3>
-                          <button className="button button-primary" disabled={busy} type="submit">
+                          <button className="button button-primary" disabled={busy || treatmentLocked} type="submit">
                             Guardar agenda
                           </button>
                         </div>
@@ -840,6 +955,7 @@ return (
                           <span>Fecha y hora programada</span>
                           <input
                             name="scheduled_for"
+                            disabled={treatmentLocked}
                             onChange={(event) => setScheduledFor(event.target.value)}
                             type="datetime-local"
                             value={scheduledFor}
@@ -850,14 +966,14 @@ return (
                       <form className="form-section" onSubmit={handleAddParticipant}>
                         <div className="section-head compact">
                           <h3>Usuarios convocados</h3>
-                          <button className="button button-primary" disabled={busy || !participantUserId} type="submit">
+                          <button className="button button-primary" disabled={busy || treatmentLocked || !participantUserId} type="submit">
                             Convocar
                           </button>
                         </div>
                         <div className="form-grid">
                           <label className="field">
                             <span>Usuario</span>
-                            <select onChange={(event) => setParticipantUserId(event.target.value)} value={participantUserId}>
+                            <select disabled={treatmentLocked} onChange={(event) => setParticipantUserId(event.target.value)} value={participantUserId}>
                               {(supportData?.users ?? []).map((user) => (
                                 <option key={user.id} value={user.id}>
                                   {buildUsersLabel(user)}
@@ -867,7 +983,7 @@ return (
                           </label>
                           <label className="field">
                             <span>Rol</span>
-                            <select onChange={(event) => setParticipantRole(event.target.value)} value={participantRole}>
+                            <select disabled={treatmentLocked} onChange={(event) => setParticipantRole(event.target.value)} value={participantRole}>
                               {PARTICIPANT_ROLES.map((role) => (
                                 <option key={role.value} value={role.value}>
                                   {role.label}
@@ -880,6 +996,7 @@ return (
                           <span>Nota</span>
                           <textarea
                             name="participant_note"
+                            disabled={treatmentLocked}
                             onChange={(event) => setParticipantNote(event.target.value)}
                             rows={3}
                             value={participantNote}
@@ -903,7 +1020,7 @@ return (
                       <form className="form-section" onSubmit={handleAddAnomaly}>
                         <div className="section-head compact">
                           <h3>Anomalias asociadas al tratamiento</h3>
-                          <button className="button button-primary" disabled={busy || !linkAnomalyId} type="submit">
+                          <button className="button button-primary" disabled={busy || treatmentLocked || !linkAnomalyId} type="submit">
                             Asociar anomalia
                           </button>
                         </div>
@@ -1001,7 +1118,7 @@ return (
                         </button>
                         <label className="field">
                   <span>Anomalias con REVICION DE HALLAZGOS disponibles</span>
-                          <select onChange={(event) => setLinkAnomalyId(event.target.value)} value={linkAnomalyId}>
+                          <select disabled={treatmentLocked} onChange={(event) => setLinkAnomalyId(event.target.value)} value={linkAnomalyId}>
                             <option value="">Seleccionar...</option>
                             {unlinkedCandidates.map((candidate) => (
                               <option key={candidate.id} value={candidate.id}>
@@ -1071,16 +1188,13 @@ return (
 
                   {selectedTab === "analysis" ? (
                     <div className="treatment-tab-content">
-                      <form className="form-section" onSubmit={handleSaveAnalysis}>
+                      <div className="form-section">
                         <div className="section-head compact">
                           <h3>Metodo y observaciones</h3>
-                          <button className="button button-primary" disabled={busy || !methodUsed || !observations.trim()} type="submit">
-                            Guardar analisis
-                          </button>
                         </div>
                         <label className="field">
                           <span>Metodo usado</span>
-                          <select onChange={(event) => setMethodUsed(event.target.value)} required value={methodUsed}>
+                          <select disabled={treatmentLocked} onChange={(event) => setMethodUsed(event.target.value)} required value={methodUsed}>
                             {METHOD_OPTIONS.map((method) => (
                               <option key={method.value || "none"} value={method.value}>
                                 {method.label}
@@ -1090,14 +1204,14 @@ return (
                         </label>
                         <label className="field">
                           <span>Observaciones de tratamiento</span>
-                          <textarea onChange={(event) => setObservations(event.target.value)} required rows={4} value={observations} />
+                          <textarea disabled={treatmentLocked} onChange={(event) => setObservations(event.target.value)} required rows={4} value={observations} />
                         </label>
-                      </form>
+                      </div>
 
                       <form className="form-section" onSubmit={handleAddTreatmentEvidence}>
                         <div className="section-head compact">
                           <h3>Evidencias del tratamiento</h3>
-                          <button className="button button-primary" disabled={busy || !treatmentEvidenceFile} type="submit">
+                          <button className="button button-primary" disabled={busy || treatmentLocked || !treatmentEvidenceFile} type="submit">
                             Cargar evidencia
                           </button>
                         </div>
@@ -1106,6 +1220,7 @@ return (
                             <span>Archivo (imagen, PDF, Word, Excel, texto o ZIP)</span>
                             <input
                               accept={EVIDENCE_ACCEPT}
+                              disabled={treatmentLocked}
                               key={treatmentEvidenceInputKey}
                               onChange={handleTreatmentEvidenceFileChange}
                               type="file"
@@ -1114,6 +1229,7 @@ return (
                           <label className="field field-span-2">
                             <span>Nota de evidencia (opcional)</span>
                             <textarea
+                              disabled={treatmentLocked}
                               onChange={(event) => setTreatmentEvidenceNote(event.target.value)}
                               rows={3}
                               value={treatmentEvidenceNote}
@@ -1142,13 +1258,14 @@ return (
                       <form className="form-section" onSubmit={handleAddRootCause}>
                         <div className="section-head compact">
                           <h3>Causas raiz encontradas</h3>
-                          <button className="button button-primary" disabled={busy || !rootCauseDescription.trim()} type="submit">
+                          <button className="button button-primary" disabled={busy || treatmentLocked || !rootCauseDescription.trim()} type="submit">
                             Agregar causa
                           </button>
                         </div>
                         <label className="field">
                           <span>Descripcion de la causa raiz</span>
                           <textarea
+                            disabled={treatmentLocked}
                             onChange={(event) => setRootCauseDescription(event.target.value)}
                             rows={3}
                             value={rootCauseDescription}
@@ -1171,7 +1288,7 @@ return (
                       <form className="form-section" onSubmit={handleAddTask}>
                         <div className="section-head compact">
                           <h3>Tareas surgidas del tratamiento</h3>
-                          <button className="button button-primary" disabled={busy || !canCreateTask} type="submit">
+                          <button className="button button-primary" disabled={busy || treatmentLocked || !canCreateTask} type="submit">
                             Crear tarea
                           </button>
                         </div>
@@ -1181,6 +1298,7 @@ return (
                             <span>Tarea</span>
                             <input
                               name="task_title"
+                              disabled={treatmentLocked}
                               onChange={(event) => handleTaskDraftChange("title", event.target.value)}
                               placeholder="Ej. Verificar ajuste de proceso"
                               required
@@ -1192,6 +1310,7 @@ return (
                           <label className="field">
                             <span>Estado</span>
                             <select
+                              disabled={treatmentLocked}
                               onChange={(event) => handleTaskDraftChange("status", event.target.value)}
                               value={taskDraft.status}
                             >
@@ -1206,6 +1325,7 @@ return (
                           <label className="field">
                             <span>Responsable</span>
                             <select
+                              disabled={treatmentLocked}
                               onChange={(event) => handleTaskDraftChange("responsible", event.target.value)}
                               required
                               value={taskDraft.responsible}
@@ -1222,6 +1342,7 @@ return (
                           <label className="field">
                             <span>Fecha de ejecucion</span>
                             <input
+                              disabled={treatmentLocked}
                               onChange={(event) => handleTaskDraftChange("execution_date", event.target.value)}
                               required
                               type="date"
@@ -1229,23 +1350,28 @@ return (
                             />
                           </label>
 
-                          <label className="field field-span-2">
-                            <span>Causa raiz asociada</span>
-                            <select
-                              onChange={(event) => handleTaskDraftChange("root_cause", event.target.value)}
-                              required
-                              value={taskDraft.root_cause}
-                            >
-                              <option value="">Seleccionar causa raiz...</option>
+                          <div className="field field-span-2">
+                            <span>Causas raiz asociadas</span>
+                            <div className="treatment-checkbox-grid">
                               {rootCauseOptions.map((cause) => (
-                                <option key={cause.id} value={cause.id}>{`Causa ${cause.sequence}: ${cause.description}`}</option>
+                                <label className="checkbox-inline" key={cause.id}>
+                                  <input
+                                    checked={taskDraft.root_cause_ids.includes(cause.id)}
+                                    disabled={treatmentLocked}
+                                    onChange={() => toggleTaskRootCause(cause.id)}
+                                    type="checkbox"
+                                  />
+                                  <span>{`Causa ${cause.sequence}: ${cause.description}`}</span>
+                                </label>
                               ))}
-                            </select>
-                          </label>
+                            </div>
+                            {!rootCauseOptions.length ? <p className="muted-copy">Primero registra al menos una causa raiz.</p> : null}
+                          </div>
 
                           <label className="field field-span-2">
                             <span>Descripcion / observaciones</span>
                             <textarea
+                              disabled={treatmentLocked}
                               onChange={(event) => handleTaskDraftChange("description", event.target.value)}
                               required
                               rows={3}
@@ -1261,6 +1387,7 @@ return (
                               <label className="checkbox-inline" key={link.id}>
                                 <input
                                   checked={checked}
+                                  disabled={treatmentLocked}
                                   onChange={() => toggleTaskAnomaly(link.anomaly.id)}
                                   type="checkbox"
                                 />
@@ -1285,6 +1412,14 @@ return (
                                 <small>
                                   Responsable: {task.responsible?.full_name || "Sin asignar"} | Ejecucion: {task.execution_date ? formatDate(task.execution_date) : "Sin fecha"}
                                 </small>
+                                <small>
+                                  Causas:{" "}
+                                  {task.root_causes?.length
+                                    ? task.root_causes.map((cause) => `Causa ${cause.sequence}`).join(", ")
+                                    : task.root_cause
+                                      ? "Causa asociada"
+                                      : "Sin causas"}
+                                </small>
                               </div>
                               <StatusBadge compact value={task.status} />
                             </div>
@@ -1296,6 +1431,78 @@ return (
                           La edicion de tareas y carga de evidencias ahora se realiza desde la pagina Acciones.
                         </p>
                       </div>
+
+                      <form className="form-section" onSubmit={handleSaveAnalysis}>
+                        <div className="section-head compact">
+                          <div>
+                            <p className="eyebrow">Paso final</p>
+                            <h3>Evaluacion de eficacia</h3>
+                          </div>
+                          <button
+                            className="button button-primary"
+                            disabled={
+                              busy ||
+                              treatmentLocked ||
+                              !methodUsed ||
+                              !observations.trim() ||
+                              !hasTreatmentTasks ||
+                              !hasEffectivenessAssignment
+                            }
+                            type="submit"
+                          >
+                            Guardar analisis
+                          </button>
+                        </div>
+                        <div className={`panel ${hasPendingEffectivenessChanges ? "warning" : "info"} compact-inline-panel`}>
+                          {hasSavedEffectivenessAssignment && !hasPendingEffectivenessChanges ? (
+                            <p>
+                              Guardado: {formatDate(savedEffectivenessDate)} | Responsable:{" "}
+                              {selectedTreatment.effectiveness_responsible?.full_name || selectedTreatment.effectiveness_responsible?.username}
+                            </p>
+                          ) : (
+                            <p>
+                              Completa la fecha y responsable de evaluacion. Se guardara junto con el analisis una vez cargadas las tareas.
+                            </p>
+                          )}
+                        </div>
+                        {!participantOptions.length ? (
+                          <div className="panel warning compact-inline-panel">
+                            <p>Primero deben convocarse responsables al tratamiento antes de asignar el responsable de evaluacion de eficacia.</p>
+                          </div>
+                        ) : (
+                          <div className="form-grid">
+                            <label className="field">
+                              <span>Fecha de evaluacion de eficacia</span>
+                              <input
+                                onChange={(event) => setEffectivenessEvaluationDate(event.target.value)}
+                                disabled={treatmentLocked}
+                                required
+                                type="date"
+                                value={effectivenessEvaluationDate}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>Responsable</span>
+                              <select
+                                onChange={(event) => setEffectivenessResponsibleId(event.target.value)}
+                                disabled={treatmentLocked}
+                                required
+                                value={effectivenessResponsibleId}
+                              >
+                                <option value="">Seleccionar convocado...</option>
+                                {participantOptions.map((participant) => (
+                                  <option key={participant.id} value={participant.user?.id}>
+                                    {participant.user?.full_name || participant.user?.username}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                        )}
+                        {!hasTreatmentTasks ? (
+                          <p className="muted-copy">Registra al menos una tarea antes de guardar el analisis.</p>
+                        ) : null}
+                      </form>
                     </div>
                   ) : null}
                 </>

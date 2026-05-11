@@ -170,8 +170,13 @@ export function AnomalyDetailPage() {
                   <StatusBadge value={data.current_stage} />
                 </div>
               </div>
-              <p>{data.description}</p>
+              {data.is_locked_by_effective_treatment ? (
+                <div className="panel info compact-inline-panel">
+                  <p>Anomalia cerrada por tratamiento validado como eficaz. Los datos quedan bloqueados para edicion.</p>
+                </div>
+              ) : null}
               <dl className="key-grid">
+                <div className="field-span-2"><dt>Descripcion detallada</dt><dd>{data.description || "Sin descripcion detallada."}</dd></div>
                 <div><dt>Fecha y hora</dt><dd>{formatDateTime(data.detected_at)}</dd></div>
                 <div><dt>Responsable actual</dt><dd>{data.current_responsible?.full_name || "Sin asignar"}</dd></div>
                 <div><dt>Numero de OF</dt><dd>{data.manufacturing_order_number || "No informada"}</dd></div>

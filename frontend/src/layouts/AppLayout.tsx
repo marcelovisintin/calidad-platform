@@ -6,9 +6,11 @@ const mainNav = [
   { to: "/dashboard", label: "Inicio", mobileLabel: "Inicio" },
   { to: "/anomalies/new", label: "Nueva", mobileLabel: "Nueva" },
   { to: "/anomalies", label: "Seguimiento de anomalias", mobileLabel: "Anomalias" },
+  { to: "/treatments/tracking", label: "Seguimiento de tratamientos", mobileLabel: "Seg. trat." },
   { to: "/anomalies/immediate-actions", label: "Accion inmediata", mobileLabel: "Inmediata" },
   { to: "/treatments", label: "Tratamientos", mobileLabel: "Tratamientos" },
   { to: "/actions/mine", label: "Acciones", mobileLabel: "Acciones" },
+  { to: "/validation", label: "Validacion", mobileLabel: "Validacion" },
   { to: "/tasks", label: "Pendientes", mobileLabel: "Pendientes" },
   { to: "/notifications/inbox", label: "Bandeja", mobileLabel: "Bandeja" },
 ];

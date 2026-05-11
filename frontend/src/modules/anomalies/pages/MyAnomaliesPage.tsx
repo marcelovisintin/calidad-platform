@@ -17,6 +17,7 @@ export function MyAnomaliesPage() {
   usePageTitle("Seguimiento de anomalias");
   const { user } = useAuth();
   const adminUser = useMemo(() => isAdminUser(user), [user]);
+  const strictAdminUser = user?.access_level === "administrador" || user?.access_level === "desarrollador";
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [classificationError, setClassificationError] = useState<string | null>(null);
@@ -106,8 +107,13 @@ export function MyAnomaliesPage() {
         actionTo="/anomalies/new"
       />
 
-      <div className="toolbar-card">
+      <div className="toolbar-card anomaly-toolbar">
         <input onChange={handleSearchChange} placeholder="Buscar por codigo, titulo, proceso o usuario reportante" type="search" value={search} />
+        {strictAdminUser ? (
+          <Link className="button button-secondary" to="/anomalies/repetition-study">
+            Estudio de repitencia
+          </Link>
+        ) : null}
       </div>
 
       {classificationError ? <div className="panel danger">{classificationError}</div> : null}

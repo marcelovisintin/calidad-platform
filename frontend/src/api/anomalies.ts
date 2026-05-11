@@ -5,6 +5,7 @@ import type {
   AnomalyCreatePayload,
   AnomalyDetail,
   AnomalyListItem,
+  AnomalyRepetitionStudyResponse,
   ImmediateActionPayload,
   PagedResponse,
   WorkflowMetadata,
@@ -46,6 +47,12 @@ export function fetchImmediateActionAnomalies(search = "", page = 1, includeClos
 
 export function fetchAnomalyDetail(anomalyId: string) {
   return apiRequest<AnomalyDetail>(`/anomalies/${anomalyId}/`);
+}
+
+export function fetchAnomalyRepetitionStudy(dateFrom: string) {
+  const params = new URLSearchParams();
+  params.set("date_from", dateFrom);
+  return apiRequest<AnomalyRepetitionStudyResponse>(`/anomalies/repetition-study/?${params.toString()}`);
 }
 
 export function reserveAnomalyCode() {
