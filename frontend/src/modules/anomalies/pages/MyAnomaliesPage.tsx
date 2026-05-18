@@ -108,7 +108,7 @@ export function MyAnomaliesPage() {
       />
 
       <div className="toolbar-card anomaly-toolbar">
-        <input onChange={handleSearchChange} placeholder="Buscar por codigo, titulo, proceso o usuario reportante" type="search" value={search} />
+        <input onChange={handleSearchChange} placeholder="Buscar por codigo, titulo, elaborado por o usuario reportante" type="search" value={search} />
         {strictAdminUser ? (
           <Link className="button button-secondary" to="/anomalies/repetition-study">
             Estudio de repitencia
@@ -141,7 +141,7 @@ export function MyAnomaliesPage() {
                   <p>{item.title}</p>
                   <small>{`Reportada por: ${item.reporter?.full_name || item.reporter?.username || "Sin dato"}`}</small>
                   <small>
-                    {item.site?.name || "Sin area"} | {item.area?.name || "Sin proceso"} | {formatDateTime(item.detected_at)}
+                    {item.site?.name || "Sin area"} | {item.affected_process || item.area?.name || "Sin elaborado por"} | {formatDateTime(item.detected_at)}
                   </small>
                 </Link>
 

@@ -1,16 +1,16 @@
 :root {
   font-family: "Aptos", "Trebuchet MS", "Segoe UI", sans-serif;
   color: #16313a;
-  background: #e6f3ef;
+  background: #cfe9e2;
   line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  --bg: #e6f3ef;
-  --panel: rgba(255, 255, 255, 0.94);
-  --panel-border: rgba(21, 105, 98, 0.12);
+  --bg: #cfe9e2;
+  --panel: rgba(218, 238, 232, 0.98);
+  --panel-border: rgba(15, 44, 53, 0.22);
   --text: #16313a;
   --muted: #56727b;
   --sidebar: #0f2c35;
@@ -58,7 +58,7 @@ input,
 textarea,
 select {
   width: 100%;
-  border: 1px solid rgba(15, 76, 92, 0.16);
+  border: 1.5px solid rgba(15, 44, 53, 0.22);
   border-radius: 14px;
   padding: 0.9rem 1rem;
   background: rgba(255, 255, 255, 0.98);
@@ -240,7 +240,7 @@ textarea {
   gap: 1rem;
   padding: 1.1rem 2rem;
   border-bottom: 1px solid rgba(15, 76, 92, 0.08);
-  background: rgba(230, 243, 239, 0.86);
+  background: rgba(218, 238, 232, 0.9);
   backdrop-filter: blur(14px);
   position: sticky;
   top: 0;
@@ -358,8 +358,8 @@ small {
   width: min(100%, 320px);
   padding: 1rem 1.1rem;
   border-radius: 20px;
-  border: 1px solid rgba(21, 132, 111, 0.12);
-  background: linear-gradient(180deg, rgba(21, 132, 111, 0.08), rgba(255, 255, 255, 0.92));
+  border: 2px solid rgba(15, 44, 53, 0.2);
+  background: linear-gradient(180deg, rgba(21, 132, 111, 0.1), rgba(218, 238, 232, 0.98));
   box-shadow: var(--shadow);
 }
 
@@ -383,7 +383,7 @@ small {
 .list-card,
 .nested-card,
 .skeleton-card {
-  border: 1px solid var(--panel-border);
+  border: 2px solid var(--panel-border);
   border-radius: var(--radius-lg);
   background: var(--panel);
   box-shadow: var(--shadow);
@@ -476,6 +476,27 @@ small {
   gap: 1.2rem;
 }
 
+.anomaly-form-compact {
+  gap: 0.85rem;
+}
+
+.anomaly-form-compact .form-section {
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+}
+
+.anomaly-form-compact .compact-form-grid {
+  gap: 0.7rem 0.85rem;
+}
+
+.anomaly-form-compact .field {
+  gap: 0.35rem;
+}
+
+.anomaly-form-compact textarea {
+  min-height: 90px;
+}
+
 .compact-form-grid {
   gap: 1rem 1.1rem;
 }
@@ -496,8 +517,8 @@ small {
   gap: 1rem;
   padding: 1.1rem;
   border-radius: 20px;
-  border: 1px solid rgba(21, 132, 111, 0.08);
-  background: rgba(255, 255, 255, 0.72);
+  border: 2px solid rgba(15, 44, 53, 0.18);
+  background: rgba(226, 241, 237, 0.78);
 }
 
 .form-actions {
@@ -513,6 +534,13 @@ small {
   align-items: center;
   justify-content: flex-end;
   gap: 0.75rem;
+}
+
+.catalog-record-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .inline-form-alert {
@@ -534,8 +562,8 @@ small {
   gap: 1rem;
   padding: 1rem 1.1rem;
   border-radius: 20px;
-  border: 1px solid rgba(21, 132, 111, 0.12);
-  background: rgba(230, 243, 239, 0.92);
+  border: 2px solid rgba(15, 44, 53, 0.2);
+  background: rgba(218, 238, 232, 0.96);
   position: sticky;
   bottom: 1rem;
   backdrop-filter: blur(12px);
@@ -564,15 +592,15 @@ small {
 }
 
 .stat-card.accent {
-  background: linear-gradient(180deg, rgba(216, 140, 58, 0.12), rgba(255, 255, 255, 0.92));
+  background: linear-gradient(180deg, rgba(216, 140, 58, 0.14), rgba(218, 238, 232, 0.98));
 }
 
 .stat-card.warning {
-  background: linear-gradient(180deg, rgba(201, 135, 26, 0.12), rgba(255, 255, 255, 0.92));
+  background: linear-gradient(180deg, rgba(201, 135, 26, 0.14), rgba(218, 238, 232, 0.98));
 }
 
 .stat-card.success {
-  background: linear-gradient(180deg, rgba(28, 124, 84, 0.12), rgba(255, 255, 255, 0.92));
+  background: linear-gradient(180deg, rgba(28, 124, 84, 0.14), rgba(218, 238, 232, 0.98));
 }
 
 .stat-value {
@@ -609,7 +637,7 @@ small {
 
 .selectable-card.active {
   border-color: rgba(21, 132, 111, 0.42);
-  background: rgba(230, 243, 239, 0.92);
+  background: rgba(218, 238, 232, 0.96);
 }
 
 .anomaly-row {
@@ -787,8 +815,8 @@ small {
 .timeline-content {
   padding: 0.95rem 1rem;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.74);
-  border: 1px solid rgba(21, 132, 111, 0.1);
+  background: rgba(226, 241, 237, 0.86);
+  border: 2px solid rgba(15, 44, 53, 0.18);
 }
 
 .timeline-row {
@@ -824,7 +852,7 @@ small {
   display: grid;
   place-items: center;
   padding: 1.5rem;
-  background: linear-gradient(180deg, #dff1eb 0%, #eaf6f3 100%);
+  background: linear-gradient(180deg, #c8e5dc 0%, #d6ede7 100%);
 }
 
 .login-card {
@@ -870,7 +898,7 @@ small {
     padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
     position: sticky;
     bottom: 0;
-    background: rgba(230, 243, 239, 0.94);
+    background: rgba(218, 238, 232, 0.98);
     backdrop-filter: blur(18px);
     border-top: 1px solid rgba(21, 132, 111, 0.1);
   }
@@ -1067,8 +1095,8 @@ small {
 .control-hero-help {
   padding: 1.1rem;
   border-radius: 20px;
-  border: 1px solid rgba(21, 132, 111, 0.12);
-  background: linear-gradient(180deg, rgba(21, 132, 111, 0.1), rgba(255, 255, 255, 0.92));
+  border: 2px solid rgba(15, 44, 53, 0.2);
+  background: linear-gradient(180deg, rgba(21, 132, 111, 0.09), rgba(226, 241, 237, 0.96));
 }
 
 .help-list {
@@ -1083,7 +1111,7 @@ small {
 .help-list li {
   padding: 0.8rem 0.85rem;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(226, 241, 237, 0.9);
   color: var(--text);
 }
 
@@ -1113,8 +1141,8 @@ small {
   min-height: 100%;
   padding: 1.05rem 1.1rem;
   border-radius: 20px;
-  border: 1px solid rgba(21, 132, 111, 0.12);
-  background: rgba(255, 255, 255, 0.88);
+  border: 2px solid rgba(15, 44, 53, 0.2);
+  background: rgba(218, 238, 232, 0.98);
   box-shadow: var(--shadow);
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
@@ -1146,7 +1174,7 @@ small {
 }
 
 .workflow-card {
-  background: linear-gradient(180deg, rgba(230, 243, 239, 0.92), rgba(255, 255, 255, 0.96));
+  background: linear-gradient(180deg, rgba(218, 238, 232, 1), rgba(218, 238, 232, 0.94));
 }
 
 .workflow-step {
@@ -1161,7 +1189,7 @@ small {
 }
 
 .admin-panel {
-  background: linear-gradient(180deg, rgba(15, 44, 53, 0.03), rgba(255, 255, 255, 0.96));
+  background: linear-gradient(180deg, rgba(15, 44, 53, 0.04), rgba(218, 238, 232, 0.98));
 }
 
 .admin-panel-copy {
@@ -1169,7 +1197,7 @@ small {
 }
 
 .admin-card {
-  background: linear-gradient(180deg, rgba(21, 132, 111, 0.08), rgba(255, 255, 255, 0.98));
+  background: linear-gradient(180deg, rgba(21, 132, 111, 0.1), rgba(218, 238, 232, 1));
 }
 
 @media (max-width: 1200px) {
@@ -1231,8 +1259,8 @@ small {
   gap: 0.4rem;
   padding: 0.65rem;
   border-radius: 18px;
-  border: 1px solid rgba(21, 132, 111, 0.16);
-  background: rgba(255, 255, 255, 0.98);
+  border: 2px solid rgba(15, 44, 53, 0.22);
+  background: rgba(218, 238, 232, 1);
   box-shadow: var(--shadow);
 }
 
@@ -1244,7 +1272,7 @@ small {
   text-align: left;
   font-weight: 700;
   color: var(--text);
-  background: rgba(230, 243, 239, 0.7);
+  background: rgba(226, 241, 237, 0.76);
   cursor: pointer;
   transition: background-color 0.18s ease, transform 0.18s ease;
 }
@@ -1388,9 +1416,9 @@ small {
   gap: 0.7rem;
   align-items: flex-start;
   padding: 0.85rem;
-  border: 1px solid rgba(21, 132, 111, 0.12);
+  border: 2px solid rgba(15, 44, 53, 0.2);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.76);
+  background: rgba(226, 241, 237, 0.86);
 }
 
 .scope-check-item input {
@@ -1494,9 +1522,9 @@ small {
 
 .treatment-list-item {
   width: 100%;
-  border: 1px solid rgba(21, 132, 111, 0.12);
+  border: 2px solid rgba(15, 44, 53, 0.2);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(218, 238, 232, 0.98);
   padding: 0.9rem 1rem;
   text-align: left;
   display: flex;
@@ -1555,20 +1583,123 @@ small {
   justify-content: flex-start;
   padding: 0.6rem 0.7rem;
   border-radius: 12px;
-  border: 1px solid rgba(15, 76, 92, 0.12);
-  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid rgba(15, 44, 53, 0.18);
+  background: rgba(226, 241, 237, 0.92);
 }
 
 .treatment-task-item {
   width: 100%;
-  border: 1px solid rgba(21, 132, 111, 0.12);
-  background: rgba(255, 255, 255, 0.92);
+  border: 2px solid rgba(15, 44, 53, 0.2);
+  background: rgba(226, 241, 237, 0.96);
   cursor: pointer;
   text-align: left;
 }
 
 .treatment-task-item:hover {
   border-color: rgba(21, 132, 111, 0.3);
+}
+
+.learned-lesson-card {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.35fr);
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.learned-lesson-summary,
+.learned-lesson-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.learned-lesson-summary {
+  position: sticky;
+  top: 96px;
+}
+
+.learned-lesson-form textarea {
+  min-height: 110px;
+}
+
+.treatment-detail-lesson {
+  gap: 0.85rem;
+}
+
+.treatment-detail-lesson .section-head {
+  margin-bottom: 0.2rem;
+}
+
+.treatment-detail-lesson-grid {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.1fr) minmax(220px, 1fr);
+  gap: 0.85rem;
+}
+
+.treatment-detail-lesson-grid small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.treatment-detail-lesson-grid p {
+  margin: 0.16rem 0 0.7rem;
+}
+
+.treatment-detail-lesson-evidence {
+  gap: 0.25rem;
+  margin-top: 0.2rem;
+}
+
+.learned-lesson-readonly {
+  display: block;
+}
+
+.learned-lesson-readonly-grid {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.7fr) minmax(160px, 0.78fr) minmax(240px, 1.28fr) minmax(220px, 1fr);
+  column-gap: 0.35rem;
+  row-gap: 1rem;
+  align-items: start;
+}
+
+.learned-lesson-readonly-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.learned-lesson-readonly-column small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.learned-lesson-readonly-column p {
+  margin: 0.18rem 0 0;
+}
+
+.learned-lesson-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.learned-lesson-title-row span {
+  color: var(--primary-dark);
+  font-weight: 800;
+}
+
+.learned-lesson-evidence-list .list-card {
+  gap: 0.35rem;
 }
 
 .nested-form {
@@ -1579,6 +1710,22 @@ small {
 @media (max-width: 1220px) {
   .treatment-layout {
     grid-template-columns: 1fr;
+  }
+
+  .learned-lesson-card {
+    grid-template-columns: 1fr;
+  }
+
+  .learned-lesson-readonly-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .treatment-detail-lesson-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .learned-lesson-summary {
+    position: static;
   }
 
   .treatment-list {
@@ -1669,3 +1816,4 @@ small {
   justify-content: space-between;
   gap: 0.8rem;
 }
+

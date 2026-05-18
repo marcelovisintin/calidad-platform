@@ -94,6 +94,14 @@ class AnomalyOriginManagementSerializer(CatalogManagementSerializer):
     class Meta(CatalogManagementSerializer.Meta):
         model = AnomalyOrigin
 
+    def validate_display_order(self, value):
+        queryset = AnomalyOrigin.objects.filter(display_order=value)
+        if self.instance is not None:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Ya existe un registro de Imputado a con ese orden de visualizacion.")
+        return value
+
 
 class SeverityManagementSerializer(CatalogManagementSerializer):
     class Meta(CatalogManagementSerializer.Meta):

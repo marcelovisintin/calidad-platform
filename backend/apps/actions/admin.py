@@ -122,7 +122,7 @@ class TreatmentTaskEvidenceInline(admin.TabularInline):
 
 @admin.register(Treatment)
 class TreatmentAdmin(admin.ModelAdmin):
-    list_display = ("code", "primary_anomaly", "status", "scheduled_for", "method_used", "created_at")
+    list_display = ("code", "primary_anomaly", "status", "scheduled_for", "treatment_location", "method_used", "created_at")
     list_filter = ("status", "method_used")
     list_select_related = ("primary_anomaly",)
     search_fields = ("code", "primary_anomaly__code", "primary_anomaly__title")

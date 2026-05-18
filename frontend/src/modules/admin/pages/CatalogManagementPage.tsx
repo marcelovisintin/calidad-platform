@@ -37,8 +37,8 @@ const ENTITY_META: EntityMeta[] = [
   },
   {
     key: "areas",
-    title: "Procesos",
-    description: "Procesos o subsectores de trabajo disponibles para el registro.",
+    title: "Sectores",
+    description: "Sectores o subsectores de trabajo disponibles para el registro.",
     parentEntity: "sites",
     parentLabel: "Area",
     parentKey: "site_id",
@@ -46,9 +46,9 @@ const ENTITY_META: EntityMeta[] = [
   {
     key: "lines",
     title: "Lineas",
-    description: "Lineas o puestos productivos utilizados en el proceso.",
+    description: "Lineas o puestos productivos utilizados en el sector.",
     parentEntity: "areas",
-    parentLabel: "Proceso",
+    parentLabel: "Sector",
     parentKey: "area_id",
   },
   {
@@ -58,8 +58,8 @@ const ENTITY_META: EntityMeta[] = [
   },
   {
     key: "anomaly-origins",
-    title: "Origenes",
-    description: "Origen o fuente primaria asociada a la anomalia.",
+    title: "Imputado a",
+    description: "Catalogo de imputaciones asociadas a la anomalia.",
   },
   {
     key: "severities",
@@ -68,8 +68,8 @@ const ENTITY_META: EntityMeta[] = [
   },
   {
     key: "priorities",
-    title: "Prioridades",
-    description: "Prioridades operativas y de tratamiento.",
+    title: "Orden operativo",
+    description: "Criterios internos de ordenamiento operativo y tratamiento.",
   },
   {
     key: "action-types",
@@ -199,6 +199,14 @@ export function CatalogManagementPage() {
     setFeedback(null);
 
     try {
+      if (entity === "anomaly-origins") {
+        const nextOrder = Number(form.display_order || 0);
+        const duplicate = items.find((item) => item.display_order === nextOrder && item.id !== editingId);
+        if (duplicate) {
+          throw new Error(`Ya existe otro registro de Imputado a con orden ${nextOrder}: ${duplicate.code} - ${duplicate.name}.`);
+        }
+      }
+
       const payload: Record<string, unknown> = {
         code: form.code.trim(),
         name: form.name.trim(),
@@ -381,9 +389,11 @@ export function CatalogManagementPage() {
                 items.map((item) => (
                   <article className="list-card" key={item.id}>
                     <div>
-                      <strong>{`${item.code} - ${item.name}`}</strong>
+                      <div className="catalog-record-title">
+                        <strong>{`${item.code} - ${item.name}`}</strong>
+                        <span className="status-badge info compact">Orden {item.display_order}</span>
+                      </div>
                       {itemParentLabel(item) ? <p>{itemParentLabel(item)}</p> : null}
-                      <small>Orden: {item.display_order}</small>
                       <small>Actualizado: {formatDateTime(item.updated_at)}</small>
                     </div>
                     <div className="badge-stack align-end">

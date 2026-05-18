@@ -49,6 +49,7 @@ from apps.anomalies.services.workflow import (
     resolve_status_for_stage,
     validate_transition,
 )
+from apps.catalog.models import Priority
 
 
 
@@ -338,6 +339,12 @@ def create_anomaly(*, user, data: dict, request_id: str = "") -> Anomaly:
 
     if reservation is None and AnomalyCodeReservation.objects.filter(code=code, anomaly__isnull=True).exists():
         raise ValidationError({"code": "El codigo esta reservado para otra carga. Solicite una nueva reserva."})
+
+    if not data.get("priority"):
+        default_priority = Priority.objects.filter(is_active=True).order_by("sort_order", "name").first()
+        if default_priority is None:
+            raise ValidationError({"priority": "Debe existir al menos un criterio operativo activo para registrar la anomalia."})
+        data["priority"] = default_priority
 
     if getattr(user, "access_level", "") != "usuario_activo":
         _ensure_scope(data["site"].pk, data["area"].pk, user)

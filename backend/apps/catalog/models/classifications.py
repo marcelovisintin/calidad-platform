@@ -12,8 +12,8 @@ class AnomalyType(ActiveCatalogModel):
 
 class AnomalyOrigin(ActiveCatalogModel):
     class Meta(ActiveCatalogModel.Meta):
-        verbose_name = "Origen de anomalia"
-        verbose_name_plural = "Origenes de anomalia"
+        verbose_name = "Imputacion de anomalia"
+        verbose_name_plural = "Imputaciones de anomalia"
         constraints = [models.UniqueConstraint(fields=["code"], name="catalog_unique_anomaly_origin_code")]
 
 
@@ -26,8 +26,8 @@ class Severity(ActiveCatalogModel):
 
 class Priority(ActiveCatalogModel):
     class Meta(ActiveCatalogModel.Meta):
-        verbose_name = "Prioridad"
-        verbose_name_plural = "Prioridades"
+        verbose_name = "Orden operativo"
+        verbose_name_plural = "Orden operativo"
         constraints = [models.UniqueConstraint(fields=["code"], name="catalog_unique_priority_code")]
 
 

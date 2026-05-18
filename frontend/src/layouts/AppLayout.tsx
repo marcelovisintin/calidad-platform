@@ -7,6 +7,7 @@ const mainNav = [
   { to: "/anomalies/new", label: "Nueva", mobileLabel: "Nueva" },
   { to: "/anomalies", label: "Seguimiento de anomalias", mobileLabel: "Anomalias" },
   { to: "/treatments/tracking", label: "Seguimiento de tratamientos", mobileLabel: "Seg. trat." },
+  { to: "/learned-lessons", label: "Lecciones aprendidas", mobileLabel: "Lecciones" },
   { to: "/anomalies/immediate-actions", label: "Accion inmediata", mobileLabel: "Inmediata" },
   { to: "/treatments", label: "Tratamientos", mobileLabel: "Tratamientos" },
   { to: "/actions/mine", label: "Acciones", mobileLabel: "Acciones" },

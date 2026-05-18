@@ -43,7 +43,6 @@ export function NewAnomalyPage() {
     manufacturing_order_number: "",
     affected_quantity: "",
     affected_process: "",
-    origin_process: "",
     detected_at: nowAsLocalDateTime(),
   });
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
@@ -88,38 +87,37 @@ export function NewAnomalyPage() {
       return;
     }
     setForm((current) => {
-      const processNames = availableAreas.map((item) => item.name);
-      const nextAffectedProcess = processNames.includes(current.affected_process)
-        ? current.affected_process
-        : processNames[0] || "";
-      const nextOriginProcess = processNames.includes(current.origin_process)
-        ? current.origin_process
-        : processNames[0] || "";
+      const selectedArea = availableAreas.find((item) => item.id === current.area);
+      const nextAffectedProcess = selectedArea?.name || availableAreas[0]?.name || "";
 
-      if (nextAffectedProcess === current.affected_process && nextOriginProcess === current.origin_process) {
+      if (nextAffectedProcess === current.affected_process) {
         return current;
       }
 
       return {
         ...current,
         affected_process: nextAffectedProcess,
-        origin_process: nextOriginProcess,
       };
     });
-  }, [availableAreas]);
+  }, [availableAreas, form.area]);
 
   const catalogsReady = Boolean(
     bootstrap &&
       bootstrap.sites.length &&
       bootstrap.areas.length &&
       bootstrap.anomalyTypes.length &&
-      bootstrap.anomalyOrigins.length &&
-      bootstrap.priorities.length,
+      bootstrap.anomalyOrigins.length,
   );
 
   const handleChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = event.target;
-    setForm((current) => ({ ...current, [name]: value }));
+    setForm((current) => {
+      if (name === "area") {
+        const selectedArea = availableAreas.find((item) => item.id === value);
+        return { ...current, area: value, affected_process: selectedArea?.name || "" };
+      }
+      return { ...current, [name]: value };
+    });
   };
 
   const handleEvidenceChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -157,7 +155,7 @@ export function NewAnomalyPage() {
         area: form.area,
         anomaly_type: form.anomaly_type,
         anomaly_origin: form.anomaly_origin,
-        priority: form.priority,
+        priority: form.priority || undefined,
         detected_at: toOffsetIso(form.detected_at),
         manufacturing_order_number: form.manufacturing_order_number.trim() || undefined,
         affected_quantity: form.affected_quantity ? Number(form.affected_quantity) : undefined,
@@ -225,7 +223,7 @@ export function NewAnomalyPage() {
       {!loading && !catalogsReady ? (
         <div className="panel warning">
           <strong>Catalogos incompletos.</strong>
-          <p>Carga `catalog.bootstrap.json` con sitios, procesos, tipos, origenes y prioridades para habilitar el alta.</p>
+          <p>Carga `catalog.bootstrap.json` con sitios, sectores, tipos e imputaciones para habilitar el alta.</p>
         </div>
       ) : null}
 
@@ -239,7 +237,7 @@ export function NewAnomalyPage() {
         </div>
       ) : null}
 
-      <form className="panel form-grid anomaly-form" onSubmit={handleSubmit}>
+      <form className="panel form-grid anomaly-form anomaly-form-compact" onSubmit={handleSubmit}>
         <section className="form-section field-span-2">
           <div className="section-head compact">
             <div>
@@ -269,7 +267,7 @@ export function NewAnomalyPage() {
                 onChange={handleChange}
                 placeholder="Describi lo observado, donde ocurrio y cualquier dato util para analizar despues."
                 required
-                rows={5}
+                rows={3}
                 value={form.description}
               />
             </label>
@@ -278,11 +276,11 @@ export function NewAnomalyPage() {
               <input name="detected_at" onChange={handleChange} required type="datetime-local" value={form.detected_at} />
             </label>
             <label className="field">
-              <span>Proceso afectado</span>
-              <select disabled={!catalogsReady} name="affected_process" onChange={handleChange} value={form.affected_process}>
+              <span>Elaborado por</span>
+              <select disabled={!catalogsReady} name="area" onChange={handleChange} required value={form.area}>
                 <option value="">Seleccionar</option>
                 {availableAreas.map((item) => (
-                  <option key={`affected-process-${item.id}`} value={item.name}>{`${item.code} - ${item.name}`}</option>
+                  <option key={`elaborated-by-${item.id}`} value={item.id}>{`${item.code} - ${item.name}`}</option>
                 ))}
               </select>
             </label>
@@ -344,15 +342,6 @@ export function NewAnomalyPage() {
               </select>
             </label>
             <label className="field">
-              <span>Proceso</span>
-              <select disabled={!catalogsReady} name="area" onChange={handleChange} required value={form.area}>
-                <option value="">Seleccionar</option>
-                {availableAreas.map((item) => (
-                  <option key={item.id} value={item.id}>{`${item.code} - ${item.name}`}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
               <span>Tipo de desvio</span>
               <select disabled={!catalogsReady} name="anomaly_type" onChange={handleChange} required value={form.anomaly_type}>
                 <option value="">Seleccionar</option>
@@ -362,19 +351,10 @@ export function NewAnomalyPage() {
               </select>
             </label>
             <label className="field">
-              <span>Origen</span>
-              <select disabled={!catalogsReady} name="origin_process" onChange={handleChange} required value={form.origin_process}>
+              <span>Imputado a</span>
+              <select disabled={!catalogsReady} name="anomaly_origin" onChange={handleChange} required value={form.anomaly_origin}>
                 <option value="">Seleccionar</option>
-                {availableAreas.map((item) => (
-                  <option key={`origin-process-${item.id}`} value={item.name}>{`${item.code} - ${item.name}`}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Prioridad</span>
-              <select disabled={!catalogsReady} name="priority" onChange={handleChange} required value={form.priority}>
-                <option value="">Seleccionar</option>
-                {bootstrap?.priorities.map((item) => (
+                {bootstrap?.anomalyOrigins.map((item) => (
                   <option key={item.id} value={item.id}>{item.name}</option>
                 ))}
               </select>

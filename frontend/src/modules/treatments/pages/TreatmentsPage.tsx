@@ -165,6 +165,7 @@ export function TreatmentsPage() {
   const [busy, setBusy] = useState(false);
 
   const [scheduledFor, setScheduledFor] = useState("");
+  const [treatmentLocation, setTreatmentLocation] = useState("");
   const [methodUsed, setMethodUsed] = useState("");
   const [observations, setObservations] = useState("");
   const [effectivenessEvaluationDate, setEffectivenessEvaluationDate] = useState("");
@@ -287,6 +288,7 @@ export function TreatmentsPage() {
   useEffect(() => {
     if (!selectedTreatment) {
       setScheduledFor("");
+      setTreatmentLocation("");
       setMethodUsed("");
       setObservations("");
       setEffectivenessEvaluationDate("");
@@ -303,6 +305,7 @@ export function TreatmentsPage() {
     }
 
     setScheduledFor(toDateTimeLocalValue(selectedTreatment.scheduled_for));
+    setTreatmentLocation(selectedTreatment.treatment_location || "");
     setMethodUsed(selectedTreatment.method_used || "");
     setObservations(selectedTreatment.observations || "");
     setEffectivenessEvaluationDate(selectedTreatment.effectiveness_evaluation_date || "");
@@ -534,6 +537,7 @@ export function TreatmentsPage() {
     await runMutation(async () => {
       await updateTreatment(selectedTreatment.id, {
         scheduled_for: scheduledFor ? toOffsetIso(scheduledFor) : null,
+        treatment_location: treatmentLocation.trim(),
       });
     }, "Agenda del tratamiento actualizada.");
   };
@@ -890,7 +894,7 @@ return (
                     <p className="treatment-title">{anomaly.code}</p>
                     <p>{anomaly.title}</p>
                     <small>
-                      Generada por: {anomaly.reporter?.full_name || anomaly.reporter?.username || "Sin dato"} | Proceso afectado: {anomaly.area?.name || "-"} | Proceso origen: {anomaly.anomaly_origin?.name || "-"}
+                      Generada por: {anomaly.reporter?.full_name || anomaly.reporter?.username || "Sin dato"} | Elaborado por: {anomaly.affected_process || anomaly.area?.name || "-"} | Imputado a: {anomaly.anomaly_origin?.name || "-"}
                     </small>
                   </button>
                 );
@@ -959,6 +963,18 @@ return (
                             onChange={(event) => setScheduledFor(event.target.value)}
                             type="datetime-local"
                             value={scheduledFor}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Lugar de tratamiento</span>
+                          <input
+                            name="treatment_location"
+                            disabled={treatmentLocked}
+                            maxLength={200}
+                            onChange={(event) => setTreatmentLocation(event.target.value)}
+                            placeholder="Ej: Sala de reuniones, linea 1, sector pintura"
+                            type="text"
+                            value={treatmentLocation}
                           />
                         </label>
                       </form>
@@ -1141,7 +1157,7 @@ return (
                                 <strong>{link.anomaly.code}</strong>
                                 <p>{link.anomaly.title}</p>
                                 <small>
-                                  Sector afectado: {link.anomaly.area?.name || "-"} | Sector origen: {link.anomaly.anomaly_origin?.name || "-"}
+                                  Elaborado por: {link.anomaly.affected_process || link.anomaly.area?.name || "-"} | Imputado a: {link.anomaly.anomaly_origin?.name || "-"}
                                 </small>
                               </div>
                               {link.is_primary ? <span className="status-badge info compact">Principal</span> : null}
@@ -1300,7 +1316,7 @@ return (
                               name="task_title"
                               disabled={treatmentLocked}
                               onChange={(event) => handleTaskDraftChange("title", event.target.value)}
-                              placeholder="Ej. Verificar ajuste de proceso"
+                              placeholder="Ej. Verificar ajuste de sector"
                               required
                               type="text"
                               value={taskDraft.title}

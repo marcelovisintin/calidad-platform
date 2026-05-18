@@ -40,7 +40,7 @@ Despliegue:
 3.2 Catalog
 - Sitios
 - Areas
-- Tipos de desvio
+- Tipos de anomalia
 - Origenes
 - Severidades
 - Prioridades
@@ -546,3 +546,527 @@ tratamiento guardar agenda borra la fecha agendada deberia quedar visible.
 ...........................................................................................................................
 en tratamientos--analisis--primer paso elegir metodo y cargar observaciones, guardar analisis, segundo paso si hubiera 
 seleccionar archivo y cargar nota de evidencias 
+__BASE DE DATOS VACIA___28/04________________________________________________________________________________________________________
+USUARIOS: SECTOR PRINCIPAL
+
+____7/05/2026___________________________________________________________________________________________________________________
+
+Analisar evaluacion de eficacia ruta y Resultados.
+"Todavia no hay evaluacion de eficacia guardada. Completa los datos y presiona Guardar analisis" ECHO OK
+................................................................................................................................
+ESTANDO PARA UN TRATAMIENTO LA VALIDACION ECHA Y EN ESTADO EFICAZ EN SEGUIMIENTO DE ANOMALIAS LAS ANOMALIAS ASOCIADAS A EL 
+TRATAMEINTO DEBEN DE PASARCE AL ESTADO CERRADO Y NO PERMITIR LA EDICION DE NINGUN DATO DE EL TRATAMIENTO O ANOMALIAS ASOCIADAS. ECHO OK
+...............................................................................................................................
+Ordenar bien tratamiento vista 2 analisis de causa no me convence el orden hace flujograma ECHO A MEDIAS 
+.............................................................................................................................
+en una misma tarea permitir varias causas raiz
+ECHO OK
+..............................................................................................................................
+
+en acciones y pendientes cuando uno selecciona una tarea que ya fue completada no se muestra en edicion la evidencia de la tarea
+ y tampoco la nota de la evidencia que ya fue cargada. ver si no se esta gurdando o es solo visualizacion. ECHO OK
+ ..............................................................................................................................
+ cuando creo nuevo tratamiento aparece la tarjeta con el nuevo tratameinto pero en la seccion de detalle del tratamiento sigue
+ visualizandoce el ultimo que estuvo actvivo, debo de ahcer click en otro tratameinto y luego si vuelvo a clikear ahi recien cambia
+ ECHO OK
+ ______8/05/2026___________________________________________________________________________________________________________________
+```text
+Contexto/Rol:
+Estás trabajando sobre el sistema de Gestión de Calidad / Seguimiento de Anomalías desarrollado en Django. El sistema ya cuenta con un menú contextual llamado “Secciones principales”, donde existen tarjetas como “Seguimiento de anomalías”. Necesitamos agregar una nueva sección de consulta y auditoría, exclusivamente de lectura, orientada al seguimiento de tratamientos/procedimientos.
+
+IMPORTANTE:
+La nueva funcionalidad debe reutilizar la lógica visual y la experiencia de usuario de “Seguimiento de anomalías”, pero NO debe reutilizar la lógica de edición operativa del tratamiento.
+La nueva pantalla debe comportarse como una “vista espejo” o “vista de auditoría” del tratamiento, diseñada únicamente para consulta y trazabilidad.
+
+Objetivo:
+Agregar en el menú contextual → “Secciones principales” una nueva tarjeta llamada:
+
+“Seguimiento de tratamientos”
+
+Al seleccionar esta tarjeta, debe abrirse un formulario/pantalla visualmente similar a “Seguimiento de anomalías”, pero orientado al seguimiento y consulta de tratamientos/procedimientos.
+
+Especificaciones funcionales:
+
+1. Nueva tarjeta en menú contextual
+- Ubicación: menú contextual → Secciones principales.
+- Nombre visible: “Seguimiento de tratamientos”.
+- Mantener el mismo diseño visual y comportamiento de navegación de las tarjetas existentes.
+- La tarjeta debe abrir una nueva vista específica de seguimiento de tratamientos.
+
+2. Nueva pantalla: Seguimiento de tratamientos
+Crear una nueva vista/pantalla llamada:
+
+“Seguimiento de tratamientos”
+
+Debe reutilizar:
+- estilos,
+- layouts,
+- componentes visuales,
+- tablas,
+- tarjetas,
+- cabeceras,
+- filtros,
+- estructura responsive
+
+del módulo “Seguimiento de anomalías”.
+
+IMPORTANTE:
+NO reutilizar la lógica de edición ni formularios operativos del tratamiento.
+Esta nueva pantalla debe funcionar únicamente como:
+- vista de consulta,
+- auditoría,
+- seguimiento histórico.
+
+3. Búsqueda y filtros
+La pantalla debe permitir buscar tratamientos/procedimientos mediante:
+
+- Código de procedimiento.
+- Usuario.
+- Proceso.
+
+Los filtros deben poder combinarse.
+
+Implementar:
+- búsqueda parcial,
+- filtros dinámicos,
+- comportamiento consistente con “Seguimiento de anomalías”.
+
+4. Listado de tratamientos/procedimientos
+La vista debe listar los registros encontrados mostrando como mínimo:
+
+- Código de procedimiento.
+- Nombre o descripción.
+- Usuario responsable o relacionado.
+- Proceso asociado.
+- Estado actual.
+- Fecha relevante (creación, programación o validación según disponibilidad).
+
+5. Estados visibles
+El listado debe mostrar claramente el estado del tratamiento, por ejemplo:
+- Pendiente.
+- En análisis.
+- En ejecución.
+- Validado eficaz.
+- Reabierto.
+- Cerrado.
+
+Usar badges, colores o indicadores visuales similares a los ya existentes en el sistema.
+
+6. Apertura de detalle
+Al hacer clic sobre un procedimiento/tratamiento listado:
+- abrir una nueva pantalla/formulario de detalle,
+- exclusivamente de lectura.
+
+7. Vista detalle tipo “espejo”
+La vista detalle debe mostrar toda la información actualmente cargada en el tratamiento/procedimiento.
+
+Debe incluir:
+- Datos generales.
+- Información de la anomalía asociada.
+- Convocados.
+- Causas raíz.
+- Detalles cargados.
+- Tareas generadas.
+- Responsables.
+- Fechas.
+- Evaluación de eficacia.
+- Responsable de validación.
+- Resultado de validación.
+- Estado actual.
+- Historial completo o seguimiento histórico.
+
+IMPORTANTE:
+Esta pantalla debe comportarse como una “vista espejo” del tratamiento:
+- mostrar todo,
+- permitir navegación,
+- permitir lectura,
+- pero NO permitir modificación alguna.
+
+8. Restricciones de edición (MUY IMPORTANTE)
+
+NO permitir:
+- editar,
+- guardar,
+- eliminar,
+- cambiar estado,
+- agregar comentarios,
+- crear tareas,
+- modificar causas raíz,
+- modificar validaciones.
+
+No mostrar:
+- botones Guardar,
+- Editar,
+- Eliminar,
+- Agregar,
+- Cambiar estado,
+- Acciones operativas.
+
+Si se reutilizan componentes existentes:
+- convertir inputs en readonly,
+- deshabilitar selects,
+- bloquear textareas,
+- ocultar acciones editables.
+
+Validar también desde backend:
+- esta vista debe aceptar únicamente GET.
+- bloquear POST, PUT, PATCH y DELETE.
+
+9. Arquitectura recomendada
+Implementar esta funcionalidad como un módulo independiente de consulta.
+
+NO reutilizar directamente la vista operativa de tratamiento para evitar:
+- conflictos,
+- permisos incorrectos,
+- edición accidental,
+- efectos colaterales.
+
+Preferentemente:
+- crear vistas específicas readonly,
+- templates específicos readonly,
+- serializers/contextos de solo lectura,
+- componentes reutilizables visuales.
+
+10. Permisos
+- Mantener compatibilidad con el sistema actual de roles y alcances.
+- Reutilizar la lógica de permisos existente donde corresponda.
+- Solo usuarios autorizados deben poder ingresar.
+
+11. Historial y trazabilidad
+- La consulta NO debe generar eventos nuevos.
+- NO debe modificar historial.
+- NO debe alterar estados.
+- Solo mostrar información existente.
+
+12. Robustez
+La vista debe funcionar correctamente aunque:
+- falten causas raíz,
+- falten tareas,
+- no exista evaluación de eficacia,
+- no exista validación,
+- haya tratamientos incompletos.
+
+13. Optimización
+Evitar:
+- consultas duplicadas,
+- N+1 queries,
+- carga innecesaria.
+
+Usar:
+- select_related,
+- prefetch_related,
+- paginación si corresponde.
+
+14. UX/UI
+Mantener coherencia total con:
+- diseño actual,
+- colores,
+- tarjetas,
+- navegación,
+- sidebar,
+- tablas,
+- formularios del sistema.
+
+La experiencia debe sentirse parte nativa del sistema actual.
+
+Criterios de calidad:
+- Código limpio y mantenible.
+- No romper funcionalidades existentes.
+- No alterar “Seguimiento de anomalías”.
+- Mantener separación clara entre:
+  - vista operativa editable,
+  - vista de auditoría readonly.
+- Evitar duplicación innecesaria.
+- Reutilizar componentes visuales correctamente.
+- Mantener seguridad backend y frontend.
+
+Resultado esperado:
+Codex debe implementar:
+
+1. Nueva tarjeta “Seguimiento de tratamientos”.
+2. Nueva URL y navegación.
+3. Vista de búsqueda y listado.
+4. Filtros por:
+   - código,
+   - usuario,
+   - proceso.
+5. Estados visibles.
+6. Vista detalle readonly tipo espejo.
+7. Protección frontend y backend contra edición.
+8. Templates necesarios.
+9. Integración visual coherente con el sistema actual.
+10. Validación final de funcionamiento sin afectar módulos existentes.
+
+Antes de modificar:
+Analizar cómo está implementado actualmente:
+- Seguimiento de anomalías.
+- Tratamientos/procedimientos.
+- Estados.
+- Roles y permisos.
+- Historial.
+- Templates reutilizables.
+- Componentes visuales existentes.
+
+ ECHO OK
+```
+.............................................................................................................................
+Acciones inmediatas cerradas por mes filtrar por analisis de repetitividad 
+(teniendo en cuenta y aca agregar cuando claudia ahace el analisis que tenga un campo desplegable con los diferentes 
+tipos de anomalias o c ausas)acciones de repitencia agregar en tratemiento convocatoria lugar de la convocatoria carga
+ de evidencia de tarea obligatorio. 
+ ____11/05/2026______________________________________________________________________________________________________________
+
+ se cambia el campo "tipo de anomalias" por "tipo de desvio" ECHO OK
+ .......................................................................................................
+ En el módulo “Seguimiento de anomalías”, junto al botón o sección “Revisión de hallazgos”, agregar un nuevo botón
+  llamado “Estudio de repitencia”. ECHO OK
+
+Al hacer clic, debe abrirse un nuevo formulario/pantalla con el mismo estilo visual,
+ estructura y diseño que el resto de formularios del sistema.
+
+Nombre de la nueva pantalla:
+“Estudio de repitencia”
+
+Funcionalidad requerida:
+
+1. Filtro de fecha
+- Agregar un selector de fecha llamado “Desde fecha”.
+- El sistema debe tomar como rango de análisis desde la fecha seleccionada hasta el día actual.
+- Si no se selecciona una fecha, mostrar un mensaje solicitando completar el filtro antes de ejecutar el análisis.
+
+2. Análisis de datos
+El sistema debe analizar todas las anomalías registradas en la base de datos dentro del período seleccionado.
+
+Se deben calcular y mostrar los siguientes KPIs:
+
+A. Cantidad de anomalías por “Tipo de desvío”
+- Agrupar las anomalías por el campo “tipo de desvío”.
+- Mostrar para cada tipo de desvío la cantidad total de anomalías encontradas en el período.
+
+B. Cantidad de anomalías por sector para cada tipo de desvío
+- Para cada “tipo de desvío”, agrupar también por “sector”.
+- Mostrar la cantidad de anomalías correspondientes a cada sector dentro de cada tipo de desvío.
+
+3. Presentación visual
+- Mostrar los KPIs en paneles o tarjetas, manteniendo el mismo diseño del sistema.
+- Primero mostrar un panel resumen con:
+  - Período analizado.
+  - Total general de anomalías encontradas.
+  - Cantidad por tipo de desvío.
+- Luego mostrar otro panel con el detalle:
+  - Tipo de desvío.
+  - Sector.
+  - Cantidad de anomalías.
+
+4. Listado de anomalías intervinientes
+Debajo de los paneles KPI, mostrar una tabla con las anomalías que formaron parte del análisis.
+
+La tabla debe incluir las siguientes columnas:
+- ID
+- Título
+- Observaciones
+- Tipo de desvío
+- Sector
+- Fecha de registro
+
+5. Comportamiento esperado
+- La pantalla debe actualizar los resultados al seleccionar la fecha y ejecutar la búsqueda.
+- Si no hay anomalías en el período seleccionado, mostrar el mensaje:
+  “No se encontraron anomalías para el período seleccionado.”
+- No modificar registros desde esta pantalla. Será solo de consulta y análisis.
+- Respetar permisos existentes del sistema.
+- Mantener coherencia con nombres de rutas, vistas, templates, formularios y estilos ya utilizados en el proyecto.
+
+6. Criterios técnicos
+- Implementar la lógica preferentemente en una vista separada.
+- Reutilizar componentes, estilos y templates existentes.
+- Evitar duplicar código innecesariamente.
+- Validar correctamente el filtro de fecha.
+- Ordenar los resultados de mayor a menor cantidad de anomalías.
+- Mantener trazabilidad visual: al hacer clic en una anomalía del listado, si el sistema ya cuenta con vista de detalle,
+ permitir acceder a ella.
+
+Resultado esperado:
+Una nueva pantalla llamada “Estudio de repitencia” integrada dentro de “Seguimiento de anomalías”, 
+que permita analizar repeticiones de anomalías por tipo de desvío y sector dentro de un período seleccionado. ECHO OK
+............................................................................................................................
+
+Se modifico paleta de colores y grosor de contornos de tarjetas. ECHO OK
+
+...........................................................................................................................
+Objetivo:
+Registrar aprendizajes derivados de tratamientos cuya validación haya sido marcada como “eficaz”.
+
+Ubicación:
+Agregar una nueva sección en el menú correspondiente del sistema con el nombre:
+“Lecciones aprendidas”.
+
+Regla de aparición:
+Cuando un tratamiento tenga la validación final en estado “eficaz”, deberá aparecer automáticamente en la sección “Lecciones aprendidas”.
+
+Diseño:
+- Copiar la tarjeta/listado visual utilizado en “Seguimiento de tratamientos”.
+- Mantener el mismo estilo, formato, colores, estructura y comportamiento visual del sistema.
+- En cada tarjeta de tratamiento, agregar a la derecha un bloque editable para registrar la lección aprendida.
+
+Campos requeridos:
+
+1. Pregunta:
+“¿Hubo un aprendizaje?”
+- Agregar selector o casilla de verificación con opciones:
+  - Sí
+  - No
+
+Si la respuesta es “Sí”, mostrar y requerir:
+- Campo de texto:
+  “¿Qué se aprendió?”
+- Campo para subir archivos:
+  “Evidencia objetiva”
+- Permitir adjuntar uno o varios archivos.
+
+Si la respuesta es “No”, mostrar y requerir:
+- Campo de texto:
+  “¿Por qué no se aprendió?”
+
+2. Pregunta:
+“¿Modifica procedimiento?”
+- Agregar selector o casilla de verificación con opciones:
+  - Sí
+  - No
+
+Si la respuesta es “Sí”, mostrar y requerir:
+- Campo de texto:
+  “Observaciones sobre modificación de procedimiento”
+
+Si la respuesta es “No”:
+- No mostrar campos adicionales.
+
+3. Botón:
+Agregar botón:
+“Guardar cambios”
+
+Comportamiento esperado:
+- Al guardar, registrar la información asociada al tratamiento correspondiente.
+- No duplicar tratamientos en la sección.
+- Si ya existe una lección aprendida cargada para un tratamiento, mostrar los datos guardados y permitir editarlos
+ según permisos existentes.
+- Registrar fecha y usuario que guardó o modificó la lección aprendida.
+- Mantener trazabilidad en el historial del tratamiento.
+- Si se adjuntan archivos, guardarlos como evidencia objetiva asociada a la lección aprendida.
+
+Validaciones:
+- Si “Hubo un aprendizaje” = Sí, el campo “¿Qué se aprendió?” debe ser obligatorio.
+- Si “Hubo un aprendizaje” = No, el campo “¿Por qué no se aprendió?” debe ser obligatorio.
+- Si “Modifica procedimiento” = Sí, el campo de observaciones debe ser obligatorio.
+- No permitir guardar sin completar los campos obligatorios según corresponda.
+
+Criterios técnicos:
+- Crear modelo, formulario, vista, ruta y template necesarios si no existen.
+- Reutilizar componentes visuales existentes del sistema.
+- Mantener compatibilidad con permisos actuales.
+- La sección debe mostrar únicamente tratamientos con validación eficaz.
+- Ordenar los tratamientos por fecha de validación más reciente primero.
+- Usar nombres claros y consistentes para modelos, campos, rutas y templates.
+
+Resultado esperado:
+Una nueva sección “Lecciones aprendidas” donde se listen automáticamente los tratamientos eficaces y se permita
+ registrar si hubo aprendizaje,
+ qué se aprendió, evidencia objetiva, si modifica procedimiento y observaciones correspondientes. ECHO OK
+ ___12/05_______________________________________________________________________________________________________________.
+ en seguimiento anomalias dentro de detalles de anomalias agregar  la seccion lecciones aprendidas.
+ tambien en seguimiento de tratamientos detalles read only . colocar en ambas  responsable que cargo el aprendizaje, 
+ fecha, que se aprendio, evidencia objetiva, si modifica rtastamiento y su detalle. ECHO. pido correcion de tarjeta 
+ esta mal ordenada. ECHO OK
+
+ ........................................................................................................................
+ en seguimiento de tratamientos, el subtitulo dice "Consulta y auditoria readonly de tratamientos, procedimientos, 
+ tareas y validaciones"  cambiar el "readonly" por "solo lectura" lo mismo en la seccion read only.ECHO OK
+ ..............................................................................................................................
+ Implementar los siguientes cambios de nomenclatura y optimización visual en el módulo de Gestión de Anomalías, 
+ asegurando consistencia en TODAS las vistas, formularios, tablas, filtros, historiales, tarjetas y componentes relacionados,
+  no solo en “Nueva anomalía”.
+
+OBJETIVO GENERAL:
+Mejorar claridad conceptual y reducir la necesidad de scroll en pantallas operativas.
+---
+## CAMBIOS DE NOMENCLATURA
+1. NUEVA ANOMALÍA – PASO 1
+* Cambiar el campo:
+  "Proceso afectado"
+  por:
+  "Elaborado por"
+2. NUEVA ANOMALÍA – PASO 2
+   Dentro de “Contexto operativo”:
+* Eliminar completamente los campos:
+  * “Proceso”
+  * “Prioridad”
+* Cambiar el nombre del campo:
+  "Origen"
+  por:
+  "Imputado a"
+---
+## REGLA DE CONSISTENCIA GLOBAL
+Revisar TODO el sistema y actualizar los nombres anteriores en:
+* Formularios
+* Tablas
+* Tarjetas
+* Filtros
+* Modales
+* Historiales
+* Seguimiento de anomalías
+* Seguimiento de tratamientos
+* Reportes
+* Tooltips
+* Placeholders
+* Validaciones
+* APIs/serializers si corresponde
+* Labels internos visibles al usuario
+IMPORTANTE:
+No deben quedar referencias visibles al usuario con los nombres antiguos.
+---
+## OPTIMIZACIÓN VISUAL / UX
+Reducir la necesidad de scroll vertical especialmente en:
+* Nueva anomalía
+* Contexto operativo
+* Formularios tipo wizard/pasos
+Aplicar mejoras visuales como:
+* Menor separación vertical entre campos
+* Compactar márgenes y paddings
+* Mejor distribución horizontal
+* Uso eficiente de grillas responsive
+* Agrupación lógica de campos
+* Mantener legibilidad y compatibilidad mobile
+OBJETIVO:
+Que la mayor cantidad posible de información relevante entre en pantalla sin perder claridad.
+---
+## VALIDACIONES
+* Verificar que los cambios no rompan:
+  * carga de anomalías
+  * edición
+  * filtros
+  * búsquedas
+  * historiales
+  * exportaciones
+  * relaciones con tratamientos
+* Confirmar que los campos eliminados:S
+  * no sigan siendo obligatorios
+  * no generen errores backend
+  * no aparezcan en validaciones
+---
+## RESULTADO ESPERADO
+* Interfaz más compacta y limpia
+* Terminología consistente en todo el sistema
+* Menor scroll operativo
+* Formularios más rápidos de usar
+* Sin referencias visibles a nombres antiguos
+
+ .............................................................................................................................
+ en seguimiento de tratamientos historial de auditoria deberia ser historial de tatamiento, el historial esta con 
+ las hitos en ingles passar a español. ECHO OK
+ ..............................................................................................................................
+ en seguimiento de tratameinto la seccion lecciones aprendidas cambiar para que entre dentro de la seccion detalle.
+  debe ser diferente a la de seguimiento de anomalia (esta no tocar ya que esta bien) ECHO OK
+ ..............................................................................................................................
+En la tarjeta de carga de imputado a  el campo  orden de visualizacion se eberia de ver en los registros y a la vez no
+permitir poner un valor que ya existe.
+.............................................................................................................................S

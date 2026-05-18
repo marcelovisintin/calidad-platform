@@ -13,6 +13,8 @@ from apps.actions.models import (
     TreatmentAnomaly,
     TreatmentEffectivenessValidationResult,
     TreatmentEvidence,
+    TreatmentLearnedLesson,
+    TreatmentLearnedLessonEvidence,
     TreatmentParticipant,
     TreatmentRootCause,
     TreatmentStatus,
@@ -171,6 +173,7 @@ def snapshot_treatment(treatment: Treatment) -> dict:
         "primary_anomaly_id": str(treatment.primary_anomaly_id),
         "status": treatment.status,
         "scheduled_for": treatment.scheduled_for.isoformat() if treatment.scheduled_for else "",
+        "treatment_location": treatment.treatment_location,
         "method_used": treatment.method_used,
         "observations": treatment.observations,
         "effectiveness_evaluation_date": treatment.effectiveness_evaluation_date.isoformat() if treatment.effectiveness_evaluation_date else "",
@@ -246,6 +249,72 @@ def get_treatment_validation_state(treatment: Treatment) -> dict:
         blockers.append("Todas las tareas surgidas del tratamiento deben estar completadas.")
 
     return {"available": not blockers, "blockers": blockers}
+
+
+def snapshot_learned_lesson(lesson: TreatmentLearnedLesson) -> dict:
+    return {
+        "id": str(lesson.pk),
+        "treatment_id": str(lesson.treatment_id),
+        "has_learning": lesson.has_learning,
+        "learned_text": lesson.learned_text,
+        "no_learning_reason": lesson.no_learning_reason,
+        "procedure_modified": lesson.procedure_modified,
+        "procedure_modification_notes": lesson.procedure_modification_notes,
+        "saved_by_id": str(lesson.saved_by_id or ""),
+        "saved_at": lesson.saved_at.isoformat() if lesson.saved_at else "",
+    }
+
+
+@transaction.atomic
+def save_treatment_learned_lesson(*, treatment: Treatment, user, data: dict, files=None, request_id: str = "") -> TreatmentLearnedLesson:
+    _require_treatment_permission(user, "No tiene permisos para registrar lecciones aprendidas.", treatment=treatment)
+    locked = Treatment.objects.select_for_update().get(pk=treatment.pk)
+    if locked.effectiveness_validation_result != TreatmentEffectivenessValidationResult.EFFECTIVE:
+        raise ValidationError({"treatment": "Solo se pueden registrar lecciones aprendidas en tratamientos validados como eficaces."})
+
+    lesson = TreatmentLearnedLesson.objects.select_for_update().filter(treatment=locked).first()
+    before = snapshot_learned_lesson(lesson) if lesson else {}
+    if not lesson:
+        lesson = TreatmentLearnedLesson(treatment=locked, created_by=user)
+
+    lesson.has_learning = data["has_learning"]
+    lesson.learned_text = data.get("learned_text", "")
+    lesson.no_learning_reason = data.get("no_learning_reason", "")
+    lesson.procedure_modified = data["procedure_modified"]
+    lesson.procedure_modification_notes = data.get("procedure_modification_notes", "")
+    lesson.saved_by = user
+    lesson.saved_at = timezone.now()
+    lesson.updated_by = user
+    _bump_version(lesson)
+    lesson.full_clean()
+    lesson.save()
+
+    for file_obj in files or []:
+        _validate_objective_file(file_obj)
+        TreatmentLearnedLessonEvidence.objects.create(
+            learned_lesson=lesson,
+            file=file_obj,
+            original_name=getattr(file_obj, "name", "") or "evidencia",
+            content_type=getattr(file_obj, "content_type", "") or "",
+            uploaded_by=user,
+            created_by=user,
+            updated_by=user,
+        )
+
+    record_audit_event(
+        entity=locked,
+        action="treatment.learned_lesson.saved",
+        actor=user,
+        before_data=before,
+        after_data=snapshot_learned_lesson(lesson),
+        request_id=_request_id(request_id),
+    )
+    _register_history_for_treatment(
+        treatment=locked,
+        user=user,
+        comment=f"Tratamiento {locked.code}: se registra o actualiza la leccion aprendida.",
+    )
+    return lesson
 
 
 def _validation_history_comment(*, treatment: Treatment, previous_status: str, result: str, comment: str = "") -> str:
@@ -518,6 +587,7 @@ def create_treatment(*, primary_anomaly, user, data: dict, request_id: str = "")
         primary_anomaly=primary_anomaly,
         status=data.get("status") or TreatmentStatus.PENDING,
         scheduled_for=data.get("scheduled_for"),
+        treatment_location=(data.get("treatment_location") or "").strip(),
         method_used=data.get("method_used", ""),
         observations=data.get("observations", ""),
         created_by=user,
@@ -584,7 +654,10 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
     ):
         _validate_effectiveness_assignment(treatment=locked, data=data)
 
-    for field in ("scheduled_for", "method_used", "observations", "effectiveness_evaluation_date", "effectiveness_responsible"):
+    if "treatment_location" in data:
+        data["treatment_location"] = (data.get("treatment_location") or "").strip()
+
+    for field in ("scheduled_for", "treatment_location", "method_used", "observations", "effectiveness_evaluation_date", "effectiveness_responsible"):
         if field in data:
             setattr(locked, field, data[field])
 
@@ -624,7 +697,7 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
     comments: list[str] = []
     if status_changed or auto_progressed:
         comments.append(f"El tratamiento {locked.code} cambia a estado {locked.status}.")
-    if "scheduled_for" in data:
+    if "scheduled_for" in data or "treatment_location" in data:
         comments.append("Se actualiza la agenda del tratamiento.")
     if "effectiveness_evaluation_date" in data or "effectiveness_responsible" in data:
         comments.append(_effectiveness_history_comment(locked))

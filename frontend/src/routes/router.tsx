@@ -16,6 +16,7 @@ import { ImmediateActionsPage } from "../modules/anomalies/pages/ImmediateAction
 import { NewAnomalyPage } from "../modules/anomalies/pages/NewAnomalyPage";
 import { DashboardPage } from "../modules/dashboard/pages/DashboardPage";
 import { TreatmentsPage } from "../modules/treatments/pages/TreatmentsPage";
+import { LearnedLessonsPage } from "../modules/treatments/pages/LearnedLessonsPage";
 import { TreatmentTrackingPage } from "../modules/treatments/pages/TreatmentTrackingPage";
 import { TreatmentValidationPage } from "../modules/treatments/pages/TreatmentValidationPage";
 import { InboxPage } from "../modules/notifications/pages/InboxPage";
@@ -52,6 +53,7 @@ export const router = createBrowserRouter([
       { path: "anomalies/:anomalyId", element: <AnomalyDetailPage /> },
       { path: "treatments", element: <TreatmentsPage /> },
       { path: "treatments/tracking", element: <TreatmentTrackingPage /> },
+      { path: "learned-lessons", element: <LearnedLessonsPage /> },
       { path: "actions/mine", element: <MyActionsPage /> },
       { path: "validation", element: <TreatmentValidationPage /> },
       { path: "tasks", element: <PendingTasksPage /> },

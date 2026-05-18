@@ -23,6 +23,7 @@ from apps.actions.api.treatment_serializers import (
     TreatmentDetailSerializer,
     TreatmentEvidenceSerializer,
     TreatmentEvidenceWriteSerializer,
+    TreatmentLearnedLessonWriteSerializer,
     TreatmentListSerializer,
     TreatmentParticipantSerializer,
     TreatmentRootCauseSerializer,
@@ -39,6 +40,8 @@ from apps.actions.models import (
     TreatmentAnomaly,
     TreatmentEffectivenessValidationResult,
     TreatmentEvidence,
+    TreatmentLearnedLesson,
+    TreatmentLearnedLessonEvidence,
     TreatmentParticipant,
     TreatmentRootCause,
     TreatmentTask,
@@ -53,6 +56,7 @@ from apps.actions.services import (
     add_treatment_task,
     add_treatment_task_evidence,
     create_treatment,
+    save_treatment_learned_lesson,
     update_treatment,
     update_treatment_task,
     validate_treatment_effectiveness,
@@ -150,6 +154,27 @@ class TreatmentTaskEvidenceDownloadAPIView(APIView):
             TreatmentTaskEvidence.objects.select_related("treatment_task", "treatment_task__treatment"),
             pk=evidence_id,
             treatment_task_id__in=visible_tasks.values("id"),
+        )
+        if not evidence.file:
+            raise Http404("Evidencia sin archivo asociado.")
+
+        response = FileResponse(
+            evidence.file.open("rb"),
+            as_attachment=True,
+            filename=evidence.original_name or evidence.file.name.rsplit("/", 1)[-1],
+        )
+        if evidence.content_type:
+            response["Content-Type"] = evidence.content_type
+        return response
+
+
+class TreatmentLearnedLessonEvidenceDownloadAPIView(APIView):
+    def get(self, request, evidence_id):
+        visible_treatments = _visible_treatments_queryset(request.user)
+        evidence = get_object_or_404(
+            TreatmentLearnedLessonEvidence.objects.select_related("learned_lesson", "learned_lesson__treatment"),
+            pk=evidence_id,
+            learned_lesson__treatment_id__in=visible_treatments.values("id"),
         )
         if not evidence.file:
             raise Http404("Evidencia sin archivo asociado.")
@@ -810,5 +835,64 @@ class TreatmentTrackingViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset.distinct().order_by("-updated_at", "-created_at")
 
 
+class TreatmentLearnedLessonViewSet(viewsets.ReadOnlyModelViewSet):
+    http_method_names = ["get", "patch", "head", "options"]
+    parser_classes = [MultiPartParser, FormParser]
+    serializer_class = TreatmentListSerializer
+
+    def _request_id(self) -> str:
+        return self.request.headers.get("X-Request-ID") or self.request.headers.get("X-Request-Id") or ""
+
+    def get_serializer_class(self):
+        if self.action == "partial_update":
+            return TreatmentLearnedLessonWriteSerializer
+        return TreatmentListSerializer
+
+    def get_queryset(self):
+        queryset = (
+            _visible_treatments_queryset(self.request.user)
+            .filter(effectiveness_validation_result=TreatmentEffectivenessValidationResult.EFFECTIVE)
+            .select_related(
+                "primary_anomaly",
+                "primary_anomaly__reporter",
+                "primary_anomaly__area",
+                "primary_anomaly__anomaly_origin",
+                "effectiveness_responsible",
+                "effectiveness_validated_by",
+                "learned_lesson",
+                "learned_lesson__saved_by",
+            )
+            .prefetch_related(
+                Prefetch(
+                    "learned_lesson__evidences",
+                    queryset=TreatmentLearnedLessonEvidence.objects.select_related("uploaded_by").order_by("-created_at"),
+                )
+            )
+        )
+
+        if search := (self.request.query_params.get("search") or "").strip():
+            queryset = queryset.filter(
+                Q(code__icontains=search)
+                | Q(primary_anomaly__code__icontains=search)
+                | Q(primary_anomaly__title__icontains=search)
+                | Q(primary_anomaly__area__name__icontains=search)
+            )
+
+        return queryset.distinct().order_by("-effectiveness_validated_at", "-updated_at")
+
+    def partial_update(self, request, *args, **kwargs):
+        treatment = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        files = request.FILES.getlist("evidences")
+        save_treatment_learned_lesson(
+            treatment=treatment,
+            user=request.user,
+            data=dict(serializer.validated_data),
+            files=files,
+            request_id=self._request_id(),
+        )
+        output = TreatmentListSerializer(self.get_queryset().get(pk=treatment.pk), context=self.get_serializer_context())
+        return Response(output.data)
 
 

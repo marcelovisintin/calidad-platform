@@ -10,6 +10,8 @@ from apps.actions.models import (
     TreatmentAnomaly,
     TreatmentEffectivenessValidationResult,
     TreatmentEvidence,
+    TreatmentLearnedLesson,
+    TreatmentLearnedLessonEvidence,
     TreatmentMethod,
     TreatmentParticipant,
     TreatmentParticipantRole,
@@ -118,6 +120,7 @@ class TreatmentAnomalySummarySerializer(serializers.Serializer):
     description = serializers.CharField(read_only=True)
     current_status = serializers.CharField(read_only=True)
     current_stage = serializers.CharField(read_only=True)
+    affected_process = serializers.CharField(read_only=True)
     reporter = UserSummarySerializer(read_only=True)
     area = AnomalySectorSerializer(read_only=True)
     anomaly_origin = AnomalySectorSerializer(read_only=True)
@@ -144,6 +147,41 @@ class TreatmentEvidenceSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         url = reverse("api:actions:treatment-evidence-download", kwargs={"evidence_id": obj.pk})
         return request.build_absolute_uri(url) if request else url
+
+
+class TreatmentLearnedLessonEvidenceSerializer(serializers.ModelSerializer):
+    uploaded_by = UserSummarySerializer(read_only=True)
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TreatmentLearnedLessonEvidence
+        fields = ("id", "original_name", "content_type", "file_url", "uploaded_by", "created_at")
+
+    def get_file_url(self, obj):
+        request = self.context.get("request")
+        url = reverse("api:actions:treatment-learned-lesson-evidence-download", kwargs={"evidence_id": obj.pk})
+        return request.build_absolute_uri(url) if request else url
+
+
+class TreatmentLearnedLessonSerializer(serializers.ModelSerializer):
+    saved_by = UserSummarySerializer(read_only=True)
+    evidences = TreatmentLearnedLessonEvidenceSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = TreatmentLearnedLesson
+        fields = (
+            "id",
+            "has_learning",
+            "learned_text",
+            "no_learning_reason",
+            "procedure_modified",
+            "procedure_modification_notes",
+            "saved_by",
+            "saved_at",
+            "evidences",
+            "created_at",
+            "updated_at",
+        )
 
 
 class TreatmentTaskEvidenceSerializer(serializers.ModelSerializer):
@@ -290,6 +328,7 @@ class TreatmentListSerializer(serializers.ModelSerializer):
     effectiveness_validated_by = UserSummarySerializer(read_only=True)
     validation_state = serializers.SerializerMethodField()
     is_locked = serializers.SerializerMethodField()
+    learned_lesson = TreatmentLearnedLessonSerializer(read_only=True)
 
     class Meta:
         model = Treatment
@@ -298,6 +337,7 @@ class TreatmentListSerializer(serializers.ModelSerializer):
             "code",
             "status",
             "scheduled_for",
+            "treatment_location",
             "method_used",
             "observations",
             "effectiveness_evaluation_date",
@@ -308,6 +348,7 @@ class TreatmentListSerializer(serializers.ModelSerializer):
             "effectiveness_validation_comment",
             "validation_state",
             "is_locked",
+            "learned_lesson",
             "primary_anomaly",
             "created_at",
             "updated_at",
@@ -336,6 +377,7 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
     tasks = TreatmentTaskSerializer(many=True, read_only=True)
     evidences = TreatmentEvidenceSerializer(many=True, read_only=True)
     audit_events = serializers.SerializerMethodField()
+    learned_lesson = TreatmentLearnedLessonSerializer(read_only=True)
 
     class Meta:
         model = Treatment
@@ -344,6 +386,7 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
             "code",
             "status",
             "scheduled_for",
+            "treatment_location",
             "method_used",
             "observations",
             "effectiveness_evaluation_date",
@@ -361,6 +404,7 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
             "tasks",
             "evidences",
             "audit_events",
+            "learned_lesson",
             "created_at",
             "updated_at",
             "row_version",
@@ -387,6 +431,7 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
 class TreatmentCreateSerializer(serializers.Serializer):
     primary_anomaly = serializers.PrimaryKeyRelatedField(queryset=Anomaly.objects.all())
     scheduled_for = serializers.DateTimeField(required=False, allow_null=True)
+    treatment_location = serializers.CharField(required=False, allow_blank=True, max_length=200)
     status = serializers.ChoiceField(choices=TreatmentStatus.choices, required=False)
     method_used = serializers.ChoiceField(choices=TreatmentMethod.choices, required=False, allow_blank=True)
     observations = serializers.CharField(required=False, allow_blank=True)
@@ -394,6 +439,7 @@ class TreatmentCreateSerializer(serializers.Serializer):
 
 class TreatmentUpdateSerializer(serializers.Serializer):
     scheduled_for = serializers.DateTimeField(required=False, allow_null=True)
+    treatment_location = serializers.CharField(required=False, allow_blank=True, max_length=200)
     status = serializers.ChoiceField(choices=TreatmentStatus.choices, required=False)
     method_used = serializers.ChoiceField(choices=TreatmentMethod.choices, required=False, allow_blank=True)
     observations = serializers.CharField(required=False, allow_blank=True)
@@ -453,6 +499,36 @@ class TreatmentUpdateTaskSerializer(serializers.Serializer):
 class TreatmentValidateSerializer(serializers.Serializer):
     result = serializers.ChoiceField(choices=TreatmentEffectivenessValidationResult.choices, required=True)
     comment = serializers.CharField(required=False, allow_blank=True)
+
+
+class TreatmentLearnedLessonWriteSerializer(serializers.Serializer):
+    has_learning = serializers.BooleanField(required=True)
+    learned_text = serializers.CharField(required=False, allow_blank=True)
+    no_learning_reason = serializers.CharField(required=False, allow_blank=True)
+    procedure_modified = serializers.BooleanField(required=True)
+    procedure_modification_notes = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        has_learning = attrs.get("has_learning")
+        procedure_modified = attrs.get("procedure_modified")
+        learned_text = (attrs.get("learned_text") or "").strip()
+        no_learning_reason = (attrs.get("no_learning_reason") or "").strip()
+        procedure_notes = (attrs.get("procedure_modification_notes") or "").strip()
+
+        errors = {}
+        if has_learning is True and not learned_text:
+            errors["learned_text"] = "Debe completar que se aprendio."
+        if has_learning is False and not no_learning_reason:
+            errors["no_learning_reason"] = "Debe indicar por que no se aprendio."
+        if procedure_modified is True and not procedure_notes:
+            errors["procedure_modification_notes"] = "Debe completar las observaciones sobre modificacion de procedimiento."
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        attrs["learned_text"] = learned_text if has_learning else ""
+        attrs["no_learning_reason"] = no_learning_reason if not has_learning else ""
+        attrs["procedure_modification_notes"] = procedure_notes if procedure_modified else ""
+        return attrs
 
 
 class TreatmentEvidenceWriteSerializer(serializers.Serializer):

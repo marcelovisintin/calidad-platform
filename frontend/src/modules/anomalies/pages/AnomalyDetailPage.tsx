@@ -4,6 +4,7 @@ import { fetchAnomalyDetail } from "../../../api/anomalies";
 import { readStoredSession } from "../../../api/http";
 import { formatDate, formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
+import { LearnedLessonReadOnly } from "../../../components/LearnedLessonReadOnly";
 import { PageHeader } from "../../../components/PageHeader";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { Timeline } from "../../../components/Timeline";
@@ -181,10 +182,9 @@ export function AnomalyDetailPage() {
                 <div><dt>Responsable actual</dt><dd>{data.current_responsible?.full_name || "Sin asignar"}</dd></div>
                 <div><dt>Numero de OF</dt><dd>{data.manufacturing_order_number || "No informada"}</dd></div>
                 <div><dt>Piezas afectadas</dt><dd>{data.affected_quantity ?? "No informada"}</dd></div>
-                <div><dt>Proceso afectado</dt><dd>{data.affected_process || "-"}</dd></div>
+                <div><dt>Elaborado por</dt><dd>{data.affected_process || data.area?.name || "-"}</dd></div>
+                <div><dt>Imputado a</dt><dd>{data.anomaly_origin?.name || "-"}</dd></div>
                 <div><dt>Criticidad</dt><dd>{data.severity?.name || "-"}</dd></div>
-                <div><dt>Prioridad</dt><dd>{data.priority?.name || "-"}</dd></div>
-                <div><dt>Proceso</dt><dd>{data.area?.name || "-"}</dd></div>
                 <div><dt>Resultados</dt><dd>{data.result_summary || "Sin resumen de resultados."}</dd></div>
                 <div><dt>Resolucion</dt><dd>{data.resolution_summary || "Sin resumen de resolucion."}</dd></div>
               </dl>
@@ -303,6 +303,26 @@ export function AnomalyDetailPage() {
                     </div>
                   </div>
                 )) : <p className="muted-copy">No hay evidencias cargadas en esta anomalia.</p>}
+              </div>
+            </article>
+
+            <article className="panel detail-span-2">
+              <div className="section-head"><h2>Lecciones aprendidas</h2></div>
+              <div className="stack-list compact">
+                {data.learned_lessons.length ? data.learned_lessons.map((lesson) => (
+                  <LearnedLessonReadOnly
+                    key={lesson.treatment_id}
+                    treatmentCode={lesson.treatment_code}
+                    savedBy={lesson.saved_by}
+                    savedAt={lesson.saved_at}
+                    hasLearning={lesson.has_learning}
+                    learnedText={lesson.learned_text}
+                    noLearningReason={lesson.no_learning_reason}
+                    procedureModified={lesson.procedure_modified}
+                    procedureModificationNotes={lesson.procedure_modification_notes}
+                    evidences={lesson.evidences}
+                  />
+                )) : <p className="muted-copy">No hay lecciones aprendidas registradas para los tratamientos asociados.</p>}
               </div>
             </article>
 

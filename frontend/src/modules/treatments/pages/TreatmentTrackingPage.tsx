@@ -53,6 +53,35 @@ function evidenceUrl(fileUrl: string) {
   return fileUrl.startsWith("/") ? fileUrl : `/${fileUrl}`;
 }
 
+const TREATMENT_AUDIT_ACTION_LABELS: Record<string, string> = {
+  "treatment.created": "Tratamiento creado",
+  "treatment.updated": "Tratamiento actualizado",
+  "treatment.effectiveness_validated": "Validacion de eficacia registrada",
+  "treatment.anomaly_added": "Anomalia asociada",
+  "treatment.participant_added": "Convocado agregado",
+  "treatment.participant_updated": "Convocado actualizado",
+  "treatment.root_cause_added": "Causa raiz registrada",
+  "treatment.task_added": "Tarea generada",
+  "treatment.task_updated": "Tarea actualizada",
+  "treatment.evidence_added": "Evidencia del tratamiento agregada",
+  "treatment.task_evidence_added": "Evidencia de tarea agregada",
+  "treatment.learned_lesson.saved": "Leccion aprendida guardada",
+};
+
+function treatmentAuditActionLabel(action: string) {
+  return TREATMENT_AUDIT_ACTION_LABELS[action] || humanizeToken(action.replace(/^treatment\./, ""));
+}
+
+function yesNo(value: boolean | null) {
+  if (value === true) {
+    return "Si";
+  }
+  if (value === false) {
+    return "No";
+  }
+  return "-";
+}
+
 export function TreatmentTrackingPage() {
   usePageTitle("Seguimiento de tratamientos");
   const [page, setPage] = useState(1);
@@ -135,7 +164,7 @@ export function TreatmentTrackingPage() {
     <section className="page-shell">
       <PageHeader
         title="Seguimiento de tratamientos"
-        description="Consulta y auditoria readonly de tratamientos, procedimientos, tareas y validaciones."
+        description="Consulta y auditoria solo lectura de tratamientos, procedimientos, tareas y validaciones."
       />
 
       <section className="toolbar-card">
@@ -161,7 +190,7 @@ export function TreatmentTrackingPage() {
             </select>
           </label>
           <label className="field">
-            <span>Proceso</span>
+            <span>Elaborado por</span>
             <select onChange={handleFilterChange(setProcessFilter)} value={processFilter}>
               <option value="">Todos</option>
               {(catalogData?.areas ?? []).map((area) => (
@@ -207,7 +236,7 @@ export function TreatmentTrackingPage() {
                     Usuario: {treatment.effectiveness_responsible?.full_name || treatment.primary_anomaly.reporter?.full_name || treatment.primary_anomaly.reporter?.username || "-"}
                   </small>
                   <small>
-                    Proceso: {treatment.primary_anomaly.area?.name || "-"} | Fecha: {formatDate(relevantDate(treatment))}
+                    Elaborado por: {treatment.primary_anomaly.affected_process || treatment.primary_anomaly.area?.name || "-"} | Fecha: {formatDate(relevantDate(treatment))}
                   </small>
                 </button>
               ))}
@@ -221,7 +250,7 @@ export function TreatmentTrackingPage() {
                 <>
                   <div className="section-head">
                     <div>
-                      <p className="eyebrow">Detalle readonly</p>
+                      <p className="eyebrow">Detalle solo lectura</p>
                       <h2>{detail.code}</h2>
                       <p className="page-description">
                         Anomalia asociada: <strong>{detail.primary_anomaly.code}</strong> | {detail.primary_anomaly.title}
@@ -239,7 +268,7 @@ export function TreatmentTrackingPage() {
                     <dl className="key-grid compact">
                       <div><dt>Codigo</dt><dd>{detail.code}</dd></div>
                       <div><dt>Estado</dt><dd>{humanizeToken(treatmentDisplayStatus(detail))}</dd></div>
-                      <div><dt>Proceso</dt><dd>{selectedProcess}</dd></div>
+                      <div><dt>Elaborado por</dt><dd>{detail.primary_anomaly.affected_process || selectedProcess}</dd></div>
                       <div><dt>Programado</dt><dd>{formatDateTime(detail.scheduled_for)}</dd></div>
                       <div><dt>Creado</dt><dd>{formatDateTime(detail.created_at)}</dd></div>
                       <div><dt>Actualizado</dt><dd>{formatDateTime(detail.updated_at)}</dd></div>
@@ -251,6 +280,46 @@ export function TreatmentTrackingPage() {
                     <div className="readonly-block">
                       <strong>Observaciones</strong>
                       <p>{detail.observations || "Sin observaciones cargadas"}</p>
+                    </div>
+                    <div className="readonly-block treatment-detail-lesson">
+                      <div className="section-head compact">
+                        <strong>Lecciones aprendidas</strong>
+                        {detail.learned_lesson?.saved_at ? <small>{formatDateTime(detail.learned_lesson.saved_at)}</small> : null}
+                      </div>
+                      {detail.learned_lesson ? (
+                        <div className="treatment-detail-lesson-grid">
+                          <div>
+                            <small>Responsable carga</small>
+                            <p>{detail.learned_lesson.saved_by?.full_name || detail.learned_lesson.saved_by?.username || "-"}</p>
+                            <small>Hubo aprendizaje</small>
+                            <p>{yesNo(detail.learned_lesson.has_learning)}</p>
+                          </div>
+                          <div>
+                            <small>{detail.learned_lesson.has_learning === false ? "Por que no se aprendio" : "Que se aprendio"}</small>
+                            <p>{detail.learned_lesson.has_learning === false ? detail.learned_lesson.no_learning_reason || "-" : detail.learned_lesson.learned_text || "-"}</p>
+                            <small>Modifica procedimiento</small>
+                            <p>{yesNo(detail.learned_lesson.procedure_modified)}</p>
+                          </div>
+                          <div>
+                            <small>Detalle de modificacion</small>
+                            <p>{detail.learned_lesson.procedure_modified ? detail.learned_lesson.procedure_modification_notes || "-" : "-"}</p>
+                            <small>Evidencia objetiva</small>
+                            {detail.learned_lesson.evidences.length ? (
+                              <div className="stack-list compact treatment-detail-lesson-evidence">
+                                {detail.learned_lesson.evidences.map((evidence) => (
+                                  <a className="text-link" href={evidenceUrl(evidence.file_url)} key={evidence.id} rel="noopener noreferrer" target="_blank">
+                                    {evidence.original_name}
+                                  </a>
+                                ))}
+                              </div>
+                            ) : (
+                              <p>Sin evidencia objetiva cargada.</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <p>Sin leccion aprendida registrada para este tratamiento.</p>
+                      )}
                     </div>
                   </section>
 
@@ -364,23 +433,23 @@ export function TreatmentTrackingPage() {
                   </section>
 
                   <section className="form-section">
-                    <div className="section-head compact"><h3>Historial de auditoria</h3></div>
+                    <div className="section-head compact"><h3>Historial de tratamiento</h3></div>
                     <div className="stack-list compact">
                       {detail.audit_events?.length ? detail.audit_events.map((event) => (
                         <div className="list-card compact" key={event.id}>
                           <div>
-                            <strong>{humanizeToken(event.action)}</strong>
+                            <strong>{treatmentAuditActionLabel(event.action)}</strong>
                             <small>{formatDateTime(event.created_at)} | {event.actor?.full_name || event.actor?.username || "-"}</small>
                           </div>
                         </div>
-                      )) : <p className="muted-copy">Sin eventos de auditoria para este tratamiento.</p>}
+                      )) : <p className="muted-copy">Sin historial registrado para este tratamiento.</p>}
                     </div>
                   </section>
                 </>
               ) : (
                 <div className="panel muted">
                   <h2>Sin tratamiento seleccionado</h2>
-                  <p>Selecciona un tratamiento para consultar su espejo readonly.</p>
+                  <p>Selecciona un tratamiento para consultar su espejo solo lectura.</p>
                 </div>
               )}
             </DataState>

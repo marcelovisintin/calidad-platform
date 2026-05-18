@@ -2,7 +2,11 @@ from django.db import models
 from django.utils import timezone
 
 from apps.core.models import AuditBaseModel
-from common.storage import treatment_evidence_upload_to, treatment_task_evidence_upload_to
+from common.storage import (
+    treatment_evidence_upload_to,
+    treatment_learned_lesson_evidence_upload_to,
+    treatment_task_evidence_upload_to,
+)
 
 
 class TreatmentStatus(models.TextChoices):
@@ -49,6 +53,7 @@ class Treatment(AuditBaseModel):
     )
     status = models.CharField(max_length=20, choices=TreatmentStatus.choices, default=TreatmentStatus.PENDING)
     scheduled_for = models.DateTimeField(null=True, blank=True)
+    treatment_location = models.CharField(max_length=200, blank=True, default="")
     method_used = models.CharField(max_length=20, choices=TreatmentMethod.choices, blank=True, default="")
     observations = models.TextField(blank=True)
     effectiveness_evaluation_date = models.DateField(null=True, blank=True)
@@ -219,3 +224,49 @@ class TreatmentTaskEvidence(AuditBaseModel):
         ordering = ("-created_at",)
         verbose_name = "Evidencia de tarea de tratamiento"
         verbose_name_plural = "Evidencias de tareas de tratamiento"
+
+
+class TreatmentLearnedLesson(AuditBaseModel):
+    treatment = models.OneToOneField("actions.Treatment", on_delete=models.CASCADE, related_name="learned_lesson")
+    has_learning = models.BooleanField(null=True, blank=True)
+    learned_text = models.TextField(blank=True)
+    no_learning_reason = models.TextField(blank=True)
+    procedure_modified = models.BooleanField(null=True, blank=True)
+    procedure_modification_notes = models.TextField(blank=True)
+    saved_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="treatment_learned_lessons_saved",
+        null=True,
+        blank=True,
+    )
+    saved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-updated_at",)
+        verbose_name = "Leccion aprendida de tratamiento"
+        verbose_name_plural = "Lecciones aprendidas de tratamientos"
+
+    def __str__(self) -> str:
+        return f"Leccion aprendida - {self.treatment.code}"
+
+
+class TreatmentLearnedLessonEvidence(AuditBaseModel):
+    learned_lesson = models.ForeignKey(
+        "actions.TreatmentLearnedLesson",
+        on_delete=models.CASCADE,
+        related_name="evidences",
+    )
+    file = models.FileField(upload_to=treatment_learned_lesson_evidence_upload_to)
+    original_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100, blank=True)
+    uploaded_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="treatment_learned_lesson_evidences",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = "Evidencia de leccion aprendida"
+        verbose_name_plural = "Evidencias de lecciones aprendidas"

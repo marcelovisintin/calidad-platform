@@ -36,3 +36,8 @@ def treatment_evidence_upload_to(instance, filename: str) -> str:
 def treatment_task_evidence_upload_to(instance, filename: str) -> str:
     task_id = getattr(instance, "treatment_task_id", None) or "unassigned"
     return _build_upload_path("treatment-tasks", task_id, filename)
+
+
+def treatment_learned_lesson_evidence_upload_to(instance, filename: str) -> str:
+    lesson_id = getattr(instance, "learned_lesson_id", None) or "unassigned"
+    return _build_upload_path("treatment-learned-lessons", lesson_id, filename)

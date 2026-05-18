@@ -5,7 +5,14 @@ from django.urls import reverse
 from rest_framework import serializers
 
 from apps.accounts.models import User
-from apps.actions.models import ActionItem, ActionItemStatus, ActionPlan, TreatmentTask
+from apps.actions.models import (
+    ActionItem,
+    ActionItemStatus,
+    ActionPlan,
+    Treatment,
+    TreatmentLearnedLessonEvidence,
+    TreatmentTask,
+)
 from apps.anomalies.models import (
     AnalysisMethod,
     Anomaly,
@@ -254,6 +261,34 @@ class TreatmentTaskPlanSerializer(serializers.ModelSerializer):
             return " | ".join(f"Causa {cause.sequence}: {cause.description}" for cause in root_causes)
         root_cause = getattr(obj, "root_cause", None)
         return getattr(root_cause, "description", "") if root_cause else ""
+
+
+class TreatmentLearnedLessonEvidenceSummarySerializer(serializers.ModelSerializer):
+    uploaded_by = UserSummarySerializer(read_only=True)
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TreatmentLearnedLessonEvidence
+        fields = ("id", "original_name", "content_type", "file_url", "uploaded_by", "created_at")
+
+    def get_file_url(self, obj):
+        request = self.context.get("request")
+        url = reverse("api:actions:treatment-learned-lesson-evidence-download", kwargs={"evidence_id": obj.pk})
+        return request.build_absolute_uri(url) if request else url
+
+
+class AnomalyTreatmentLearnedLessonSerializer(serializers.Serializer):
+    treatment_id = serializers.UUIDField(source="id", read_only=True)
+    treatment_code = serializers.CharField(source="code", read_only=True)
+    saved_by = UserSummarySerializer(source="learned_lesson.saved_by", read_only=True)
+    saved_at = serializers.DateTimeField(source="learned_lesson.saved_at", read_only=True, allow_null=True)
+    has_learning = serializers.BooleanField(source="learned_lesson.has_learning", read_only=True, allow_null=True)
+    learned_text = serializers.CharField(source="learned_lesson.learned_text", read_only=True)
+    no_learning_reason = serializers.CharField(source="learned_lesson.no_learning_reason", read_only=True)
+    procedure_modified = serializers.BooleanField(source="learned_lesson.procedure_modified", read_only=True, allow_null=True)
+    procedure_modification_notes = serializers.CharField(source="learned_lesson.procedure_modification_notes", read_only=True)
+    evidences = TreatmentLearnedLessonEvidenceSummarySerializer(source="learned_lesson.evidences", many=True, read_only=True)
+
 
 class AnomalyStatusHistorySerializer(serializers.ModelSerializer):
     changed_by = UserSummarySerializer(read_only=True)
@@ -523,6 +558,7 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
     immediate_action = AnomalyImmediateActionSerializer(read_only=True)
     action_plans = ActionPlanSummarySerializer(many=True, read_only=True)
     treatment_tasks = serializers.SerializerMethodField()
+    learned_lessons = serializers.SerializerMethodField()
 
     def get_is_locked_by_effective_treatment(self, obj):
         from apps.anomalies.services.anomaly_service import is_anomaly_locked_by_effective_treatment
@@ -542,6 +578,19 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
             .order_by("execution_date", "created_at")
         )
         return TreatmentTaskPlanSerializer(queryset, many=True, context=self.context).data
+
+    def get_learned_lessons(self, obj):
+        queryset = (
+            Treatment.objects.filter(
+                Q(primary_anomaly=obj) | Q(anomaly_links__anomaly=obj),
+                learned_lesson__isnull=False,
+            )
+            .select_related("learned_lesson", "learned_lesson__saved_by")
+            .prefetch_related("learned_lesson__evidences", "learned_lesson__evidences__uploaded_by")
+            .distinct()
+            .order_by("-learned_lesson__saved_at", "-effectiveness_validated_at")
+        )
+        return AnomalyTreatmentLearnedLessonSerializer(queryset, many=True, context=self.context).data
 
     class Meta:
         model = Anomaly
@@ -597,6 +646,7 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
             "immediate_action",
             "action_plans",
             "treatment_tasks",
+            "learned_lessons",
             "created_at",
             "updated_at",
             "row_version",
@@ -647,6 +697,7 @@ class AnomalyCreateSerializer(serializers.ModelSerializer):
             "affected_quantity": {"required": False, "allow_null": True},
             "affected_process": {"required": False, "allow_blank": True},
             "severity": {"required": False, "allow_null": True},
+            "priority": {"required": False, "allow_null": True},
             "code_reservation_id": {"required": False, "allow_null": True},
         }
 

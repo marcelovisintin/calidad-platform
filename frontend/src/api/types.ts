@@ -273,6 +273,7 @@ export interface TreatmentAnomalySummary {
   description: string;
   current_status: string;
   current_stage: string;
+  affected_process?: string;
   reporter?: UserSummary | null;
   area?: CatalogSummary | null;
   anomaly_origin?: CatalogSummary | null;
@@ -309,6 +310,38 @@ export interface TreatmentEvidence {
   file_url: string;
   uploaded_by?: UserSummary | null;
   created_at: string;
+}
+
+export interface TreatmentLearnedLessonEvidence {
+  id: UUID;
+  original_name: string;
+  content_type: string;
+  file_url: string;
+  uploaded_by?: UserSummary | null;
+  created_at: string;
+}
+
+export interface TreatmentLearnedLesson {
+  id: UUID;
+  has_learning: boolean | null;
+  learned_text: string;
+  no_learning_reason: string;
+  procedure_modified: boolean | null;
+  procedure_modification_notes: string;
+  saved_by?: UserSummary | null;
+  saved_at?: string | null;
+  evidences: TreatmentLearnedLessonEvidence[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TreatmentLearnedLessonPayload {
+  has_learning: boolean;
+  learned_text?: string;
+  no_learning_reason?: string;
+  procedure_modified: boolean;
+  procedure_modification_notes?: string;
+  evidences?: File[];
 }
 
 export interface TreatmentTaskEvidence {
@@ -384,6 +417,7 @@ export interface TreatmentSummary {
   code: string;
   status: string;
   scheduled_for?: string | null;
+  treatment_location?: string;
   method_used?: string;
   observations?: string;
   effectiveness_evaluation_date?: string | null;
@@ -397,6 +431,7 @@ export interface TreatmentSummary {
     blockers: string[];
   };
   is_locked?: boolean;
+  learned_lesson?: TreatmentLearnedLesson | null;
   primary_anomaly: TreatmentAnomalySummary;
   created_at: string;
   updated_at: string;
@@ -429,6 +464,7 @@ export interface TreatmentCandidate extends TreatmentAnomalySummary {}
 export interface TreatmentWritePayload {
   primary_anomaly: UUID;
   scheduled_for?: string | null;
+  treatment_location?: string;
   status?: "pending" | "scheduled" | "in_progress" | "completed" | "cancelled";
   method_used?: "" | "five_whys" | "6m" | "ishikawa" | "a3" | "8d" | "other";
   observations?: string;
@@ -436,6 +472,7 @@ export interface TreatmentWritePayload {
 
 export interface TreatmentUpdatePayload {
   scheduled_for?: string | null;
+  treatment_location?: string;
   status?: "pending" | "scheduled" | "in_progress" | "completed" | "cancelled";
   method_used?: "" | "five_whys" | "6m" | "ishikawa" | "a3" | "8d" | "other";
   observations?: string;
@@ -658,6 +695,20 @@ export interface AnomalyTreatmentTaskSummary {
   } | null;
   root_cause_description?: string;
 }
+
+export interface AnomalyTreatmentLearnedLessonSummary {
+  treatment_id: UUID;
+  treatment_code: string;
+  saved_by?: UserSummary | null;
+  saved_at?: string | null;
+  has_learning: boolean | null;
+  learned_text: string;
+  no_learning_reason: string;
+  procedure_modified: boolean | null;
+  procedure_modification_notes: string;
+  evidences: TreatmentLearnedLessonEvidence[];
+}
+
 export interface AnomalyDetail extends AnomalyListItem {
   description: string;
   duplicate_of?: AnomalyListItem | null;
@@ -690,6 +741,7 @@ export interface AnomalyDetail extends AnomalyListItem {
   immediate_action?: AnomalyImmediateAction | null;
   action_plans: ActionPlanSummary[];
   treatment_tasks: AnomalyTreatmentTaskSummary[];
+  learned_lessons: AnomalyTreatmentLearnedLessonSummary[];
   created_at: string;
   updated_at: string;
   row_version: number;
@@ -721,7 +773,7 @@ export interface AnomalyCreatePayload {
   area: UUID;
   anomaly_type: UUID;
   anomaly_origin: UUID;
-  priority: UUID;
+  priority?: UUID;
   detected_at: string;
   manufacturing_order_number?: string;
   affected_quantity?: number;

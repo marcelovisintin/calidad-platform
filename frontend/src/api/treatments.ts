@@ -4,6 +4,7 @@ import type {
   TreatmentCandidate,
   TreatmentDetail,
   TreatmentEvidence,
+  TreatmentLearnedLessonPayload,
   TreatmentParticipant,
   TreatmentRootCause,
   TreatmentSummary,
@@ -50,6 +51,30 @@ export function fetchTreatmentTracking(filters: {
 
 export function fetchTreatmentTrackingDetail(treatmentId: string) {
   return apiRequest<TreatmentDetail>(`/actions/treatment-tracking/${treatmentId}/`);
+}
+
+export function fetchLearnedLessons(page = 1, search = "") {
+  const params = new URLSearchParams({ page: String(page), page_size: "10" });
+  if (search.trim()) {
+    params.set("search", search.trim());
+  }
+  return apiRequest<PagedResponse<TreatmentSummary>>(`/actions/learned-lessons/?${params.toString()}`);
+}
+
+export function saveTreatmentLearnedLesson(treatmentId: string, payload: TreatmentLearnedLessonPayload) {
+  const formData = new FormData();
+  formData.append("has_learning", String(payload.has_learning));
+  formData.append("learned_text", payload.learned_text ?? "");
+  formData.append("no_learning_reason", payload.no_learning_reason ?? "");
+  formData.append("procedure_modified", String(payload.procedure_modified));
+  formData.append("procedure_modification_notes", payload.procedure_modification_notes ?? "");
+  (payload.evidences ?? []).forEach((file) => {
+    formData.append("evidences", file);
+  });
+  return apiRequest<TreatmentSummary>(`/actions/learned-lessons/${treatmentId}/`, {
+    method: "PATCH",
+    body: formData,
+  });
 }
 
 export function fetchTreatmentTasksHistory(filters: {

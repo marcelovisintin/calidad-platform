@@ -3,6 +3,8 @@ from rest_framework.routers import DefaultRouter
 
 from apps.actions.api.treatment_views import (
     TreatmentEvidenceDownloadAPIView,
+    TreatmentLearnedLessonEvidenceDownloadAPIView,
+    TreatmentLearnedLessonViewSet,
     TreatmentTaskEvidenceDownloadAPIView,
     TreatmentTrackingViewSet,
     TreatmentViewSet,
@@ -16,6 +18,7 @@ router.register("plans", ActionPlanViewSet, basename="action-plan")
 router.register("items", ActionItemViewSet, basename="action-item")
 router.register("treatments", TreatmentViewSet, basename="treatment")
 router.register("treatment-tracking", TreatmentTrackingViewSet, basename="treatment-tracking")
+router.register("learned-lessons", TreatmentLearnedLessonViewSet, basename="learned-lesson")
 
 urlpatterns = [
     path("", ActionsApiRootView.as_view(), name="actions-root"),
@@ -29,6 +32,11 @@ urlpatterns = [
         "treatments/task-evidences/<uuid:evidence_id>/download/",
         TreatmentTaskEvidenceDownloadAPIView.as_view(),
         name="treatment-task-evidence-download",
+    ),
+    path(
+        "learned-lessons/evidences/<uuid:evidence_id>/download/",
+        TreatmentLearnedLessonEvidenceDownloadAPIView.as_view(),
+        name="treatment-learned-lesson-evidence-download",
     ),
     path("", include(router.urls)),
 ]

@@ -173,7 +173,7 @@ export function ImmediateActionsPage() {
       <div className="toolbar-card">
         <input
           onChange={handleSearch}
-          placeholder="Buscar por codigo, titulo, proceso o usuario"
+          placeholder="Buscar por codigo, titulo, elaborado por o usuario"
           type="search"
           value={search}
         />
@@ -213,7 +213,7 @@ export function ImmediateActionsPage() {
                     <small>
                       Reportada por: {anomaly.reporter?.full_name || anomaly.reporter?.username || "Sin dato"}
                       {" | "}
-                      {anomaly.area?.name || "Sin proceso"}
+                      {anomaly.affected_process || anomaly.area?.name || "Sin elaborado por"}
                     </small>
                   </div>
                   <div className="badge-stack align-end">

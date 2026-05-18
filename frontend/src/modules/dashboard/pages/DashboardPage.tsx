@@ -29,9 +29,15 @@ const primarySectionsBase = [
   },
   {
     title: "Seguimiento de tratamientos",
-    description: "Consulta readonly de procedimientos, tareas, responsables, evidencias y validaciones.",
+    description: "Consulta solo lectura de procedimientos, tareas, responsables, evidencias y validaciones.",
     to: "/treatments/tracking",
     label: "Auditar tratamientos",
+  },
+  {
+    title: "Lecciones aprendidas",
+    description: "Registra aprendizajes y evidencias de tratamientos validados como eficaces.",
+    to: "/learned-lessons",
+    label: "Registrar aprendizajes",
   },
   {
     title: "Tratamientos",
@@ -91,15 +97,15 @@ const workflowSections = [
 
 const adminSections = [
   { title: "Usuarios", description: "Alta, baja y edicion de usuarios del sistema.", to: "/management/users" },
-  { title: "Roles y alcances", description: "Roles, permisos y alcance por sitio o proceso.", href: "/admin/accounts/role/" },
+  { title: "Roles y alcances", description: "Roles, permisos y alcance por sitio o sector.", href: "/admin/accounts/role/" },
   { title: "Alcances de usuario", description: "Nivel, rol y checklist de permisos por usuario.", to: "/management/user-scopes" },
   { title: "Areas", description: "Areas principales de la empresa donde opera el sistema.", to: "/management/catalogs?entity=sites" },
   { title: "Procesos", description: "Procesos o subsectores de trabajo disponibles para el registro.", to: "/management/catalogs?entity=areas" },
-  { title: "Lineas", description: "Lineas o puestos productivos, si el proceso las utiliza.", to: "/management/catalogs?entity=lines" },
+  { title: "Lineas", description: "Lineas o puestos productivos, si el sector las utiliza.", to: "/management/catalogs?entity=lines" },
   { title: "Tipos de desvio", description: "Catalogo de defectos, desvios o eventos de calidad.", to: "/management/catalogs?entity=anomaly-types" },
-  { title: "Origenes", description: "Origen o fuente primaria asociada a la anomalia.", to: "/management/catalogs?entity=anomaly-origins" },
+  { title: "Imputado a", description: "Catalogo de imputaciones asociadas a la anomalia.", to: "/management/catalogs?entity=anomaly-origins" },
   { title: "Criterios de REVICION DE HALLAZGOS", description: "Criterios usados para la REVICION DE HALLAZGOS de cada anomalia.", to: "/management/catalogs?entity=severities" },
-  { title: "Prioridades", description: "Prioridades operativas y de tratamiento.", to: "/management/catalogs?entity=priorities" },
+  { title: "Orden operativo", description: "Criterios internos de ordenamiento operativo y tratamiento.", to: "/management/catalogs?entity=priorities" },
   { title: "Tipos de accion", description: "Contencion, correctiva, preventiva o mejora.", to: "/management/catalogs?entity=action-types" },
   { title: "Panel admin Django", description: "Acceso completo al panel tecnico y maestros.", href: "/admin/" },
 ];
