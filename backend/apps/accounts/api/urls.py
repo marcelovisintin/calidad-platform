@@ -10,7 +10,10 @@ from apps.accounts.api.views import (
     UserAccessOptionsAPIView,
     UserAccessProfileAPIView,
     UserDetailAPIView,
+    UserImportConfirmAPIView,
+    UserImportPreviewAPIView,
     UserManagementAPIView,
+    UserPhotoAPIView,
 )
 
 app_name = "accounts"
@@ -23,6 +26,9 @@ urlpatterns = [
     path("change-password/", ChangePasswordAPIView.as_view(), name="change-password"),
     path("me/", CurrentUserAPIView.as_view(), name="me"),
     path("users/", UserManagementAPIView.as_view(), name="user-list"),
+    path("users/import/preview/", UserImportPreviewAPIView.as_view(), name="user-import-preview"),
+    path("users/import/confirm/", UserImportConfirmAPIView.as_view(), name="user-import-confirm"),
+    path("users/<uuid:user_id>/photo/", UserPhotoAPIView.as_view(), name="user-photo"),
     path("users/access-options/", UserAccessOptionsAPIView.as_view(), name="user-access-options"),
     path("users/<uuid:pk>/", UserDetailAPIView.as_view(), name="user-detail"),
     path("users/<uuid:pk>/access-profile/", UserAccessProfileAPIView.as_view(), name="user-access-profile"),

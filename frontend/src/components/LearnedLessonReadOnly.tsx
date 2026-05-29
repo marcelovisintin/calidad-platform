@@ -1,3 +1,5 @@
+import { MouseEvent, useState } from "react";
+import { normalizeProtectedFileUrl, openAuthenticatedFile } from "../api/files";
 import type { TreatmentLearnedLessonEvidence, UserSummary } from "../api/types";
 import { formatDateTime } from "../app/utils";
 
@@ -12,27 +14,6 @@ type LearnedLessonReadOnlyProps = {
   procedureModificationNotes?: string;
   evidences?: TreatmentLearnedLessonEvidence[];
 };
-
-function evidenceUrl(fileUrl: string) {
-  if (!fileUrl) {
-    return "#";
-  }
-  if (fileUrl.startsWith("/")) {
-    return fileUrl;
-  }
-  if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) {
-    try {
-      const parsed = new URL(fileUrl);
-      const host = parsed.hostname.toLowerCase();
-      if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
-        return `${parsed.pathname}${parsed.search}${parsed.hash}`;
-      }
-    } catch {
-      return fileUrl;
-    }
-  }
-  return fileUrl.startsWith("/") ? fileUrl : `/${fileUrl}`;
-}
 
 function yesNo(value: boolean | null) {
   if (value === true) {
@@ -55,6 +36,18 @@ export function LearnedLessonReadOnly({
   procedureModificationNotes,
   evidences = [],
 }: LearnedLessonReadOnlyProps) {
+  const [error, setError] = useState<string | null>(null);
+
+  const handleOpenEvidence = async (event: MouseEvent<HTMLAnchorElement>, fileUrl: string, fallbackName: string) => {
+    event.preventDefault();
+    setError(null);
+    try {
+      await openAuthenticatedFile(fileUrl, fallbackName);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo abrir la evidencia.");
+    }
+  };
+
   return (
     <div className="nested-card learned-lesson-readonly">
       <div className="learned-lesson-readonly-grid">
@@ -97,10 +90,18 @@ export function LearnedLessonReadOnly({
 
         <div className="learned-lesson-readonly-column">
           <small>Evidencia objetiva</small>
+          {error ? <p className="form-error">{error}</p> : null}
           {evidences.length ? (
             <div className="stack-list compact learned-lesson-evidence-list">
               {evidences.map((evidence) => (
-                <a className="list-card compact" href={evidenceUrl(evidence.file_url)} key={evidence.id} rel="noopener noreferrer" target="_blank">
+                <a
+                  className="list-card compact"
+                  href={normalizeProtectedFileUrl(evidence.file_url)}
+                  key={evidence.id}
+                  onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
                   <span>{evidence.original_name}</span>
                   <small>{formatDateTime(evidence.created_at)}</small>
                 </a>

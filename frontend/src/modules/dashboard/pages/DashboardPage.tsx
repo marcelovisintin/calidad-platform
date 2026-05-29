@@ -1,76 +1,83 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { fetchMyActions, fetchPendingActions } from "../../../api/actions";
+import { fetchDashboardSummary, fetchPendingActions } from "../../../api/actions";
 import { fetchMyAnomalies } from "../../../api/anomalies";
-import { fetchInboxSummary } from "../../../api/notifications";
 import { fetchTreatments } from "../../../api/treatments";
+import type { DashboardSummaryCard } from "../../../api/types";
 import { isAdminUser } from "../../../app/access";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { formatDate, formatDateTime } from "../../../app/utils";
 import { CompanyLogo } from "../../../components/CompanyLogo";
 import { DataState } from "../../../components/DataState";
-import { StatCard } from "../../../components/StatCard";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
 const primarySectionsBase = [
   {
+    sequence: 1,
     title: "Registrar anomalia",
     description: "Carga inicial desde planta con datos rapidos, OF, cantidad afectada y confirmacion inmediata.",
     to: "/anomalies/new",
     label: "Ir a nueva anomalia",
   },
   {
+    sequence: 2,
     title: "Seguimiento de anomalias",
     description: "Consulta estado, etapa, responsables y trazabilidad de cada caso reportado.",
     to: "/anomalies",
     label: "Ver mis anomalias",
   },
   {
-    title: "Seguimiento de tratamientos",
-    description: "Consulta solo lectura de procedimientos, tareas, responsables, evidencias y validaciones.",
-    to: "/treatments/tracking",
-    label: "Auditar tratamientos",
-  },
-  {
-    title: "Lecciones aprendidas",
-    description: "Registra aprendizajes y evidencias de tratamientos validados como eficaces.",
-    to: "/learned-lessons",
-    label: "Registrar aprendizajes",
-  },
-  {
+    sequence: 3,
     title: "Tratamientos",
     description: "Gestiona convocatorias, analisis de causa raiz y tareas surgidas de anomalias con REVICION DE HALLAZGOS para tratamiento.",
     to: "/treatments",
     label: "Ver tratamientos",
   },
   {
+    sequence: 4,
+    title: "Accion inmediata",
+    description: "Cierre directo de anomalias con REVICION DE HALLAZGOS como accion inmediata, con responsable, evidencia y verificacion de eficacia.",
+    to: "/anomalies/immediate-actions",
+    label: "Gestionar accion inmediata",
+  },
+  {
+    sequence: 5,
+    title: "Seguimiento de tratamientos",
+    description: "Consulta solo lectura de procedimientos, tareas, responsables, evidencias y validaciones.",
+    to: "/treatments/tracking",
+    label: "Auditar tratamientos",
+  },
+  {
+    sequence: 6,
     title: "Acciones y pendientes",
     description: "Accede a acciones asignadas, tareas abiertas y bandeja interna del usuario.",
     to: "/actions/mine",
     label: "Ver acciones",
   },
   {
+    sequence: 7,
     title: "Validacion",
     description: "Evalua si los tratamientos completados fueron eficaces o deben reabrirse.",
     to: "/validation",
     label: "Validar eficacia",
   },
   {
+    sequence: 8,
+    title: "Lecciones aprendidas",
+    description: "Registra aprendizajes y evidencias de tratamientos validados como eficaces.",
+    to: "/learned-lessons",
+    label: "Registrar aprendizajes",
+  },
+  {
+    sequence: 9,
     title: "Bandeja interna",
     description: "Revisa avisos, solicitudes de participacion y notificaciones operativas por usuario.",
     to: "/notifications/inbox",
     label: "Abrir bandeja",
   },
 ];
-
-const immediateActionSection = {
-  title: "Accion inmediata",
-  description: "Cierre directo de anomalias con REVICION DE HALLAZGOS como accion inmediata, con responsable, evidencia y verificacion de eficacia.",
-  to: "/anomalies/immediate-actions",
-  label: "Gestionar accion inmediata",
-};
 
 const workflowSections = [
   {
@@ -97,13 +104,14 @@ const workflowSections = [
 
 const adminSections = [
   { title: "Usuarios", description: "Alta, baja y edicion de usuarios del sistema.", to: "/management/users" },
+  { title: "Importacion de usuarios", description: "Carga masiva desde CSV o Excel con datos basicos.", to: "/management/users/import" },
   { title: "Roles y alcances", description: "Roles, permisos y alcance por sitio o sector.", href: "/admin/accounts/role/" },
   { title: "Alcances de usuario", description: "Nivel, rol y checklist de permisos por usuario.", to: "/management/user-scopes" },
   { title: "Areas", description: "Areas principales de la empresa donde opera el sistema.", to: "/management/catalogs?entity=sites" },
   { title: "Procesos", description: "Procesos o subsectores de trabajo disponibles para el registro.", to: "/management/catalogs?entity=areas" },
   { title: "Lineas", description: "Lineas o puestos productivos, si el sector las utiliza.", to: "/management/catalogs?entity=lines" },
   { title: "Tipos de desvio", description: "Catalogo de defectos, desvios o eventos de calidad.", to: "/management/catalogs?entity=anomaly-types" },
-  { title: "Imputado a", description: "Catalogo de imputaciones asociadas a la anomalia.", to: "/management/catalogs?entity=anomaly-origins" },
+  { title: "Asignado a", description: "Catalogo de asignaciones asociadas a la anomalia.", to: "/management/catalogs?entity=anomaly-origins" },
   { title: "Criterios de REVICION DE HALLAZGOS", description: "Criterios usados para la REVICION DE HALLAZGOS de cada anomalia.", to: "/management/catalogs?entity=severities" },
   { title: "Orden operativo", description: "Criterios internos de ordenamiento operativo y tratamiento.", to: "/management/catalogs?entity=priorities" },
   { title: "Tipos de accion", description: "Contencion, correctiva, preventiva o mejora.", to: "/management/catalogs?entity=action-types" },
@@ -135,6 +143,100 @@ const viewLabels: Record<DashboardView, string> = {
   admin: "Configuracion y maestros",
 };
 
+function compactStatuses(card: DashboardSummaryCard) {
+  const visible = card.statuses.filter((item) => item.count > 0).slice(0, 4);
+  const source = visible.length ? visible : card.statuses.slice(0, 4);
+  return source;
+}
+
+function DashboardSummaryCardView({
+  card,
+  adminScope,
+  expanded,
+  onToggle,
+}: {
+  card: DashboardSummaryCard;
+  adminScope: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const compact = compactStatuses(card);
+  const hiddenCount = Math.max(0, card.statuses.length - compact.length);
+
+  return (
+    <article className="stat-card dashboard-summary-card">
+      <span className="stat-label">{card.title}</span>
+      <strong className="stat-value">{card.total}</strong>
+      <span className="stat-hint">{card.description}</span>
+      <div className="dashboard-status-line">
+        {compact.map((status) => (
+          <span key={status.key}>{`${status.label}: ${status.count}`}</span>
+        ))}
+        {hiddenCount ? <span>{`+ ${hiddenCount} estados mas`}</span> : null}
+      </div>
+      {adminScope ? (
+        <button className="button button-secondary dashboard-detail-toggle" onClick={onToggle} type="button">
+          {expanded ? "Ocultar detalle por usuario" : "Ver detalle por usuario"}
+        </button>
+      ) : null}
+    </article>
+  );
+}
+
+function DashboardSummaryDetail({ card }: { card: DashboardSummaryCard }) {
+  const rows = card.detail_rows ?? [];
+  if (!rows.length) {
+    return (
+      <section className="panel muted dashboard-detail-panel">
+        <strong>{card.title}</strong>
+        <p>No hay datos por usuario para mostrar.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel dashboard-detail-panel">
+      <div className="section-head compact">
+        <div>
+          <p className="eyebrow">Detalle por usuario</p>
+          <h3>{card.title}</h3>
+        </div>
+      </div>
+      <div className="table-scroll dashboard-summary-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Total</th>
+              {card.statuses.map((status) => (
+                <th key={status.key}>{status.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.user.id}>
+                <td>{row.user.name}</td>
+                <td>{row.total}</td>
+                {card.statuses.map((status) => (
+                  <td key={`${row.user.id}-${status.key}`}>{row.statuses.find((item) => item.key === status.key)?.count ?? 0}</td>
+                ))}
+              </tr>
+            ))}
+            <tr className="dashboard-summary-total-row">
+              <td>Total general</td>
+              <td>{card.total}</td>
+              {card.statuses.map((status) => (
+                <td key={`total-${status.key}`}>{status.count}</td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function resolveDashboardView(value: string | null, adminUser: boolean): DashboardView {
   if (!value) {
     return "none";
@@ -159,6 +261,7 @@ export function DashboardPage() {
   const adminUser = isAdminUser(user);
   const [searchParams, setSearchParams] = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [expandedSummary, setExpandedSummary] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<DashboardView>(() => resolveDashboardView(searchParams.get("view"), adminUser));
 
   useEffect(() => {
@@ -170,24 +273,20 @@ export function DashboardPage() {
     [adminUser],
   );
 
-  const primarySections = useMemo(
-    () => (adminUser ? [...primarySectionsBase, immediateActionSection] : primarySectionsBase),
-    [adminUser],
-  );
+  const primarySections = primarySectionsBase;
   const { data, loading, error, reload } = useAsyncTask(async () => {
     if (!user) {
       throw new Error("No hay usuario autenticado.");
     }
 
-    const [anomalies, myActions, treatments, pendingActions, inboxSummary] = await Promise.all([
+    const [summary, anomalies, treatments, pendingActions] = await Promise.all([
+      fetchDashboardSummary(),
       fetchMyAnomalies(user.id),
-      fetchMyActions(),
       fetchTreatments(),
       fetchPendingActions(),
-      fetchInboxSummary(),
     ]);
 
-    return { anomalies, myActions, treatments, pendingActions, inboxSummary };
+    return { summary, anomalies, treatments, pendingActions };
   }, [user?.id]);
 
   const selectView = (viewId: DashboardView) => {
@@ -297,16 +396,21 @@ export function DashboardPage() {
                     <p className="eyebrow">Resumen</p>
                     <h2>Indicadores actuales</h2>
                   </div>
-                  <Link className="button button-primary" to="/anomalies/new">
-                    Nueva anomalia
-                  </Link>
                 </div>
-                <div className="stats-grid compact-grid">
-                  <StatCard label="Seguimiento de anomalias" value={data.anomalies.count} hint="Casos reportados por vos" />
-                  <StatCard label="Acciones" value={data.myActions.count} hint="Acciones activas o historicas" tone="accent" />
-                  <StatCard label="Pendientes" value={data.pendingActions.count} hint="Trabajo operativo abierto" tone="warning" />
-                  <StatCard label="Bandeja" value={data.inboxSummary.tasks_pending} hint="Solicitudes por resolver" tone="success" />
+                <div className="stats-grid compact-grid dashboard-summary-grid">
+                  {data.summary.cards.map((card) => (
+                    <DashboardSummaryCardView
+                      adminScope={data.summary.scope === "admin"}
+                      card={card}
+                      expanded={expandedSummary === card.key}
+                      key={card.key}
+                      onToggle={() => setExpandedSummary((current) => (current === card.key ? null : card.key))}
+                    />
+                  ))}
                 </div>
+                {data.summary.scope === "admin" && expandedSummary ? (
+                  <DashboardSummaryDetail card={data.summary.cards.find((card) => card.key === expandedSummary) ?? data.summary.cards[0]} />
+                ) : null}
               </section>
             ) : null}
 
@@ -321,6 +425,7 @@ export function DashboardPage() {
                 <div className="management-grid">
                   {primarySections.map((section) => (
                     <Link className="management-card" key={section.title} to={section.to}>
+                      <span className="section-sequence-badge">{section.sequence}</span>
                       <p className="eyebrow">Operacion</p>
                       <h3>{section.title}</h3>
                       <p>{section.description}</p>

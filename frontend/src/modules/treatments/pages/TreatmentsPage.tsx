@@ -11,6 +11,7 @@ import {
   createTreatment,
   fetchTreatmentCandidates,
   fetchTreatmentDetail,
+  fetchOpenTreatmentOptions,
   fetchTreatments,
   updateTreatment,
   updateTreatmentTask,
@@ -74,7 +75,25 @@ const EMPTY_TASK_DRAFT: TaskDraft = {
 
 function buildUsersLabel(user: UserDirectoryItem) {
   const name = user.full_name || user.username;
-  return `${name} (${user.username})`;
+  const sector = user.sector?.name ? ` - ${user.sector.name}` : "";
+  return `${name} (${user.username})${sector}`;
+}
+
+function getTreatmentTaskCount(treatment: { tasks: TreatmentTask[]; root_causes: Array<{ tasks?: TreatmentTask[] }> } | null) {
+  if (!treatment) {
+    return 0;
+  }
+
+  const taskIds = new Set<string>();
+  for (const task of treatment.tasks ?? []) {
+    taskIds.add(task.id);
+  }
+  for (const cause of treatment.root_causes ?? []) {
+    for (const task of cause.tasks ?? []) {
+      taskIds.add(task.id);
+    }
+  }
+  return taskIds.size;
 }
 
 function normalizeEvidenceType(contentType: string) {
@@ -160,6 +179,7 @@ export function TreatmentsPage() {
   const [selectedTab, setSelectedTab] = useState<TreatmentTab>("agenda");
 
   const [selectedCandidateId, setSelectedCandidateId] = useState("");
+  const [selectedOpenTreatmentId, setSelectedOpenTreatmentId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -172,11 +192,15 @@ export function TreatmentsPage() {
   const [effectivenessResponsibleId, setEffectivenessResponsibleId] = useState("");
 
   const [participantUserId, setParticipantUserId] = useState("");
+  const [participantAreaId, setParticipantAreaId] = useState("");
   const [participantRole, setParticipantRole] = useState("convoked");
   const [participantNote, setParticipantNote] = useState("");
 
-  const [linkAnomalyId, setLinkAnomalyId] = useState("");
+  const [linkAnomalyIds, setLinkAnomalyIds] = useState<string[]>([]);
   const [linkCandidatePage, setLinkCandidatePage] = useState(1);
+  const [linkCandidateAnomalyDraft, setLinkCandidateAnomalyDraft] = useState("");
+  const [linkCandidateSectorDraft, setLinkCandidateSectorDraft] = useState("");
+  const [linkCandidateAreaDraft, setLinkCandidateAreaDraft] = useState("");
   const [linkCandidateAnomalyFilter, setLinkCandidateAnomalyFilter] = useState("");
   const [linkCandidateSectorFilter, setLinkCandidateSectorFilter] = useState("");
   const [linkCandidateAreaFilter, setLinkCandidateAreaFilter] = useState("");
@@ -245,6 +269,18 @@ export function TreatmentsPage() {
     linkCandidateDateFrom,
     linkCandidateDateTo,
   ]);
+
+  const {
+    data: openTreatmentOptions,
+    reload: reloadOpenTreatmentOptions,
+  } = useAsyncTask(async () => {
+    if (!selectedCandidateId) {
+      return [];
+    }
+    return fetchOpenTreatmentOptions(selectedCandidateId);
+  }, [selectedCandidateId]);
+
+  const openTreatments = openTreatmentOptions ?? [];
 
   const filteredTreatments = useMemo(() => supportData?.treatments ?? [], [supportData?.treatments]);
 
@@ -331,7 +367,9 @@ export function TreatmentsPage() {
 
   useEffect(() => {
     if (!selectedTreatment) {
-      setLinkAnomalyId("");
+      if (linkAnomalyIds.length) {
+        setLinkAnomalyIds([]);
+      }
       return;
     }
 
@@ -340,29 +378,30 @@ export function TreatmentsPage() {
     );
 
     if (!available.length) {
-      setLinkAnomalyId("");
+      if (linkAnomalyIds.length) {
+        setLinkAnomalyIds([]);
+      }
       return;
     }
 
-    if (linkAnomalyId && available.some((item) => item.id === linkAnomalyId)) {
+    const stillAvailable = linkAnomalyIds.filter((id) => available.some((item) => item.id === id));
+    if (stillAvailable.length === linkAnomalyIds.length && stillAvailable.length > 0) {
       return;
     }
 
-    setLinkAnomalyId(available[0].id);
-  }, [linkAnomalyId, selectedTreatment, supportData?.linkCandidates]);
+    setLinkAnomalyIds(stillAvailable.length ? stillAvailable : [available[0].id]);
+  }, [linkAnomalyIds, selectedTreatment, supportData?.linkCandidates]);
 
   useEffect(() => {
-    if (!supportData?.users.length) {
-      setParticipantUserId("");
+    if (!openTreatments.length) {
+      setSelectedOpenTreatmentId("");
       return;
     }
-
-    if (participantUserId && supportData.users.some((user) => user.id === participantUserId)) {
+    if (selectedOpenTreatmentId && openTreatments.some((treatment) => treatment.id === selectedOpenTreatmentId)) {
       return;
     }
-
-    setParticipantUserId(supportData.users[0].id);
-  }, [participantUserId, supportData?.users]);
+    setSelectedOpenTreatmentId(openTreatments[0].id);
+  }, [openTreatments, selectedOpenTreatmentId]);
 
   const unlinkedCandidates = useMemo(() => {
     if (!selectedTreatment) {
@@ -380,6 +419,36 @@ export function TreatmentsPage() {
     () => (selectedTreatment?.participants ?? []).filter((participant) => participant.user),
     [selectedTreatment?.participants],
   );
+  const participantAreaOptions = useMemo(() => {
+    const areaMap = new Map<string, { id: string; name: string }>();
+    for (const user of supportData?.users ?? []) {
+      if (user.sector?.id) {
+        areaMap.set(user.sector.id, { id: user.sector.id, name: user.sector.name });
+      }
+    }
+    return Array.from(areaMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [supportData?.users]);
+  const participantUserOptions = useMemo(() => {
+    const users = supportData?.users ?? [];
+    if (!participantAreaId) {
+      return users;
+    }
+    return users.filter((user) => user.sector?.id === participantAreaId);
+  }, [participantAreaId, supportData?.users]);
+
+  useEffect(() => {
+    if (!participantUserOptions.length) {
+      setParticipantUserId("");
+      return;
+    }
+
+    if (participantUserId && participantUserOptions.some((user) => user.id === participantUserId)) {
+      return;
+    }
+
+    setParticipantUserId(participantUserOptions[0].id);
+  }, [participantUserId, participantUserOptions]);
+
   const hasEffectivenessAssignment = Boolean(effectivenessEvaluationDate) && Boolean(effectivenessResponsibleId);
   const savedEffectivenessDate = selectedTreatment?.effectiveness_evaluation_date || "";
   const savedEffectivenessResponsibleId = selectedTreatment?.effectiveness_responsible?.id || "";
@@ -387,7 +456,8 @@ export function TreatmentsPage() {
   const hasPendingEffectivenessChanges =
     Boolean(selectedTreatment) &&
     (effectivenessEvaluationDate !== savedEffectivenessDate || effectivenessResponsibleId !== savedEffectivenessResponsibleId);
-  const hasTreatmentTasks = Boolean(selectedTreatment?.tasks.length);
+  const treatmentTaskCount = getTreatmentTaskCount(selectedTreatment);
+  const hasTreatmentTasks = treatmentTaskCount > 0;
   const canCreateTask =
     Boolean(taskDraft.title.trim()) &&
     Boolean(taskDraft.description.trim()) &&
@@ -400,6 +470,13 @@ export function TreatmentsPage() {
     [selectedTaskId, selectedTreatment?.tasks],
   );
   const treatmentLocked = Boolean(selectedTreatment?.is_locked);
+
+  const handleApplyLinkCandidateFilters = () => {
+    setLinkCandidateAnomalyFilter(linkCandidateAnomalyDraft.trim());
+    setLinkCandidateSectorFilter(linkCandidateSectorDraft.trim());
+    setLinkCandidateAreaFilter(linkCandidateAreaDraft.trim());
+    setLinkCandidatePage(1);
+  };
 
   useEffect(() => {
     if (!selectedTask) {
@@ -500,9 +577,9 @@ export function TreatmentsPage() {
     }
   };
 
-  const handleCreateTreatment = async () => {
+  const handleCreateTreatment = async (forceCreateNew = false) => {
     if (!selectedCandidateId) {
-      setFormError("Selecciona una anomalia para crear el tratamiento.");
+      setFormError("Selecciona una anomalia disponible para tratamiento.");
       return;
     }
 
@@ -511,14 +588,34 @@ export function TreatmentsPage() {
     setMessage(null);
 
     try {
-      const created = await createTreatment({ primary_anomaly: selectedCandidateId, status: "pending" });
+      if (openTreatments.length && !forceCreateNew) {
+        if (!selectedOpenTreatmentId) {
+          setFormError("Selecciona el tratamiento abierto al que se asociara la anomalia.");
+          return;
+        }
+        await addTreatmentAnomaly(selectedOpenTreatmentId, selectedCandidateId);
+        setSelectedTreatmentId(selectedOpenTreatmentId);
+        setSelectedTab("agenda");
+        setSelectedTaskId("");
+        await reloadSupport();
+        await reloadOpenTreatmentOptions();
+        setMessage("Anomalia asociada a tratamiento abierto. No se creo un tratamiento nuevo.");
+        return;
+      }
+
+      const created = await createTreatment({
+        primary_anomaly: selectedCandidateId,
+        status: "pending",
+        force_create_new: forceCreateNew,
+      });
       setSelectedTreatmentId(created.id);
       setSelectedTab("agenda");
       setSelectedTaskId("");
       await reloadSupport();
-      setMessage("Tratamiento creado correctamente.");
+      await reloadOpenTreatmentOptions();
+      setMessage("Tratamiento creado correctamente. Revisa la seccion de anomalias asociadas para vincular otras anomalias compatibles.");
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "No se pudo crear el tratamiento.");
+      setFormError(err instanceof Error ? err.message : "No se pudo completar el tratamiento.");
     } finally {
       setBusy(false);
     }
@@ -564,7 +661,7 @@ export function TreatmentsPage() {
 
   const handleAddAnomaly = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedTreatment || !linkAnomalyId) {
+    if (!selectedTreatment || !linkAnomalyIds.length) {
       return;
     }
     if (treatmentLocked) {
@@ -573,8 +670,11 @@ export function TreatmentsPage() {
     }
 
     await runMutation(async () => {
-      await addTreatmentAnomaly(selectedTreatment.id, linkAnomalyId);
-    }, "Anomalia vinculada al tratamiento.");
+      for (const anomalyId of linkAnomalyIds) {
+        await addTreatmentAnomaly(selectedTreatment.id, anomalyId);
+      }
+      setLinkAnomalyIds([]);
+    }, linkAnomalyIds.length === 1 ? "Anomalia vinculada al tratamiento." : "Anomalias vinculadas al tratamiento.");
   };
 
   const handleSaveAnalysis = async (event: FormEvent<HTMLFormElement>) => {
@@ -586,15 +686,8 @@ export function TreatmentsPage() {
       setFormError("El tratamiento esta cerrado por validacion eficaz y no admite modificaciones.");
       return;
     }
-    if (!methodUsed) {
-      setFormError("Debes seleccionar un metodo de analisis.");
-      return;
-    }
-    if (!observations.trim()) {
-      setFormError("Debes registrar observaciones para guardar el analisis.");
-      return;
-    }
-    if (!selectedTreatment.tasks.length) {
+    const freshTreatment = await fetchTreatmentDetail(selectedTreatment.id);
+    if (getTreatmentTaskCount(freshTreatment) === 0) {
       setFormError("Debes registrar al menos una tarea surgida del tratamiento antes de guardar el analisis.");
       return;
     }
@@ -608,7 +701,7 @@ export function TreatmentsPage() {
     }
 
     const confirmSave = window.confirm(
-      "Confirmas guardar el analisis de tratamiento? Esto impactara en el seguimiento de la anomalia.",
+      "Confirmas guardar la evaluacion de eficacia y los datos de analisis cargados? Esto impactara en el seguimiento de la anomalia.",
     );
     if (!confirmSave) {
       return;
@@ -857,10 +950,33 @@ return (
               <option key={candidate.id} value={candidate.id}>{`${candidate.code} - ${candidate.title}`}</option>
             ))}
           </select>
-          <button className="button button-primary" disabled={busy || !selectedCandidateId} onClick={() => void handleCreateTreatment()} type="button">
-            Crear tratamiento
-          </button>
+          {openTreatments.length ? (
+            <select onChange={(event) => setSelectedOpenTreatmentId(event.target.value)} value={selectedOpenTreatmentId}>
+              {openTreatments.map((treatment) => (
+                <option key={treatment.id} value={treatment.id}>
+                  {`${treatment.code} - ${treatment.primary_anomaly.code} | ${treatment.primary_anomaly.title}`}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {openTreatments.length ? (
+            <>
+              <button className="button button-primary" disabled={busy || !selectedCandidateId || !selectedOpenTreatmentId} onClick={() => void handleCreateTreatment()} type="button">
+                Asociar a tratamiento abierto
+              </button>
+              <button className="button button-secondary" disabled={busy || !selectedCandidateId} onClick={() => void handleCreateTreatment(true)} type="button">
+                Crear nuevo tratamiento
+              </button>
+            </>
+          ) : (
+            <button className="button button-primary" disabled={busy || !selectedCandidateId} onClick={() => void handleCreateTreatment(true)} type="button">
+              Crear tratamiento
+            </button>
+          )}
         </div>
+        {selectedCandidateId && openTreatments.length ? (
+          <p className="muted-copy">Hay tratamientos abiertos disponibles. Podes asociar la anomalia a uno existente o crear un tratamiento nuevo con esta anomalia.</p>
+        ) : null}
       </div>
 
       {message ? <div className="panel">{message}</div> : null}
@@ -894,7 +1010,7 @@ return (
                     <p className="treatment-title">{anomaly.code}</p>
                     <p>{anomaly.title}</p>
                     <small>
-                      Generada por: {anomaly.reporter?.full_name || anomaly.reporter?.username || "Sin dato"} | Elaborado por: {anomaly.affected_process || anomaly.area?.name || "-"} | Imputado a: {anomaly.anomaly_origin?.name || "-"}
+                      Generada por: {anomaly.reporter?.full_name || anomaly.reporter?.username || "Sin dato"} | Elaborado por: {anomaly.affected_process || anomaly.area?.name || "-"} | Asignado a: {anomaly.imputed_area?.name || anomaly.anomaly_origin?.name || "-"}
                     </small>
                   </button>
                 );
@@ -988,9 +1104,20 @@ return (
                         </div>
                         <div className="form-grid">
                           <label className="field">
+                            <span>Area</span>
+                            <select disabled={treatmentLocked} onChange={(event) => setParticipantAreaId(event.target.value)} value={participantAreaId}>
+                              <option value="">Todas las areas</option>
+                              {participantAreaOptions.map((area) => (
+                                <option key={area.id} value={area.id}>
+                                  {area.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="field">
                             <span>Usuario</span>
                             <select disabled={treatmentLocked} onChange={(event) => setParticipantUserId(event.target.value)} value={participantUserId}>
-                              {(supportData?.users ?? []).map((user) => (
+                              {participantUserOptions.map((user) => (
                                 <option key={user.id} value={user.id}>
                                   {buildUsersLabel(user)}
                                 </option>
@@ -1036,8 +1163,8 @@ return (
                       <form className="form-section" onSubmit={handleAddAnomaly}>
                         <div className="section-head compact">
                           <h3>Anomalias asociadas al tratamiento</h3>
-                          <button className="button button-primary" disabled={busy || treatmentLocked || !linkAnomalyId} type="submit">
-                            Asociar anomalia
+                          <button className="button button-primary" disabled={busy || treatmentLocked || !linkAnomalyIds.length} type="submit">
+                            Asociar anomalias
                           </button>
                         </div>
                         <div className="form-grid">
@@ -1045,36 +1172,51 @@ return (
                             <span>ID / codigo / titulo</span>
                             <input
                               onChange={(event) => {
-                                setLinkCandidateAnomalyFilter(event.target.value);
-                                setLinkCandidatePage(1);
+                                setLinkCandidateAnomalyDraft(event.target.value);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  handleApplyLinkCandidateFilters();
+                                }
                               }}
                               placeholder="Buscar anomalia"
                               type="search"
-                              value={linkCandidateAnomalyFilter}
+                              value={linkCandidateAnomalyDraft}
                             />
                           </label>
                           <label className="field">
                             <span>Sector</span>
                             <input
                               onChange={(event) => {
-                                setLinkCandidateSectorFilter(event.target.value);
-                                setLinkCandidatePage(1);
+                                setLinkCandidateSectorDraft(event.target.value);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  handleApplyLinkCandidateFilters();
+                                }
                               }}
                               placeholder="Codigo o nombre de sector"
                               type="search"
-                              value={linkCandidateSectorFilter}
+                              value={linkCandidateSectorDraft}
                             />
                           </label>
                           <label className="field">
                             <span>Area</span>
                             <input
                               onChange={(event) => {
-                                setLinkCandidateAreaFilter(event.target.value);
-                                setLinkCandidatePage(1);
+                                setLinkCandidateAreaDraft(event.target.value);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  handleApplyLinkCandidateFilters();
+                                }
                               }}
                               placeholder="Codigo o nombre de area"
                               type="search"
-                              value={linkCandidateAreaFilter}
+                              value={linkCandidateAreaDraft}
                             />
                           </label>
                           <label className="field">
@@ -1119,7 +1261,18 @@ return (
                         </div>
                         <button
                           className="button button-secondary"
+                          disabled={loading || busy}
+                          onClick={handleApplyLinkCandidateFilters}
+                          type="button"
+                        >
+                          Buscar
+                        </button>
+                        <button
+                          className="button button-secondary"
                           onClick={() => {
+                            setLinkCandidateAnomalyDraft("");
+                            setLinkCandidateSectorDraft("");
+                            setLinkCandidateAreaDraft("");
                             setLinkCandidateAnomalyFilter("");
                             setLinkCandidateSectorFilter("");
                             setLinkCandidateAreaFilter("");
@@ -1134,14 +1287,21 @@ return (
                         </button>
                         <label className="field">
                   <span>Anomalias con REVICION DE HALLAZGOS disponibles</span>
-                          <select disabled={treatmentLocked} onChange={(event) => setLinkAnomalyId(event.target.value)} value={linkAnomalyId}>
-                            <option value="">Seleccionar...</option>
+                          <select
+                            disabled={treatmentLocked}
+                            multiple
+                            onChange={(event) => {
+                              setLinkAnomalyIds(Array.from(event.target.selectedOptions, (option) => option.value));
+                            }}
+                            value={linkAnomalyIds}
+                          >
                             {unlinkedCandidates.map((candidate) => (
                               <option key={candidate.id} value={candidate.id}>
                                 {`${candidate.code} - ${candidate.title} | Area: ${candidate.area?.name || "-"} | Usuario: ${candidate.reporter?.full_name || candidate.reporter?.username || "-"} | Fecha: ${formatDate(candidate.detected_at)}`}
                               </option>
                             ))}
                           </select>
+                          <small className="muted-copy">Mantene Ctrl presionado para seleccionar mas de una anomalia.</small>
                         </label>
                         <PaginationControls
                           page={linkCandidatePage}
@@ -1157,7 +1317,7 @@ return (
                                 <strong>{link.anomaly.code}</strong>
                                 <p>{link.anomaly.title}</p>
                                 <small>
-                                  Elaborado por: {link.anomaly.affected_process || link.anomaly.area?.name || "-"} | Imputado a: {link.anomaly.anomaly_origin?.name || "-"}
+                                  Elaborado por: {link.anomaly.affected_process || link.anomaly.area?.name || "-"} | Asignado a: {link.anomaly.imputed_area?.name || link.anomaly.anomaly_origin?.name || "-"}
                                 </small>
                               </div>
                               {link.is_primary ? <span className="status-badge info compact">Principal</span> : null}
@@ -1210,7 +1370,7 @@ return (
                         </div>
                         <label className="field">
                           <span>Metodo usado</span>
-                          <select disabled={treatmentLocked} onChange={(event) => setMethodUsed(event.target.value)} required value={methodUsed}>
+                          <select disabled={treatmentLocked} onChange={(event) => setMethodUsed(event.target.value)} value={methodUsed}>
                             {METHOD_OPTIONS.map((method) => (
                               <option key={method.value || "none"} value={method.value}>
                                 {method.label}
@@ -1220,7 +1380,7 @@ return (
                         </label>
                         <label className="field">
                           <span>Observaciones de tratamiento</span>
-                          <textarea disabled={treatmentLocked} onChange={(event) => setObservations(event.target.value)} required rows={4} value={observations} />
+                          <textarea disabled={treatmentLocked} onChange={(event) => setObservations(event.target.value)} rows={4} value={observations} />
                         </label>
                       </div>
 
@@ -1341,18 +1501,19 @@ return (
                           <label className="field">
                             <span>Responsable</span>
                             <select
-                              disabled={treatmentLocked}
+                              disabled={treatmentLocked || !participantOptions.length}
                               onChange={(event) => handleTaskDraftChange("responsible", event.target.value)}
                               required
                               value={taskDraft.responsible}
                             >
                               <option value="">Seleccionar responsable...</option>
-                              {(supportData?.users ?? []).map((user) => (
-                                <option key={user.id} value={user.id}>
-                                  {buildUsersLabel(user)}
+                              {participantOptions.map((participant) => (
+                                <option key={participant.id} value={participant.user?.id}>
+                                  {participant.user?.full_name || participant.user?.username}
                                 </option>
                               ))}
                             </select>
+                            {!participantOptions.length ? <small className="muted-copy">Primero convoca usuarios al tratamiento.</small> : null}
                           </label>
 
                           <label className="field">
@@ -1459,9 +1620,6 @@ return (
                             disabled={
                               busy ||
                               treatmentLocked ||
-                              !methodUsed ||
-                              !observations.trim() ||
-                              !hasTreatmentTasks ||
                               !hasEffectivenessAssignment
                             }
                             type="submit"
@@ -1477,7 +1635,7 @@ return (
                             </p>
                           ) : (
                             <p>
-                              Completa la fecha y responsable de evaluacion. Se guardara junto con el analisis una vez cargadas las tareas.
+                              Completa la fecha y responsable de evaluacion. Si metodo y observaciones estan cargados, tambien se guardaran.
                             </p>
                           )}
                         </div>
@@ -1515,9 +1673,11 @@ return (
                             </label>
                           </div>
                         )}
-                        {!hasTreatmentTasks ? (
+                        {hasTreatmentTasks ? (
+                          <p className="muted-copy">{`Tareas registradas para este tratamiento: ${treatmentTaskCount}.`}</p>
+                        ) : (
                           <p className="muted-copy">Registra al menos una tarea antes de guardar el analisis.</p>
-                        ) : null}
+                        )}
                       </form>
                     </div>
                   ) : null}

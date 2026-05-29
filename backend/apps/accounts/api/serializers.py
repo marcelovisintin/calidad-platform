@@ -5,6 +5,7 @@ from django.contrib.auth.models import Permission
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
+from django.urls import reverse
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
@@ -59,6 +60,7 @@ class UserRoleScopeSerializer(serializers.ModelSerializer):
 class CurrentUserSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
     sector = AreaSummarySerializer(source="primary_sector", read_only=True)
+    photo_url = serializers.SerializerMethodField()
     role_codes = serializers.SerializerMethodField()
     role_scopes = UserRoleScopeSerializer(many=True, read_only=True)
     permissions = serializers.SerializerMethodField()
@@ -74,6 +76,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             "full_name",
             "employee_code",
             "phone",
+            "photo_url",
             "access_level",
             "must_change_password",
             "password_changed_at",
@@ -87,6 +90,13 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             "permissions",
         )
 
+    def get_photo_url(self, obj):
+        if not obj.photo:
+            return ""
+        request = self.context.get("request")
+        url = reverse("api:accounts:user-photo", kwargs={"user_id": obj.pk})
+        return request.build_absolute_uri(url) if request else url
+
     def get_role_codes(self, obj):
         return get_user_role_codes(obj)
 
@@ -97,6 +107,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
 class UserListSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
     sector = AreaSummarySerializer(source="primary_sector", read_only=True)
+    photo_url = serializers.SerializerMethodField()
     role_codes = serializers.SerializerMethodField()
     primary_sector_id = serializers.SerializerMethodField()
 
@@ -111,6 +122,7 @@ class UserListSerializer(serializers.ModelSerializer):
             "full_name",
             "employee_code",
             "phone",
+            "photo_url",
             "access_level",
             "must_change_password",
             "sector",
@@ -121,6 +133,13 @@ class UserListSerializer(serializers.ModelSerializer):
             "last_activity_at",
             "role_codes",
         )
+
+    def get_photo_url(self, obj):
+        if not obj.photo:
+            return ""
+        request = self.context.get("request")
+        url = reverse("api:accounts:user-photo", kwargs={"user_id": obj.pk})
+        return request.build_absolute_uri(url) if request else url
 
     def get_role_codes(self, obj):
         return get_user_role_codes(obj)
@@ -279,6 +298,7 @@ class UserWriteSerializer(serializers.ModelSerializer):
             "last_name",
             "employee_code",
             "phone",
+            "photo",
             "access_level",
             "primary_sector",
             "is_active",

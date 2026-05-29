@@ -7,6 +7,9 @@ import type {
   UserAccessProfile,
   UserAccessProfilePayload,
   UserDirectoryItem,
+  UserImportMode,
+  UserImportPreview,
+  UserImportResult,
   UserWritePayload,
 } from "./types";
 
@@ -51,23 +54,63 @@ export function fetchUsers(params: { active?: boolean; q?: string; page?: number
   return apiRequest<PagedResponse<UserDirectoryItem>>(`/accounts/users/?${query.toString()}`);
 }
 
+function userPayloadBody(payload: UserWritePayload) {
+  if (!payload.photo) {
+    return payload;
+  }
+
+  const formData = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    if (typeof value === "undefined" || value === null || value === "") {
+      return;
+    }
+    if (value instanceof File) {
+      formData.append(key, value);
+      return;
+    }
+    formData.append(key, String(value));
+  });
+  return formData;
+}
+
 export function createUser(payload: UserWritePayload) {
   return apiRequest<UserDirectoryItem>("/accounts/users/", {
     method: "POST",
-    body: payload,
+    body: userPayloadBody(payload),
   });
 }
 
 export function updateUser(userId: string, payload: UserWritePayload) {
   return apiRequest<UserDirectoryItem>(`/accounts/users/${userId}/`, {
     method: "PATCH",
-    body: payload,
+    body: userPayloadBody(payload),
   });
 }
 
 export function deleteUser(userId: string) {
   return apiRequest<void>(`/accounts/users/${userId}/`, {
     method: "DELETE",
+  });
+}
+
+function userImportBody(file: File, mode: UserImportMode) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("mode", mode);
+  return formData;
+}
+
+export function previewUserImport(file: File, mode: UserImportMode) {
+  return apiRequest<UserImportPreview>("/accounts/users/import/preview/", {
+    method: "POST",
+    body: userImportBody(file, mode),
+  });
+}
+
+export function confirmUserImport(file: File, mode: UserImportMode) {
+  return apiRequest<UserImportResult>("/accounts/users/import/confirm/", {
+    method: "POST",
+    body: userImportBody(file, mode),
   });
 }
 

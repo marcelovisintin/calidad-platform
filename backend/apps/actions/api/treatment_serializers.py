@@ -123,6 +123,7 @@ class TreatmentAnomalySummarySerializer(serializers.Serializer):
     affected_process = serializers.CharField(read_only=True)
     reporter = UserSummarySerializer(read_only=True)
     area = AnomalySectorSerializer(read_only=True)
+    imputed_area = AnomalySectorSerializer(read_only=True)
     anomaly_origin = AnomalySectorSerializer(read_only=True)
     attachments = AnomalyAttachmentSummarySerializer(many=True, read_only=True)
 
@@ -430,6 +431,7 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
 
 class TreatmentCreateSerializer(serializers.Serializer):
     primary_anomaly = serializers.PrimaryKeyRelatedField(queryset=Anomaly.objects.all())
+    force_create_new = serializers.BooleanField(required=False, default=False, write_only=True)
     scheduled_for = serializers.DateTimeField(required=False, allow_null=True)
     treatment_location = serializers.CharField(required=False, allow_blank=True, max_length=200)
     status = serializers.ChoiceField(choices=TreatmentStatus.choices, required=False)
@@ -560,6 +562,7 @@ class TreatmentCandidateSerializer(serializers.Serializer):
     current_stage = serializers.CharField(read_only=True)
     reporter = UserSummarySerializer(read_only=True)
     area = AnomalySectorSerializer(read_only=True)
+    imputed_area = AnomalySectorSerializer(read_only=True)
     anomaly_origin = AnomalySectorSerializer(read_only=True)
     detected_at = serializers.DateTimeField(read_only=True)
 

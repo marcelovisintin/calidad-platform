@@ -129,7 +129,7 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_THROTTLE_RATES": {
         "anon": env("DRF_ANON_RATE", default="60/minute"),
-        "user": env("DRF_USER_RATE", default="600/hour"),
+        "user": env("DRF_USER_RATE", default="6000/hour"),
         "login": env("DRF_LOGIN_RATE", default="10/minute"),
     },
     "PAGE_SIZE": 10,

@@ -480,6 +480,7 @@ class AnomalyImmediateActionSerializer(serializers.ModelSerializer):
 class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin, serializers.ModelSerializer):
     site = SiteSummarySerializer(read_only=True)
     area = AreaSummarySerializer(read_only=True)
+    imputed_area = AreaSummarySerializer(read_only=True)
     line = LineSummarySerializer(read_only=True)
     reporter = UserSummarySerializer(read_only=True)
     owner = UserSummarySerializer(read_only=True)
@@ -508,6 +509,7 @@ class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin
             "detected_at",
             "site",
             "area",
+            "imputed_area",
             "line",
             "reporter",
             "owner",
@@ -533,6 +535,7 @@ class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin
 class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMixin, serializers.ModelSerializer):
     site = SiteSummarySerializer(read_only=True)
     area = AreaSummarySerializer(read_only=True)
+    imputed_area = AreaSummarySerializer(read_only=True)
     line = LineSummarySerializer(read_only=True)
     reporter = UserSummarySerializer(read_only=True)
     owner = UserSummarySerializer(read_only=True)
@@ -604,6 +607,7 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
             "detected_at",
             "site",
             "area",
+            "imputed_area",
             "line",
             "reporter",
             "owner",
@@ -667,6 +671,7 @@ class AnomalyCreateSerializer(serializers.ModelSerializer):
             "description",
             "site",
             "area",
+            "imputed_area",
             "line",
             "owner",
             "anomaly_type",
@@ -687,6 +692,7 @@ class AnomalyCreateSerializer(serializers.ModelSerializer):
         )
         extra_kwargs = {
             "code": {"required": False, "allow_blank": True},
+            "imputed_area": {"required": False, "allow_null": True},
             "line": {"required": False, "allow_null": True},
             "owner": {"required": False, "allow_null": True},
             "duplicate_of": {"required": False, "allow_null": True},
@@ -713,6 +719,7 @@ class AnomalyUpdateSerializer(serializers.ModelSerializer):
             "description",
             "site",
             "area",
+            "imputed_area",
             "line",
             "owner",
             "anomaly_type",
@@ -734,6 +741,7 @@ class AnomalyUpdateSerializer(serializers.ModelSerializer):
             "description": {"required": False},
             "site": {"required": False},
             "area": {"required": False},
+            "imputed_area": {"required": False, "allow_null": True},
             "line": {"required": False, "allow_null": True},
             "owner": {"required": False, "allow_null": True},
             "anomaly_type": {"required": False},

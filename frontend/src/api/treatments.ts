@@ -179,6 +179,11 @@ export function fetchTreatmentCandidates(filters: {
   return apiRequest<PagedResponse<TreatmentCandidate>>(`/actions/treatments/candidates/?${params.toString()}`);
 }
 
+export function fetchOpenTreatmentOptions(anomalyId: string) {
+  const params = new URLSearchParams({ anomaly: anomalyId });
+  return apiRequest<TreatmentSummary[]>(`/actions/treatments/open-options/?${params.toString()}`);
+}
+
 export function addTreatmentAnomaly(treatmentId: string, anomalyId: string) {
   return apiRequest<TreatmentCandidate>(`/actions/treatments/${treatmentId}/anomalies/`, {
     method: "POST",

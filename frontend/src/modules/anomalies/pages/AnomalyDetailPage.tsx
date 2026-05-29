@@ -183,7 +183,7 @@ export function AnomalyDetailPage() {
                 <div><dt>Numero de OF</dt><dd>{data.manufacturing_order_number || "No informada"}</dd></div>
                 <div><dt>Piezas afectadas</dt><dd>{data.affected_quantity ?? "No informada"}</dd></div>
                 <div><dt>Elaborado por</dt><dd>{data.affected_process || data.area?.name || "-"}</dd></div>
-                <div><dt>Imputado a</dt><dd>{data.anomaly_origin?.name || "-"}</dd></div>
+                <div><dt>Asignado a</dt><dd>{data.imputed_area?.name || data.anomaly_origin?.name || "-"}</dd></div>
                 <div><dt>Criticidad</dt><dd>{data.severity?.name || "-"}</dd></div>
                 <div><dt>Resultados</dt><dd>{data.result_summary || "Sin resumen de resultados."}</dd></div>
                 <div><dt>Resolucion</dt><dd>{data.resolution_summary || "Sin resumen de resolucion."}</dd></div>

@@ -34,6 +34,7 @@ ALLOWED_TREATMENT_TRANSITIONS = {
     TreatmentStatus.COMPLETED: set(),
     TreatmentStatus.CANCELLED: set(),
 }
+OPEN_TREATMENT_STATUSES = {TreatmentStatus.PENDING, TreatmentStatus.SCHEDULED, TreatmentStatus.IN_PROGRESS}
 
 ALLOWED_EVIDENCE_CONTENT_TYPES = {
     "application/pdf",
@@ -199,11 +200,34 @@ def _validate_effectiveness_assignment(*, treatment: Treatment, data: dict) -> N
         )
 
 
+def _validate_treatment_task_responsible(*, treatment: Treatment, responsible) -> None:
+    if responsible and not treatment.participants.filter(user_id=responsible.pk).exists():
+        raise ValidationError({"responsible": "El responsable de la tarea debe estar convocado al tratamiento."})
+
+
 def is_treatment_closed_by_effective_validation(treatment: Treatment) -> bool:
     return bool(
         treatment.status == TreatmentStatus.COMPLETED
         and treatment.effectiveness_validation_result == TreatmentEffectivenessValidationResult.EFFECTIVE
     )
+
+
+def is_open_treatment_for_association(treatment: Treatment) -> bool:
+    return treatment.status in OPEN_TREATMENT_STATUSES and not treatment.effectiveness_validation_result
+
+
+def ensure_anomaly_available_for_treatment(anomaly, field: str = "anomaly") -> None:
+    if anomaly.current_status in {AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED}:
+        raise ValidationError({field: "La anomalia esta cerrada o anulada y no puede vincularse a tratamiento."})
+    if is_immediate_action_anomaly(anomaly):
+        raise ValidationError({field: "Las anomalias con REVICION DE HALLAZGOS como accion inmediata no pueden vincularse a un tratamiento."})
+    if anomaly.severity_id is None:
+        raise ValidationError({field: "La anomalia no tiene REVICION DE HALLAZGOS clasificada para tratamiento."})
+    if not hasattr(anomaly, "initial_verification"):
+        raise ValidationError({field: "La anomalia no tiene verificacion inicial registrada."})
+    classification = getattr(anomaly, "classification", None)
+    if not classification or not classification.requires_action_plan:
+        raise ValidationError({field: "La anomalia no esta clasificada para tratamiento."})
 
 
 def ensure_treatment_is_editable(treatment: Treatment) -> None:
@@ -576,8 +600,7 @@ def _ensure_treatment_in_progress(*, treatment: Treatment, user, reason: str) ->
 def create_treatment(*, primary_anomaly, user, data: dict, request_id: str = "") -> Treatment:
     _require_treatment_permission(user, "No tiene permisos para crear tratamientos.")
 
-    if is_immediate_action_anomaly(primary_anomaly):
-        raise ValidationError({"primary_anomaly": "Las anomalias con REVICION DE HALLAZGOS como accion inmediata no pueden crear tratamiento."})
+    ensure_anomaly_available_for_treatment(primary_anomaly, field="primary_anomaly")
 
     if Treatment.objects.filter(primary_anomaly=primary_anomaly).exists():
         raise ValidationError({"primary_anomaly": "La anomalia ya tiene un tratamiento principal asociado."})
@@ -776,8 +799,9 @@ def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str,
 def add_treatment_anomaly(*, treatment: Treatment, anomaly, user, request_id: str = "") -> TreatmentAnomaly:
     _require_treatment_permission(user, "No tiene permisos para asociar anomalias al tratamiento.", treatment=treatment)
     ensure_treatment_is_editable(treatment)
-    if is_immediate_action_anomaly(anomaly):
-        raise ValidationError({"anomaly": "Las anomalias con REVICION DE HALLAZGOS como accion inmediata no pueden vincularse a un tratamiento."})
+    if not is_open_treatment_for_association(treatment):
+        raise ValidationError({"treatment": "Solo se pueden asociar anomalias a tratamientos abiertos y no validados."})
+    ensure_anomaly_available_for_treatment(anomaly)
     link, created = TreatmentAnomaly.objects.get_or_create(
         treatment=treatment,
         anomaly=anomaly,
@@ -905,6 +929,7 @@ def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: st
     responsible = data.get("responsible")
     if not responsible:
         raise ValidationError({"responsible": "Debe seleccionar un responsable para la tarea."})
+    _validate_treatment_task_responsible(treatment=treatment, responsible=responsible)
 
     execution_date = data.get("execution_date")
     if not execution_date:
@@ -983,6 +1008,9 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
     for field in ("title", "description", "responsible", "execution_date", "status", "root_cause"):
         if field in data:
             setattr(locked, field, data[field])
+
+    if "responsible" in data:
+        _validate_treatment_task_responsible(treatment=locked.treatment, responsible=locked.responsible)
 
     locked.updated_by = user
     _bump_version(locked)

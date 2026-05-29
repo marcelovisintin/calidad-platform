@@ -130,7 +130,7 @@ export function TreatmentTrackingPage() {
     return fetchTreatmentTrackingDetail(selectedTreatmentId);
   }, [selectedTreatmentId]);
 
-  const selectedProcess = detail?.primary_anomaly.area?.name || detail?.primary_anomaly.anomaly_origin?.name || "-";
+  const selectedProcess = detail?.primary_anomaly.area?.name || detail?.primary_anomaly.imputed_area?.name || detail?.primary_anomaly.anomaly_origin?.name || "-";
   const relatedUsers = useMemo(() => {
     if (!detail) {
       return [];

@@ -1059,7 +1059,7 @@ Que la mayor cantidad posible de información relevante entre en pantalla sin pe
 * Menor scroll operativo
 * Formularios más rápidos de usar
 * Sin referencias visibles a nombres antiguos
-
+ECHO OK
  .............................................................................................................................
  en seguimiento de tratamientos historial de auditoria deberia ser historial de tatamiento, el historial esta con 
  las hitos en ingles passar a español. ECHO OK
@@ -1068,5 +1068,148 @@ Que la mayor cantidad posible de información relevante entre en pantalla sin pe
   debe ser diferente a la de seguimiento de anomalia (esta no tocar ya que esta bien) ECHO OK
  ..............................................................................................................................
 En la tarjeta de carga de imputado a  el campo  orden de visualizacion se eberia de ver en los registros y a la vez no
-permitir poner un valor que ya existe.
-.............................................................................................................................S
+permitir poner un valor que ya existe. ECHO OK
+____18/05_______________________________________________________________________________________________________________________
+1. En “Crear Tratamiento” debe mostrarse la lista de anomalías disponibles para tratamiento.
+
+2. Al seleccionar una anomalía, el sistema debe verificar:
+   “¿Hay un tratamiento abierto al cual se pueda asociar esta anomalía?”
+
+3. Si SÍ existe un tratamiento abierto adecuado:
+   - Mostrar tratamientos abiertos disponibles.
+   - Permitir seleccionar uno.
+   - Asociar la anomalía al tratamiento elegido.
+   - Registrar la asociación en historial/seguimiento.
+   - No generar un tratamiento nuevo.
+
+4. Si NO existe un tratamiento abierto adecuado:
+   - Generar un nuevo tratamiento a partir de la anomalía seleccionada.
+   - Luego consultar si hay otras anomalías disponibles para asociar a ese tratamiento.
+
+5. Si hay otras anomalías para asociar:
+   - Mostrar listado de anomalías compatibles.
+   - Permitir seleccionar una o varias.
+   - Asociarlas al tratamiento recién creado.
+   - Registrar cada asociación en historial/seguimiento.
+
+6. Si no hay otras anomalías para asociar:
+   - El tratamiento queda creado solo con la anomalía inicial.
+
+Reglas:
+- Solo pueden aparecer en “Crear Tratamiento” anomalías con revisión de hallazgos realizada y clasificadas para tratamiento.
+- No se debe crear automáticamente un tratamiento si la anomalía se asocia a uno abierto existente.
+- Solo se pueden asociar anomalías a tratamientos abiertos.
+- No permitir asociación con tratamientos cerrados, eficaces, bloqueados o validados.
+- Toda asociación o desasociación debe quedar registrada en historial.
+- Revisar esta lógica en todas las secciones donde se creen o asocien tratamientos.
+
+Criterio de aceptación:
+Desde “Crear Tratamiento”, el sistema debe permitir tomar anomalías ya revisadas y clasificadas para tratamiento, primero intentando asociarlas
+ a un tratamiento abierto existente y solo creando uno nuevo cuando corresponda. ECHO OK
+..........................................................................................................................
+con el objetivo de hacer todo mas facil de seguir en secciones principales tarjeta, arriba a la derecha agregar 
+un numero  en rojo facil de ver: 1 registrar anomalia 2 seguimiento 3 tratamiento 4 accion inmediata 5 accion inmediata 6 acciones y pendientes 
+7validacion 8 lecciones aprendidas 9 bandeja interna. ECHO OK
+............................................................................................................................
+en lecciones aprendidas evidencia objetiva ,ai cargo evidencioa objetiva y luego  quiero verlo en evidencias lecciones aprendidas_evidencias cargadas
+o  en seguiimiento anomalia,me da error (HTTP 401 Unauthorized
+Allow: GET, HEAD, OPTIONS
+Content-Type: application/json
+Vary: Accept
+WWW-Authenticate: Bearer realm="api") ECHO OK
+___21/05_____________________________________________________________________________________________________________________________
+ EN CONFIGURACION Y MAESTROS TARJETA NUEVO USUARIOS AGREGAR CMPO FOTO (AQUI SE CARGARA LA FOTO DEL USUARIO) LUEGO SE DEBE VER EN LA ETIQUIETA 
+ DE ARRIBA A LA DERECHA (LA QUE ESTA EN LA PAGINA PRINCIPAL Y DE FONDO) LA FOTO DEL USUARIO Y DEBAJO EL NOMBRE.
+ .......................................................................................................................................
+ Implementar una funcionalidad de importación masiva de usuarios en el sistema.
+
+Objetivo:
+Permitir que un administrador pueda cargar usuarios de forma masiva mediante un archivo Excel o CSV, incluyendo datos principales como nombre, apellido, correo electrónico, legajo, rol, área y foto de perfil.
+
+Ubicación sugerida:
+Administración / Usuarios / Importación masiva.
+
+Campos esperados en el archivo:
+- legajo
+- nombre
+- apellido
+- email
+- rol
+- área
+- usuario_activo
+- foto
+
+La columna “foto” debe permitir indicar el nombre del archivo de imagen asociado al usuario, por ejemplo:
+1025.jpg
+
+Además del Excel/CSV, permitir opcionalmente subir un archivo ZIP con las fotos de perfil.
+El sistema debe relacionar cada foto con el usuario usando el campo “foto” o, si corresponde, el legajo.
+
+Flujo esperado:
+1. El administrador ingresa a “Importación masiva de usuarios”.
+2. Carga el archivo Excel o CSV.
+3. Opcionalmente carga un ZIP con las fotos de perfil.
+4. El sistema analiza el archivo antes de importar.
+5. El sistema muestra una vista previa con:
+   - usuarios nuevos;
+   - usuarios existentes;
+   - usuarios con errores;
+   - correos repetidos;
+   - legajos repetidos;
+   - fotos encontradas;
+   - fotos faltantes.
+6. El administrador confirma la importación.
+7. El sistema crea o actualiza los usuarios según corresponda.
+8. El sistema muestra un reporte final de la importación.
+
+Reglas de validación:
+- El legajo debe ser obligatorio y único.
+- El email debe ser obligatorio, válido y único.
+- Nombre y apellido deben ser obligatorios.
+- El rol debe existir dentro de los roles definidos en el sistema.
+- El área debe existir dentro de las áreas definidas en el sistema.
+- usuario_activo debe aceptar valores como sí/no, true/false o activo/inactivo.
+- La foto debe ser opcional.
+- Si se indica una foto y no existe en el ZIP, mostrar advertencia pero no bloquear toda la importación.
+- No importar registros con errores críticos.
+- No duplicar usuarios existentes.
+
+Opciones de importación:
+Agregar una opción para definir el comportamiento ante usuarios existentes:
+- Crear solo usuarios nuevos.
+- Actualizar usuarios existentes.
+- Crear nuevos y actualizar existentes.
+
+Fotos de perfil:
+- Permitir formatos jpg, jpeg, png y webp.
+- Validar tamaño máximo de archivo.
+- Guardar la imagen en el campo de perfil correspondiente.
+- Si no se carga foto, mantener la foto actual o usar avatar por defecto.
+
+Seguridad y permisos:
+- Solo usuarios administradores deben poder acceder a esta función.
+- Registrar en historial o auditoría quién realizó la importación, fecha y cantidad de registros procesados.
+- No permitir que usuarios sin permisos modifiquen usuarios mediante importación.
+
+Reporte final:
+Al finalizar, mostrar:
+- cantidad de usuarios creados;
+- cantidad de usuarios actualizados;
+- cantidad de usuarios omitidos;
+- listado de errores;
+- listado de advertencias;
+- posibilidad de descargar el reporte en CSV o Excel.
+
+Criterio de aceptación:
+El sistema debe permitir importar usuarios masivamente desde Excel/CSV, asociar fotos desde un ZIP, 
+validar datos antes de guardar, mostrar una previsualización, permitir confirmar la importación y generar un reporte final, 
+sin afectar usuarios existentes de manera accidental.
+Se simpliofico no se cargaron fotos y otros detalles en la masiva. ECHO OK
+..............................................................................................................................
+___22/05/2026___________________________________________________________________________________________________________________
+revisar en nueva anomalia no deja elejir elaborado por solo miuestra una opcion de la lista
+..................................................................................................................................
+_27/05___________________________________________________________________________________________________________________________
+
+Cambiar todas las leyendas "imputado a " por "Asignado a"
+..................................................................................................................................

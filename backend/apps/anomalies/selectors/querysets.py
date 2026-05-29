@@ -41,6 +41,7 @@ def build_anomaly_queryset(*, detailed: bool = False):
     queryset = Anomaly.objects.select_related(
         "site",
         "area",
+        "imputed_area",
         "line",
         "reporter",
         "owner",

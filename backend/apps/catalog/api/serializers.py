@@ -99,7 +99,7 @@ class AnomalyOriginManagementSerializer(CatalogManagementSerializer):
         if self.instance is not None:
             queryset = queryset.exclude(pk=self.instance.pk)
         if queryset.exists():
-            raise serializers.ValidationError("Ya existe un registro de Imputado a con ese orden de visualizacion.")
+            raise serializers.ValidationError("Ya existe un registro de Asignado a con ese orden de visualizacion.")
         return value
 
 

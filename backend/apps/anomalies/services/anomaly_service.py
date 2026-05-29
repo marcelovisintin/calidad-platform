@@ -135,6 +135,7 @@ def snapshot_anomaly(anomaly: Anomaly) -> dict:
         "current_stage": anomaly.current_stage,
         "site_id": str(anomaly.site_id) if anomaly.site_id else "",
         "area_id": str(anomaly.area_id) if anomaly.area_id else "",
+        "imputed_area_id": str(anomaly.imputed_area_id) if anomaly.imputed_area_id else "",
         "line_id": str(anomaly.line_id) if anomaly.line_id else "",
         "reporter_id": str(anomaly.reporter_id) if anomaly.reporter_id else "",
         "owner_id": str(anomaly.owner_id) if anomaly.owner_id else "",
@@ -346,8 +347,13 @@ def create_anomaly(*, user, data: dict, request_id: str = "") -> Anomaly:
             raise ValidationError({"priority": "Debe existir al menos un criterio operativo activo para registrar la anomalia."})
         data["priority"] = default_priority
 
+    if data.get("area") and data["area"].site_id != data["site"].pk:
+        data["site"] = data["area"].site
+
     if getattr(user, "access_level", "") != "usuario_activo":
         _ensure_scope(data["site"].pk, data["area"].pk, user)
+
+    data.setdefault("imputed_area", data.get("area"))
 
     now = timezone.now()
     anomaly = Anomaly(

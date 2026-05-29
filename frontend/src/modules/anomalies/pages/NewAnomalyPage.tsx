@@ -37,6 +37,7 @@ export function NewAnomalyPage() {
     description: "",
     site: "",
     area: "",
+    imputed_area: "",
     anomaly_type: "",
     anomaly_origin: "",
     priority: "",
@@ -56,6 +57,7 @@ export function NewAnomalyPage() {
     setForm((current) => ({
       ...current,
       site: current.site || bootstrap.sites[0]?.id || "",
+      imputed_area: current.imputed_area || bootstrap.areas[0]?.id || "",
       anomaly_type: current.anomaly_type || bootstrap.anomalyTypes[0]?.id || "",
       anomaly_origin: current.anomaly_origin || bootstrap.anomalyOrigins[0]?.id || "",
       priority: current.priority || bootstrap.priorities[0]?.id || "",
@@ -66,8 +68,8 @@ export function NewAnomalyPage() {
     if (!bootstrap) {
       return [];
     }
-    return bootstrap.areas.filter((area) => !form.site || area.site?.id === form.site);
-  }, [bootstrap, form.site]);
+    return bootstrap.areas;
+  }, [bootstrap]);
 
   useEffect(() => {
     if (!availableAreas.length) {
@@ -75,10 +77,12 @@ export function NewAnomalyPage() {
     }
     setForm((current) => {
       const nextArea = availableAreas.some((area) => area.id === current.area) ? current.area : availableAreas[0]?.id || "";
+      const selectedArea = availableAreas.find((area) => area.id === nextArea);
       if (nextArea === current.area) {
-        return current;
+        const nextSite = selectedArea?.site?.id || current.site;
+        return nextSite === current.site ? current : { ...current, site: nextSite };
       }
-      return { ...current, area: nextArea };
+      return { ...current, area: nextArea, site: selectedArea?.site?.id || current.site };
     });
   }, [availableAreas]);
 
@@ -114,7 +118,12 @@ export function NewAnomalyPage() {
     setForm((current) => {
       if (name === "area") {
         const selectedArea = availableAreas.find((item) => item.id === value);
-        return { ...current, area: value, affected_process: selectedArea?.name || "" };
+        return {
+          ...current,
+          area: value,
+          site: selectedArea?.site?.id || current.site,
+          affected_process: selectedArea?.name || "",
+        };
       }
       return { ...current, [name]: value };
     });
@@ -153,6 +162,7 @@ export function NewAnomalyPage() {
         description: form.description,
         site: form.site,
         area: form.area,
+        imputed_area: form.imputed_area || undefined,
         anomaly_type: form.anomaly_type,
         anomaly_origin: form.anomaly_origin,
         priority: form.priority || undefined,
@@ -351,11 +361,11 @@ export function NewAnomalyPage() {
               </select>
             </label>
             <label className="field">
-              <span>Imputado a</span>
-              <select disabled={!catalogsReady} name="anomaly_origin" onChange={handleChange} required value={form.anomaly_origin}>
+              <span>Asignado a</span>
+              <select disabled={!catalogsReady} name="imputed_area" onChange={handleChange} required value={form.imputed_area}>
                 <option value="">Seleccionar</option>
-                {bootstrap?.anomalyOrigins.map((item) => (
-                  <option key={item.id} value={item.id}>{item.name}</option>
+                {availableAreas.map((item) => (
+                  <option key={`imputed-area-${item.id}`} value={item.id}>{`${item.code} - ${item.name}`}</option>
                 ))}
               </select>
             </label>

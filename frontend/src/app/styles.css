@@ -261,14 +261,49 @@ textarea {
 }
 
 .topbar-user {
-  min-width: 56px;
-  min-height: 56px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
+  min-width: 88px;
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  border-radius: 16px;
+  padding: 0.45rem 0.7rem;
   background: rgba(21, 132, 111, 0.12);
   color: var(--primary);
   font-weight: 800;
+  text-align: center;
+  line-height: 1.15;
+}
+
+.topbar-user-photo,
+.topbar-user-initial {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.topbar-user-photo {
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 4px 12px rgba(8, 33, 40, 0.18);
+}
+
+.topbar-user-initial {
+  display: grid;
+  place-items: center;
+  background: rgba(21, 132, 111, 0.22);
+  color: var(--primary-dark);
+}
+
+.topbar-user span:last-child {
+  max-width: 116px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
 }
 
 .app-content {
@@ -1002,8 +1037,20 @@ small {
   }
 
   .topbar-user {
-    min-width: 48px;
-    min-height: 48px;
+    min-width: 68px;
+    min-height: 60px;
+    padding: 0.35rem 0.45rem;
+  }
+
+  .topbar-user-photo,
+  .topbar-user-initial {
+    width: 30px;
+    height: 30px;
+  }
+
+  .topbar-user span:last-child {
+    max-width: 82px;
+    font-size: 0.7rem;
   }
 
   .form-section {
@@ -1135,6 +1182,7 @@ small {
 .management-card,
 .workflow-card,
 .admin-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
@@ -1145,6 +1193,25 @@ small {
   background: rgba(218, 238, 232, 0.98);
   box-shadow: var(--shadow);
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.section-sequence-badge {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: #c1121f;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 8px 18px rgba(193, 18, 31, 0.25);
 }
 
 .management-card:hover,
@@ -1230,6 +1297,139 @@ small {
   font-size: 1.02rem;
   font-weight: 800;
   color: var(--text);
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.8rem;
+}
+
+.summary-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(15, 76, 92, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.summary-grid strong {
+  font-size: 1.35rem;
+}
+
+.summary-grid span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 820px;
+}
+
+.table-scroll th,
+.table-scroll td {
+  padding: 0.75rem;
+  border-bottom: 1px solid rgba(15, 76, 92, 0.12);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table-scroll th {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.status-create {
+  color: #0f6958;
+  background: rgba(22, 132, 111, 0.14);
+}
+
+.status-update {
+  color: #8a5215;
+  background: rgba(216, 140, 58, 0.16);
+}
+
+.status-skip {
+  color: #56727b;
+  background: rgba(86, 114, 123, 0.14);
+}
+
+.status-error {
+  color: #b7443c;
+  background: rgba(183, 68, 60, 0.14);
+}
+
+.user-import-actions {
+  justify-content: end;
+}
+
+.user-import-summary,
+.user-import-table {
+  margin-top: 1rem;
+}
+
+.dashboard-summary-card {
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.dashboard-summary-grid {
+  align-items: stretch;
+}
+
+.dashboard-status-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.dashboard-status-line span {
+  white-space: nowrap;
+}
+
+.dashboard-detail-toggle {
+  min-height: 36px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.84rem;
+}
+
+.dashboard-detail-panel {
+  margin-top: 1rem;
+}
+
+.dashboard-summary-table th,
+.dashboard-summary-table td {
+  white-space: nowrap;
+}
+
+.dashboard-summary-total-row {
+  font-weight: 900;
+  background: rgba(21, 132, 111, 0.08);
 }
 
 .contextual-toolbar {

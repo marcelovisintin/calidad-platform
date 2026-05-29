@@ -1,7 +1,9 @@
-﻿from django.conf import settings
+from django.conf import settings
 from django.db.models import Q
+from django.http import FileResponse, Http404
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -23,6 +25,7 @@ from apps.accounts.constants import USER_SCOPE_OPTIONS
 from apps.accounts.models import Role, User
 from apps.accounts.permissions import CanCreateUsers, CanDeleteUsers, CanEditUsers, CanListUsers
 from apps.accounts.services.authorization import filter_user_directory_queryset
+from apps.accounts.services.user_import import analyze_user_import, confirm_user_import
 from apps.accounts.throttling import LoginRateThrottle
 
 
@@ -96,11 +99,13 @@ class CurrentUserAPIView(APIView):
             .prefetch_related("role_scopes__role", "role_scopes__site", "role_scopes__area")
             .get(pk=request.user.pk)
         )
-        serializer = CurrentUserSerializer(user)
+        serializer = CurrentUserSerializer(user, context={"request": request})
         return Response(serializer.data)
 
 
 class UserManagementAPIView(generics.ListCreateAPIView):
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+
     def get_permissions(self):
         if self.request.method == "POST":
             return [CanCreateUsers()]
@@ -135,6 +140,7 @@ class UserManagementAPIView(generics.ListCreateAPIView):
 
 class UserDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = "pk"
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_permissions(self):
         if self.request.method in {"PUT", "PATCH"}:
@@ -155,6 +161,67 @@ class UserDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         if instance.pk == self.request.user.pk:
             raise ValidationError({"detail": "No puede eliminar su propio usuario."})
         instance.delete()
+
+
+class UserPhotoAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        if request.user.pk == user_id:
+            user = User.objects.filter(pk=user_id).first()
+        else:
+            user = build_user_queryset(request.user).filter(pk=user_id).first()
+        if not user or not user.photo:
+            raise Http404("Usuario sin foto.")
+
+        response = FileResponse(user.photo.open("rb"), filename=user.photo.name.rsplit("/", 1)[-1])
+        if user.photo.name.lower().endswith(".png"):
+            response["Content-Type"] = "image/png"
+        elif user.photo.name.lower().endswith(".webp"):
+            response["Content-Type"] = "image/webp"
+        else:
+            response["Content-Type"] = "image/jpeg"
+        return response
+
+
+class UserImportPreviewAPIView(APIView):
+    permission_classes = [CanCreateUsers]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        import_file = request.FILES.get("file")
+        if not import_file:
+            raise ValidationError({"file": "Debe cargar un archivo CSV o Excel."})
+
+        try:
+            result = analyze_user_import(
+                import_file,
+                mode=request.data.get("mode", "upsert"),
+            )
+        except ValueError as exc:
+            raise ValidationError({"file": str(exc)}) from exc
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class UserImportConfirmAPIView(APIView):
+    permission_classes = [CanCreateUsers]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        import_file = request.FILES.get("file")
+        if not import_file:
+            raise ValidationError({"file": "Debe cargar un archivo CSV o Excel."})
+
+        try:
+            result = confirm_user_import(
+                uploaded_file=import_file,
+                mode=request.data.get("mode", "upsert"),
+                actor=request.user,
+                request_id=request.headers.get("X-Request-ID", ""),
+            )
+        except ValueError as exc:
+            raise ValidationError({"file": str(exc)}) from exc
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class UserAccessOptionsAPIView(APIView):

@@ -56,16 +56,18 @@ class AnomalyAdmin(admin.ModelAdmin):
         "current_stage",
         "site",
         "area",
+        "imputed_area",
         "manufacturing_order_number",
         "affected_quantity",
         "priority",
         "owner",
         "detected_at",
     )
-    list_filter = ("current_status", "current_stage", "site", "area", "severity", "priority")
+    list_filter = ("current_status", "current_stage", "site", "area", "imputed_area", "severity", "priority")
     list_select_related = (
         "site",
         "area",
+        "imputed_area",
         "line",
         "priority",
         "severity",

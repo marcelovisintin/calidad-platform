@@ -1,5 +1,5 @@
 import { apiRequest } from "./http";
-import type { ActionItemDetail, PagedResponse } from "./types";
+import type { ActionItemDetail, DashboardSummaryResponse, PagedResponse } from "./types";
 
 export type ActionItemsFilters = {
   page?: number;
@@ -51,6 +51,10 @@ export function fetchMyActions(page = 1) {
 export function fetchPendingActions(page = 1) {
   const params = new URLSearchParams({ page: String(page), page_size: "10" });
   return apiRequest<PagedResponse<ActionItemDetail>>(`/actions/items/pending/?${params.toString()}`);
+}
+
+export function fetchDashboardSummary() {
+  return apiRequest<DashboardSummaryResponse>("/actions/dashboard-summary/");
 }
 
 export function transitionActionItem(actionItemId: string, targetStatus: string, comment: string, closureComment = "") {

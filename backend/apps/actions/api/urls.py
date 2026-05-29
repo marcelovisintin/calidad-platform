@@ -9,7 +9,7 @@ from apps.actions.api.treatment_views import (
     TreatmentTrackingViewSet,
     TreatmentViewSet,
 )
-from apps.actions.api.views import ActionEvidenceDownloadAPIView, ActionItemViewSet, ActionPlanViewSet, ActionsApiRootView
+from apps.actions.api.views import ActionEvidenceDownloadAPIView, ActionItemViewSet, ActionPlanViewSet, ActionsApiRootView, DashboardSummaryAPIView
 
 app_name = "actions"
 
@@ -22,6 +22,7 @@ router.register("learned-lessons", TreatmentLearnedLessonViewSet, basename="lear
 
 urlpatterns = [
     path("", ActionsApiRootView.as_view(), name="actions-root"),
+    path("dashboard-summary/", DashboardSummaryAPIView.as_view(), name="dashboard-summary"),
     path("evidences/<uuid:evidence_id>/download/", ActionEvidenceDownloadAPIView.as_view(), name="evidence-download"),
     path(
         "treatments/evidences/<uuid:evidence_id>/download/",

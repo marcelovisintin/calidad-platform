@@ -44,6 +44,7 @@ from apps.actions.models import (
     TreatmentLearnedLessonEvidence,
     TreatmentParticipant,
     TreatmentRootCause,
+    TreatmentStatus,
     TreatmentTask,
     TreatmentTaskAnomaly,
     TreatmentTaskEvidence,
@@ -56,12 +57,14 @@ from apps.actions.services import (
     add_treatment_task,
     add_treatment_task_evidence,
     create_treatment,
+    ensure_anomaly_available_for_treatment,
+    is_open_treatment_for_association,
     save_treatment_learned_lesson,
     update_treatment,
     update_treatment_task,
     validate_treatment_effectiveness,
 )
-from apps.anomalies.models import AnomalyAttachment, AnomalyStage, AnomalyStatus
+from apps.anomalies.models import AnomalyAttachment, AnomalyStatus
 from apps.anomalies.selectors import build_anomaly_queryset, filter_anomaly_queryset_for_user
 from apps.anomalies.services.classification_rules import immediate_action_q
 
@@ -124,6 +127,31 @@ def _validation_ready_treatments_queryset(queryset, user):
         queryset = queryset.filter(effectiveness_responsible=user)
 
     return queryset
+
+
+def _treatment_candidate_queryset(visible):
+    return (
+        visible.filter(
+            severity__isnull=False,
+            initial_verification__isnull=False,
+            classification__requires_action_plan=True,
+        )
+        .exclude(current_status__in=[AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED])
+        .exclude(immediate_action_q())
+    )
+
+
+def _open_treatments_for_anomaly(user, anomaly):
+    linked_to_anomaly = TreatmentAnomaly.objects.filter(anomaly=anomaly).values("treatment_id")
+    return (
+        _visible_treatments_queryset(user)
+        .filter(status__in=[TreatmentStatus.PENDING, TreatmentStatus.SCHEDULED, TreatmentStatus.IN_PROGRESS])
+        .filter(effectiveness_validation_result="")
+        .exclude(pk__in=linked_to_anomaly)
+        .select_related("primary_anomaly", "primary_anomaly__reporter", "primary_anomaly__area", "primary_anomaly__imputed_area", "primary_anomaly__anomaly_origin")
+        .distinct()
+        .order_by("-updated_at", "-created_at")
+    )
 
 
 class TreatmentEvidenceDownloadAPIView(APIView):
@@ -329,11 +357,23 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         primary_anomaly = serializer.validated_data["primary_anomaly"]
         if not self._visible_anomalies().filter(pk=primary_anomaly.pk).exists():
             raise PermissionDenied("No tiene alcance para crear tratamiento sobre esa anomalia.")
+        ensure_anomaly_available_for_treatment(primary_anomaly, field="primary_anomaly")
+        data = dict(serializer.validated_data)
+        force_create_new = data.pop("force_create_new", False)
+        if not force_create_new and _open_treatments_for_anomaly(request.user, primary_anomaly).exists():
+            raise ValidationError(
+                {
+                    "primary_anomaly": (
+                        "Existe un tratamiento abierto disponible para esta anomalia. "
+                        "Debe asociarla a un tratamiento abierto en lugar de crear uno nuevo."
+                    )
+                }
+            )
 
         treatment = create_treatment(
             primary_anomaly=primary_anomaly,
             user=request.user,
-            data=dict(serializer.validated_data),
+            data=data,
             request_id=self._request_id(),
         )
         return self._detail_response(treatment.pk, response_status=status.HTTP_201_CREATED)
@@ -454,16 +494,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
     def candidates(self, request):
         visible = self._visible_anomalies()
 
-        candidate_qs = (
-            visible.filter(
-                Q(severity__isnull=False)
-                | Q(classification__requires_action_plan=True)
-                | Q(current_status=AnomalyStatus.IN_TREATMENT)
-                | Q(current_stage__in=[AnomalyStage.ACTION_PLAN, AnomalyStage.EXECUTION_AND_FOLLOW_UP, AnomalyStage.RESULTS])
-            )
-            .exclude(current_status__in=[AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED])
-            .exclude(immediate_action_q())
-        )
+        candidate_qs = _treatment_candidate_queryset(visible)
 
         if treatment_value := (request.query_params.get("treatment") or "").strip():
             try:
@@ -525,7 +556,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
             except ValueError:
                 pass
 
-        candidate_qs = candidate_qs.select_related("reporter", "area", "anomaly_origin").distinct().order_by("-detected_at", "code")
+        candidate_qs = candidate_qs.select_related("reporter", "area", "imputed_area", "anomaly_origin").distinct().order_by("-detected_at", "code")
 
         page = self.paginate_queryset(candidate_qs)
         if page is not None:
@@ -534,6 +565,26 @@ class TreatmentViewSet(viewsets.ModelViewSet):
 
         output = TreatmentCandidateSerializer(candidate_qs, many=True, context=self.get_serializer_context())
         return Response(output.data)
+
+    @action(detail=False, methods=["get"], url_path="open-options")
+    def open_options(self, request):
+        anomaly_value = (request.query_params.get("anomaly") or "").strip()
+        if not anomaly_value:
+            raise ValidationError({"anomaly": "Debe indicar una anomalia."})
+
+        try:
+            anomaly_id = UUID(anomaly_value)
+        except ValueError:
+            raise ValidationError({"anomaly": "Identificador de anomalia invalido."})
+
+        visible = self._visible_anomalies()
+        anomaly = get_object_or_404(_treatment_candidate_queryset(visible), pk=anomaly_id)
+        ensure_anomaly_available_for_treatment(anomaly)
+
+        queryset = _open_treatments_for_anomaly(request.user, anomaly)
+
+        serializer = TreatmentListSerializer(queryset, many=True, context=self.get_serializer_context())
+        return Response(serializer.data)
 
     @action(detail=True, methods=["post"], url_path="anomalies")
     def add_anomaly(self, request, pk=None):
@@ -544,6 +595,8 @@ class TreatmentViewSet(viewsets.ModelViewSet):
 
         if not self._visible_anomalies().filter(pk=anomaly.pk).exists():
             raise PermissionDenied("No tiene alcance sobre la anomalia a asociar.")
+        if not is_open_treatment_for_association(treatment):
+            raise ValidationError({"treatment": "Solo se pueden asociar anomalias a tratamientos abiertos y no validados."})
 
         link = add_treatment_anomaly(
             treatment=treatment,
@@ -894,5 +947,3 @@ class TreatmentLearnedLessonViewSet(viewsets.ReadOnlyModelViewSet):
         )
         output = TreatmentListSerializer(self.get_queryset().get(pk=treatment.pk), context=self.get_serializer_context())
         return Response(output.data)
-
-

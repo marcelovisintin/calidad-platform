@@ -55,6 +55,7 @@ export interface CurrentUser extends UserSummary {
   access_level: "usuario_activo" | "mando_medio_activo" | "administrador" | "desarrollador";
   must_change_password: boolean;
   password_changed_at?: string | null;
+  photo_url?: string;
   sector?: AreaSummary | null;
   is_active: boolean;
   date_joined: string;
@@ -80,6 +81,7 @@ export interface UserDirectoryItem {
   full_name: string;
   employee_code?: string;
   phone?: string;
+  photo_url?: string;
   access_level: "usuario_activo" | "mando_medio_activo" | "administrador" | "desarrollador";
   must_change_password: boolean;
   password_changed_at?: string | null;
@@ -144,15 +146,91 @@ export interface UserWritePayload {
   last_name?: string;
   employee_code?: string;
   phone?: string;
+  photo?: File | null;
   access_level?: "usuario_activo" | "mando_medio_activo" | "administrador" | "desarrollador";
   primary_sector?: UUID | null;
   is_active?: boolean;
-  password?: string;
+    password?: string;
+  }
+
+export type UserImportMode = "create_only" | "update_existing" | "upsert";
+
+export interface UserImportItem {
+  row_number: number;
+  legajo: string;
+  nombre?: string;
+  apellido?: string;
+  email: string;
+  usuario?: string;
+  celular?: string;
+  existing_user_id?: string;
+  status: "create" | "update" | "skip" | "error";
+  errors: string[];
+  warnings: string[];
+}
+
+export interface UserImportPreview {
+  mode: UserImportMode;
+  summary: {
+    total: number;
+    new_users: number;
+    existing_users: number;
+    errors: number;
+      skipped: number;
+      duplicate_emails: number;
+      duplicate_legajos: number;
+      duplicate_usernames: number;
+    };
+  items: UserImportItem[];
+}
+
+export interface UserImportResult {
+  summary: {
+    total: number;
+    created: number;
+    updated: number;
+    skipped: number;
+    errors: number;
+    warnings: number;
+  };
+  items: UserImportItem[];
+  errors: string[];
+  warnings: string[];
 }
 export interface LoginResponse {
   access: string;
   refresh: string;
   user: CurrentUser;
+}
+
+export interface DashboardSummaryStatus {
+  key: string;
+  label: string;
+  count: number;
+}
+
+export interface DashboardSummaryUserRow {
+  user: {
+    id: UUID;
+    name: string;
+    username: string;
+  };
+  total: number;
+  statuses: DashboardSummaryStatus[];
+}
+
+export interface DashboardSummaryCard {
+  key: "anomalies" | "actions" | "treatments";
+  title: string;
+  description: string;
+  total: number;
+  statuses: DashboardSummaryStatus[];
+  detail_rows?: DashboardSummaryUserRow[];
+}
+
+export interface DashboardSummaryResponse {
+  scope: "admin" | "user";
+  cards: DashboardSummaryCard[];
 }
 
 export interface ApiRootResponse {
@@ -276,6 +354,7 @@ export interface TreatmentAnomalySummary {
   affected_process?: string;
   reporter?: UserSummary | null;
   area?: CatalogSummary | null;
+  imputed_area?: CatalogSummary | null;
   anomaly_origin?: CatalogSummary | null;
   detected_at?: string;
   attachments: AnomalyAttachmentSummary[];
@@ -463,6 +542,7 @@ export interface TreatmentCandidate extends TreatmentAnomalySummary {}
 
 export interface TreatmentWritePayload {
   primary_anomaly: UUID;
+  force_create_new?: boolean;
   scheduled_for?: string | null;
   treatment_location?: string;
   status?: "pending" | "scheduled" | "in_progress" | "completed" | "cancelled";
@@ -518,6 +598,7 @@ export interface AnomalyListItem {
   detected_at: string;
   site?: SiteSummary;
   area?: AreaSummary;
+  imputed_area?: AreaSummary | null;
   line?: CatalogSummary | null;
   reporter?: UserSummary | null;
   owner?: UserSummary | null;
@@ -771,6 +852,7 @@ export interface AnomalyCreatePayload {
   description: string;
   site: UUID;
   area: UUID;
+  imputed_area?: UUID;
   anomaly_type: UUID;
   anomaly_origin: UUID;
   priority?: UUID;

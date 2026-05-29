@@ -22,6 +22,7 @@ type UserFormState = {
   last_name: string;
   employee_code: string;
   phone: string;
+  photo: File | null;
   access_level: AccessLevel;
   primary_sector: string;
   is_active: boolean;
@@ -42,6 +43,7 @@ const emptyForm: UserFormState = {
   last_name: "",
   employee_code: "",
   phone: "",
+  photo: null,
   access_level: "usuario_activo",
   primary_sector: "",
   is_active: true,
@@ -112,6 +114,11 @@ export function UserManagementPage() {
     setForm((current) => ({ ...current, [name]: value }));
   };
 
+  const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setForm((current) => ({ ...current, photo: file }));
+  };
+
   const handleEdit = (item: UserDirectoryItem) => {
     setEditingId(item.id);
     setFeedback(null);
@@ -123,6 +130,7 @@ export function UserManagementPage() {
       last_name: item.last_name || "",
       employee_code: item.employee_code || "",
       phone: item.phone || "",
+      photo: null,
       access_level: resolveAccessLevel(item),
       primary_sector: item.primary_sector_id || item.sector?.id || "",
       is_active: item.is_active,
@@ -144,6 +152,7 @@ export function UserManagementPage() {
         last_name: form.last_name.trim(),
         employee_code: form.employee_code.trim(),
         phone: form.phone.trim(),
+        photo: form.photo || undefined,
         access_level: form.access_level,
         primary_sector: form.primary_sector || null,
         is_active: form.is_active,
@@ -231,6 +240,9 @@ export function UserManagementPage() {
           <button className="button button-secondary" onClick={resetForm} type="button">
             Nuevo usuario
           </button>
+          <Link className="button button-secondary" to="/management/users/import">
+            Importacion masiva
+          </Link>
         </section>
       </section>
 
@@ -272,6 +284,17 @@ export function UserManagementPage() {
               <label className="field">
                 <span>Celular</span>
                 <input name="phone" onChange={handleInputChange} type="tel" value={form.phone} placeholder="+54 9 11 1234-5678" />
+              </label>
+              <label className="field field-span-2">
+                <span>Foto del usuario</span>
+                <input accept="image/*" name="photo" onChange={handlePhotoChange} type="file" />
+                <small>
+                  {form.photo
+                    ? `Lista para cargar: ${form.photo.name}`
+                    : editingUser?.photo_url
+                      ? "Foto actual cargada. Selecciona otra imagen para reemplazarla."
+                      : "Se mostrara en la etiqueta superior derecha."}
+                </small>
               </label>
               <label className="field">
                 <span>Nivel de acceso</span>
@@ -387,4 +410,3 @@ export function UserManagementPage() {
     </section>
   );
 }
-

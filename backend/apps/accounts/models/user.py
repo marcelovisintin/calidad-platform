@@ -4,6 +4,8 @@ from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+from common.storage import user_photo_upload_to
+
 
 class UserManager(BaseUserManager):
     use_in_migrations = True
@@ -49,6 +51,7 @@ class User(AbstractUser):
     email = models.EmailField(unique=True)
     employee_code = models.CharField(max_length=50, blank=True)
     phone = models.CharField(max_length=30, blank=True)
+    photo = models.FileField(upload_to=user_photo_upload_to, null=True, blank=True)
     access_level = models.CharField(
         max_length=30,
         choices=AccessLevel.choices,

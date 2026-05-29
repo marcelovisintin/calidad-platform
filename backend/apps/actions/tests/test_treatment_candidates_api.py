@@ -6,7 +6,14 @@ from rest_framework.test import APITestCase
 
 from apps.accounts.models import Role, User, UserRoleScope
 from apps.actions.models import Treatment, TreatmentAnomaly, TreatmentParticipant, TreatmentRootCause, TreatmentTask
-from apps.anomalies.models import Anomaly, AnomalyStage, AnomalyStatus, AnomalyStatusHistory
+from apps.anomalies.models import (
+    Anomaly,
+    AnomalyClassification,
+    AnomalyInitialVerification,
+    AnomalyStage,
+    AnomalyStatus,
+    AnomalyStatusHistory,
+)
 from apps.catalog.models import AnomalyOrigin, AnomalyType, Area, Priority, Severity, Site
 
 
@@ -102,7 +109,7 @@ class TreatmentCandidatesApiTests(APITestCase):
         )
 
     def _create_anomaly(self, *, code: str, title: str, reporter: User, area: Area, detected_at):
-        return Anomaly.objects.create(
+        anomaly = Anomaly.objects.create(
             code=code,
             title=title,
             description=f"Descripcion {title}",
@@ -119,6 +126,25 @@ class TreatmentCandidatesApiTests(APITestCase):
             created_by=self.admin,
             updated_by=self.admin,
         )
+        AnomalyInitialVerification.objects.create(
+            anomaly=anomaly,
+            verified_by=self.admin,
+            verified_at=timezone.now(),
+            summary="Verificacion inicial registrada.",
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+        AnomalyClassification.objects.create(
+            anomaly=anomaly,
+            classified_by=self.admin,
+            classified_at=timezone.now(),
+            requires_action_plan=True,
+            requires_effectiveness_verification=True,
+            summary="Anomalia clasificada para tratamiento.",
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+        return anomaly
 
     def test_candidates_for_selected_treatment_include_anomalies_from_other_treatments(self):
         default_response = self.client.get("/api/v1/actions/treatments/candidates/")
@@ -151,6 +177,47 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["id"], str(self.anomaly_two.pk))
+
+    def test_open_options_return_open_treatments_available_for_candidate(self):
+        response = self.client.get(f"/api/v1/actions/treatments/open-options/?anomaly={self.anomaly_three.pk}")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        treatment_ids = {item["id"] for item in response.data}
+        self.assertIn(str(self.treatment_one.pk), treatment_ids)
+        self.assertIn(str(self.treatment_two.pk), treatment_ids)
+
+    def test_create_rejects_new_treatment_when_open_treatment_is_available(self):
+        response = self.client.post(
+            "/api/v1/actions/treatments/",
+            {"primary_anomaly": str(self.anomaly_three.pk), "status": "pending"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("primary_anomaly", response.data)
+        self.assertEqual(Treatment.objects.count(), 2)
+        self.assertFalse(TreatmentAnomaly.objects.filter(anomaly=self.anomaly_three).exists())
+
+    def test_create_allows_explicit_new_treatment_when_open_treatment_is_available(self):
+        response = self.client.post(
+            "/api/v1/actions/treatments/",
+            {
+                "primary_anomaly": str(self.anomaly_three.pk),
+                "status": "pending",
+                "force_create_new": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Treatment.objects.count(), 3)
+        self.assertTrue(
+            TreatmentAnomaly.objects.filter(
+                treatment_id=response.data["id"],
+                anomaly=self.anomaly_three,
+                is_primary=True,
+            ).exists()
+        )
 
     def test_tasks_history_for_participant_only_returns_own_tasks(self):
         TreatmentParticipant.objects.create(
@@ -331,6 +398,33 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(TreatmentTask.objects.filter(treatment=self.treatment_one).count(), 1)
+
+    def test_add_treatment_task_requires_convoked_responsible(self):
+        root_cause = TreatmentRootCause.objects.create(
+            treatment=self.treatment_one,
+            sequence=1,
+            description="Causa para responsable no convocado",
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+
+        response = self.client.post(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/tasks/",
+            {
+                "title": "Tarea sin responsable convocado",
+                "description": "Descripcion de la tarea",
+                "root_cause": str(root_cause.pk),
+                "responsible": str(self.other_task_user.pk),
+                "execution_date": timezone.localdate().isoformat(),
+                "status": "pending",
+                "anomaly_ids": [str(self.anomaly_one.pk)],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("responsible", response.data)
+        self.assertEqual(TreatmentTask.objects.filter(treatment=self.treatment_one).count(), 0)
 
     def test_save_analysis_requires_effectiveness_evaluation_date(self):
         TreatmentParticipant.objects.create(

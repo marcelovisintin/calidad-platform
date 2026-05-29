@@ -1,4 +1,6 @@
-﻿import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { createAuthenticatedObjectUrl } from "../api/files";
 import { useAuth } from "../app/providers/AuthProvider";
 import { CompanyLogo } from "../components/CompanyLogo";
 
@@ -24,7 +26,36 @@ export function AppLayout() {
     mainNav.find((item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`))?.label ||
     (location.pathname.startsWith("/management/users") ? "Usuarios" : location.pathname.startsWith("/management/catalogs") ? "Catalogos" : "Plataforma");
   const userTag = user?.username || user?.email?.split("@")[0] || "usuario";
+  const [photoSrc, setPhotoSrc] = useState("");
   const canGoBack = (window.history.state?.idx ?? 0) > 0;
+
+  useEffect(() => {
+    let objectUrl = "";
+    let cancelled = false;
+
+    setPhotoSrc("");
+    if (!user?.photo_url) {
+      return;
+    }
+
+    void createAuthenticatedObjectUrl(user.photo_url).then((url) => {
+      if (cancelled) {
+        if (url) {
+          URL.revokeObjectURL(url);
+        }
+        return;
+      }
+      objectUrl = url;
+      setPhotoSrc(url);
+    });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [user?.photo_url]);
 
   const handleGoBack = () => {
     if (canGoBack) {
@@ -74,8 +105,13 @@ export function AppLayout() {
             </button>
             <strong className="topbar-title">{currentSection}</strong>
           </div>
-          <div className="topbar-user" title={userTag}>
-            {userTag}
+          <div className="topbar-user" title={user?.full_name || userTag}>
+            {photoSrc ? (
+              <img alt="" className="topbar-user-photo" src={photoSrc} />
+            ) : (
+              <span className="topbar-user-initial">{userTag.slice(0, 1).toUpperCase()}</span>
+            )}
+            <span>{user?.full_name || userTag}</span>
           </div>
         </header>
 

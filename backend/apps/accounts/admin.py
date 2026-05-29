@@ -42,6 +42,7 @@ class UserAdmin(DjangoUserAdmin):
             {
                 "fields": (
                     "employee_code",
+                    "photo",
                     "access_level",
                     "must_change_password",
                     "password_changed_at",

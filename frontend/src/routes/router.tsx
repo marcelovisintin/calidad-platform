@@ -5,6 +5,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { ChangePasswordPage } from "../modules/accounts/pages/ChangePasswordPage";
 import { LoginPage } from "../modules/accounts/pages/LoginPage";
 import { CatalogManagementPage } from "../modules/admin/pages/CatalogManagementPage";
+import { UserBulkImportPage } from "../modules/admin/pages/UserBulkImportPage";
 import { UserManagementPage } from "../modules/admin/pages/UserManagementPage";
 import { UserScopesPage } from "../modules/admin/pages/UserScopesPage";
 import { MyActionsPage } from "../modules/actions/pages/MyActionsPage";
@@ -59,6 +60,7 @@ export const router = createBrowserRouter([
       { path: "tasks", element: <PendingTasksPage /> },
       { path: "notifications/inbox", element: <InboxPage /> },
       { path: "management/users", element: <UserManagementPage /> },
+      { path: "management/users/import", element: <UserBulkImportPage /> },
       { path: "management/user-scopes", element: <UserScopesPage /> },
       { path: "management/catalogs", element: <CatalogManagementPage /> },
     ],

@@ -254,6 +254,7 @@ Objetivo de esta estrategia:
 - `docs/data-model/erd-initial.md`
 - `docs/workflows/anomalies-workflow.md`
 - `docs/deployment/local-cloud-ready.md`
+- `docs/audit/audit-readiness.md`
 
 ## Proximos pasos sugeridos
 

@@ -94,6 +94,13 @@ class Anomaly(AuditBaseModel):
     )
     site = models.ForeignKey("catalog.Site", on_delete=models.PROTECT, related_name="anomalies")
     area = models.ForeignKey("catalog.Area", on_delete=models.PROTECT, related_name="anomalies")
+    imputed_area = models.ForeignKey(
+        "catalog.Area",
+        on_delete=models.PROTECT,
+        related_name="imputed_anomalies",
+        null=True,
+        blank=True,
+    )
     line = models.ForeignKey(
         "catalog.Line",
         on_delete=models.PROTECT,

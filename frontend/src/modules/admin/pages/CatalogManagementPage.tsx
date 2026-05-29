@@ -58,8 +58,8 @@ const ENTITY_META: EntityMeta[] = [
   },
   {
     key: "anomaly-origins",
-    title: "Imputado a",
-    description: "Catalogo de imputaciones asociadas a la anomalia.",
+    title: "Asignado a",
+    description: "Catalogo de asignaciones asociadas a la anomalia.",
   },
   {
     key: "severities",
@@ -203,7 +203,7 @@ export function CatalogManagementPage() {
         const nextOrder = Number(form.display_order || 0);
         const duplicate = items.find((item) => item.display_order === nextOrder && item.id !== editingId);
         if (duplicate) {
-          throw new Error(`Ya existe otro registro de Imputado a con orden ${nextOrder}: ${duplicate.code} - ${duplicate.name}.`);
+          throw new Error(`Ya existe otro registro de Asignado a con orden ${nextOrder}: ${duplicate.code} - ${duplicate.name}.`);
         }
       }
 

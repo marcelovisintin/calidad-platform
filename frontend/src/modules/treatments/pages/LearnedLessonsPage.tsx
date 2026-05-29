@@ -1,4 +1,5 @@
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, MouseEvent, useEffect, useState } from "react";
+import { normalizeProtectedFileUrl, openAuthenticatedFile } from "../../../api/files";
 import { fetchLearnedLessons, saveTreatmentLearnedLesson } from "../../../api/treatments";
 import type { TreatmentSummary } from "../../../api/types";
 import { formatDate, formatDateTime } from "../../../app/utils";
@@ -26,27 +27,6 @@ const emptyForm: LessonFormState = {
   procedureModificationNotes: "",
   evidences: [],
 };
-
-function evidenceUrl(fileUrl: string) {
-  if (!fileUrl) {
-    return "#";
-  }
-  if (fileUrl.startsWith("/")) {
-    return fileUrl;
-  }
-  if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) {
-    try {
-      const parsed = new URL(fileUrl);
-      const host = parsed.hostname.toLowerCase();
-      if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
-        return `${parsed.pathname}${parsed.search}${parsed.hash}`;
-      }
-    } catch {
-      return fileUrl;
-    }
-  }
-  return fileUrl.startsWith("/") ? fileUrl : `/${fileUrl}`;
-}
 
 function formFromTreatment(treatment: TreatmentSummary): LessonFormState {
   const lesson = treatment.learned_lesson;
@@ -140,6 +120,16 @@ function LearnedLessonCard({
     updateForm({ evidences: Array.from(event.target.files ?? []) });
   };
 
+  const handleOpenEvidence = async (event: MouseEvent<HTMLAnchorElement>, fileUrl: string, fallbackName: string) => {
+    event.preventDefault();
+    setError(null);
+    try {
+      await openAuthenticatedFile(fileUrl, fallbackName);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo abrir la evidencia.");
+    }
+  };
+
   return (
     <article className="panel learned-lesson-card">
       <div className="learned-lesson-summary">
@@ -219,7 +209,14 @@ function LearnedLessonCard({
             <strong>Evidencias cargadas</strong>
             <div className="stack-list compact">
               {lesson.evidences.map((evidence) => (
-                <a className="list-card compact" href={evidenceUrl(evidence.file_url)} key={evidence.id} rel="noopener noreferrer" target="_blank">
+                <a
+                  className="list-card compact"
+                  href={normalizeProtectedFileUrl(evidence.file_url)}
+                  key={evidence.id}
+                  onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
                   <span>{evidence.original_name}</span>
                   <small>{formatDateTime(evidence.created_at)}</small>
                 </a>
