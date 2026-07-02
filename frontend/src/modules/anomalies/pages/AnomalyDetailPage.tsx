@@ -165,6 +165,7 @@ export function AnomalyDetailPage() {
                 <div>
                   <p className="eyebrow">{data.code}</p>
                   <h2>{data.title}</h2>
+                  <p className="muted-copy">{`Tipo de desvio: ${data.anomaly_type?.name || "Sin tipo de desvio"}`}</p>
                 </div>
                 <div className="badge-stack align-end">
                   <StatusBadge value={data.current_status} />
@@ -182,7 +183,6 @@ export function AnomalyDetailPage() {
                 <div><dt>Responsable actual</dt><dd>{data.current_responsible?.full_name || "Sin asignar"}</dd></div>
                 <div><dt>Numero de OF</dt><dd>{data.manufacturing_order_number || "No informada"}</dd></div>
                 <div><dt>Piezas afectadas</dt><dd>{data.affected_quantity ?? "No informada"}</dd></div>
-                <div><dt>Elaborado por</dt><dd>{data.affected_process || data.area?.name || "-"}</dd></div>
                 <div><dt>Asignado a</dt><dd>{data.imputed_area?.name || data.anomaly_origin?.name || "-"}</dd></div>
                 <div><dt>Criticidad</dt><dd>{data.severity?.name || "-"}</dd></div>
                 <div><dt>Resultados</dt><dd>{data.result_summary || "Sin resumen de resultados."}</dd></div>
@@ -270,7 +270,7 @@ export function AnomalyDetailPage() {
               <div className="section-head"><h2>Participacion y verificaciones</h2></div>
               <dl className="key-grid">
                 <div><dt>Verificacion inicial</dt><dd>{initialVerificationLabel}</dd></div>
-                <div><dt>REVICION DE HALLAZGOS</dt><dd>{classificationLabel}</dd></div>
+                <div><dt>Revisión de hallazgos</dt><dd>{classificationLabel}</dd></div>
                 <div><dt>Tratamiento creado</dt><dd>{treatmentCreatedLabel}</dd></div>
                 <div><dt>Analisis de causa</dt><dd>{causeAnalysisLabel}</dd></div>
                 <div><dt>Eficacia</dt><dd>{data.effectiveness_summary || "Sin verificacion de eficacia"}</dd></div>

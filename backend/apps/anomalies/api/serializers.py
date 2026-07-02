@@ -471,6 +471,7 @@ class AnomalyImmediateActionSerializer(serializers.ModelSerializer):
             "responsible",
             "action_date",
             "effectiveness_verified_at",
+            "effectiveness_is_effective",
             "observation",
             "actions_taken",
             "effectiveness_comment",
@@ -876,7 +877,8 @@ class AnomalyLearningWriteSerializer(serializers.ModelSerializer):
 class AnomalyImmediateActionWriteSerializer(serializers.Serializer):
     responsible = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True))
     action_date = serializers.DateField()
-    effectiveness_verified_at = serializers.DateTimeField(style=DATETIME_INPUT_STYLE)
+    effectiveness_verified_at = serializers.DateTimeField(required=False, allow_null=True, style=DATETIME_INPUT_STYLE)
+    effectiveness_is_effective = serializers.BooleanField(required=False, allow_null=True)
     observation = serializers.CharField()
     actions_taken = serializers.CharField()
     effectiveness_comment = serializers.CharField(required=False, allow_blank=True)

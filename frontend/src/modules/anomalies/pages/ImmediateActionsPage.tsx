@@ -45,11 +45,11 @@ export function ImmediateActionsPage() {
 
   const [responsibleId, setResponsibleId] = useState("");
   const [actionDate, setActionDate] = useState(nowAsDate());
-  const [effectivenessVerifiedAt, setEffectivenessVerifiedAt] = useState(nowAsLocalDateTime());
   const [observation, setObservation] = useState("");
   const [actionsTaken, setActionsTaken] = useState("");
+  const [effectivenessVerifiedAt, setEffectivenessVerifiedAt] = useState(nowAsLocalDateTime());
+  const [effectivenessResult, setEffectivenessResult] = useState<"" | "effective" | "not_effective">("");
   const [effectivenessComment, setEffectivenessComment] = useState("");
-  const [closureComment, setClosureComment] = useState("");
 
   const [message, setMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -109,11 +109,17 @@ export function ImmediateActionsPage() {
     const existing = selectedAnomaly.immediate_action;
     setResponsibleId(existing?.responsible?.id || selectedAnomaly.owner?.id || selectedAnomaly.current_responsible?.id || "");
     setActionDate(existing?.action_date || nowAsDate());
-    setEffectivenessVerifiedAt(existing?.effectiveness_verified_at ? existing.effectiveness_verified_at.slice(0, 16) : nowAsLocalDateTime());
     setObservation(existing?.observation || selectedAnomaly.containment_summary || "");
     setActionsTaken(existing?.actions_taken || selectedAnomaly.resolution_summary || "");
+    setEffectivenessVerifiedAt(existing?.effectiveness_verified_at ? existing.effectiveness_verified_at.slice(0, 16) : nowAsLocalDateTime());
+    setEffectivenessResult(
+      existing?.effectiveness_is_effective === true
+        ? "effective"
+        : existing?.effectiveness_is_effective === false
+          ? "not_effective"
+          : "",
+    );
     setEffectivenessComment(existing?.effectiveness_comment || selectedAnomaly.effectiveness_summary || "");
-    setClosureComment(existing?.closure_comment || selectedAnomaly.closure_comment || "");
     setFormError(null);
     setMessage(null);
   }, [selectedAnomalyId, selectedAnomaly]);
@@ -123,15 +129,15 @@ export function ImmediateActionsPage() {
     setPage(1);
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleLoadAction = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedAnomalyId) {
       setFormError("Selecciona una anomalia para registrar accion inmediata.");
       return;
     }
 
-    if (!responsibleId || !actionDate || !effectivenessVerifiedAt || !observation.trim() || !actionsTaken.trim()) {
-      setFormError("Completa todos los campos obligatorios para cerrar la anomalia por accion inmediata.");
+    if (!responsibleId || !actionDate || !observation.trim() || !actionsTaken.trim()) {
+      setFormError("Completa responsable, fecha de carga, observacion y acciones tomadas.");
       return;
     }
 
@@ -143,17 +149,57 @@ export function ImmediateActionsPage() {
       await saveImmediateAction(selectedAnomalyId, {
         responsible: responsibleId,
         action_date: actionDate,
-        effectiveness_verified_at: toOffsetIso(effectivenessVerifiedAt),
         observation: observation.trim(),
         actions_taken: actionsTaken.trim(),
-        effectiveness_comment: effectivenessComment.trim() || undefined,
-        closure_comment: closureComment.trim() || undefined,
       });
 
-      setMessage("Accion inmediata registrada y anomalia cerrada correctamente.");
+      setMessage("Accion inmediata cargada. Ahora registra la verificacion de eficacia.");
       await Promise.all([reload(), reloadDetail()]);
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "No se pudo registrar la accion inmediata.");
+      setFormError(err instanceof Error ? err.message : "No se pudo cargar la accion inmediata.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleVerifyEffectiveness = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedAnomalyId) {
+      setFormError("Selecciona una anomalia para verificar eficacia.");
+      return;
+    }
+
+    if (!responsibleId || !actionDate || !observation.trim() || !actionsTaken.trim()) {
+      setFormError("Primero carga la accion inmediata.");
+      return;
+    }
+
+    if (!effectivenessVerifiedAt || !effectivenessResult) {
+      setFormError("Completa fecha de verificacion y selecciona si fue eficaz.");
+      return;
+    }
+
+    setSubmitting(true);
+    setFormError(null);
+    setMessage(null);
+
+    const isEffective = effectivenessResult === "effective";
+
+    try {
+      await saveImmediateAction(selectedAnomalyId, {
+        responsible: responsibleId,
+        action_date: actionDate,
+        observation: observation.trim(),
+        actions_taken: actionsTaken.trim(),
+        effectiveness_verified_at: toOffsetIso(effectivenessVerifiedAt),
+        effectiveness_is_effective: isEffective,
+        effectiveness_comment: effectivenessComment.trim() || undefined,
+      });
+
+      setMessage(isEffective ? "Accion inmediata eficaz. Anomalia cerrada definitivamente." : "No eficaz reveer acciones tomadas");
+      await Promise.all([reload(), reloadDetail()]);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "No se pudo verificar la eficacia.");
     } finally {
       setSubmitting(false);
     }
@@ -162,18 +208,20 @@ export function ImmediateActionsPage() {
   const users = listData?.users ?? [];
   const anomalies = listData?.anomalies.results ?? [];
   const totalCount = listData?.anomalies.count ?? 0;
+  const hasLoadedAction = Boolean(selectedAnomaly?.immediate_action);
+  const notEffective = selectedAnomaly?.immediate_action?.effectiveness_is_effective === false || effectivenessResult === "not_effective";
 
   return (
     <section className="page-shell">
       <PageHeader
         title="Accion inmediata"
-      description="Gestion directa para anomalias con REVICION DE HALLAZGOS como accion inmediata. No generan tratamiento: se ejecuta, verifica eficacia y se cierra en este flujo."
+      description="Gestion directa para anomalias con Revisión de hallazgos como accion inmediata. No generan tratamiento: se ejecuta, verifica eficacia y se cierra en este flujo."
       />
 
       <div className="toolbar-card">
         <input
           onChange={handleSearch}
-          placeholder="Buscar por codigo, titulo, elaborado por o usuario"
+          placeholder="Buscar por codigo, titulo, area o usuario"
           type="search"
           value={search}
         />
@@ -189,7 +237,7 @@ export function ImmediateActionsPage() {
         onRetry={reload}
         empty={totalCount === 0}
         emptyTitle="No hay anomalias de accion inmediata"
-        emptyDescription="Realiza REVICION DE HALLAZGOS de una anomalia con criterio de accion inmediata para gestionarla desde aqui."
+        emptyDescription="Realiza Revisión de hallazgos de una anomalia con criterio de accion inmediata para gestionarla desde aqui."
       >
         <div className="treatment-layout">
           <article className="panel">
@@ -213,7 +261,7 @@ export function ImmediateActionsPage() {
                     <small>
                       Reportada por: {anomaly.reporter?.full_name || anomaly.reporter?.username || "Sin dato"}
                       {" | "}
-                      {anomaly.affected_process || anomaly.area?.name || "Sin elaborado por"}
+                      Area: {anomaly.area?.name || "Sin area"}
                     </small>
                   </div>
                   <div className="badge-stack align-end">
@@ -254,9 +302,9 @@ export function ImmediateActionsPage() {
                     Ver detalle completo de la anomalia
                   </Link>
 
-                  <form className="form-section" onSubmit={handleSubmit}>
+                  <form className="form-section" onSubmit={handleLoadAction}>
                     <div className="section-head compact">
-                      <h3>Registro de accion inmediata</h3>
+                      <h3>Carga de accion inmediata</h3>
                     </div>
 
                     <div className="form-grid">
@@ -273,7 +321,7 @@ export function ImmediateActionsPage() {
                       </label>
 
                       <label className="field">
-                        <span>Fecha de accion</span>
+                        <span>Fecha de carga</span>
                         <input onChange={(event) => setActionDate(event.target.value)} required type="date" value={actionDate} />
                       </label>
 
@@ -286,7 +334,27 @@ export function ImmediateActionsPage() {
                         <span>Acciones tomadas</span>
                         <textarea onChange={(event) => setActionsTaken(event.target.value)} required rows={3} value={actionsTaken} />
                       </label>
+                    </div>
 
+                    <div className="form-actions">
+                      <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed"} type="submit">
+                        {submitting ? "Guardando..." : "Cargar accion"}
+                      </button>
+                    </div>
+                  </form>
+
+                  {!hasLoadedAction && formError ? <div className="panel danger">{formError}</div> : null}
+                  {!hasLoadedAction && message ? <div className="panel success">{message}</div> : null}
+
+                  {hasLoadedAction ? (
+                    <form className="form-section" onSubmit={handleVerifyEffectiveness}>
+                      <div className="section-head compact">
+                        <h3>Verificacion de eficacia</h3>
+                      </div>
+
+                      {notEffective ? <div className="panel warning">No eficaz reveer acciones tomadas</div> : null}
+
+                      <div className="form-grid">
                       <label className="field">
                         <span>Fecha verificacion de eficacia</span>
                         <input
@@ -298,30 +366,39 @@ export function ImmediateActionsPage() {
                       </label>
 
                       <label className="field">
-                        <span>Comentario de eficacia</span>
-                        <textarea onChange={(event) => setEffectivenessComment(event.target.value)} rows={2} value={effectivenessComment} />
+                        <span>Eficaz</span>
+                        <select onChange={(event) => setEffectivenessResult(event.target.value as "" | "effective" | "not_effective")} required value={effectivenessResult}>
+                          <option value="">Seleccionar...</option>
+                          <option value="effective">Si</option>
+                          <option value="not_effective">No</option>
+                        </select>
                       </label>
 
-                      <label className="field field-span-2">
-                        <span>Comentario de cierre</span>
-                        <textarea onChange={(event) => setClosureComment(event.target.value)} rows={2} value={closureComment} />
-                      </label>
+                        <label className="field field-span-2">
+                          <span>Observacion</span>
+                          <textarea onChange={(event) => setEffectivenessComment(event.target.value)} rows={3} value={effectivenessComment} />
+                        </label>
                     </div>
 
                     {formError ? <div className="panel danger">{formError}</div> : null}
                     {message ? <div className="panel success">{message}</div> : null}
 
                     <div className="form-actions">
-                      <button className="button button-primary" disabled={submitting} type="submit">
-                        {submitting ? "Guardando..." : "Guardar accion inmediata y cerrar"}
+                      <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed"} type="submit">
+                        {submitting ? "Guardando..." : "Guardar verificacion"}
                       </button>
                     </div>
                   </form>
+                  ) : (
+                    <div className="panel muted">
+                      <p>Primero carga la accion inmediata para habilitar la verificacion de eficacia.</p>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="panel muted">
                   <h2>Selecciona una anomalia</h2>
-                        <p>Elige una anomalia con REVICION DE HALLAZGOS como accion inmediata para cargar ejecucion, eficacia y cierre directo.</p>
+                        <p>Elige una anomalia con Revisión de hallazgos como accion inmediata para cargar ejecucion, eficacia y cierre directo.</p>
                 </div>
               )}
             </DataState>

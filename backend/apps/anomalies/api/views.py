@@ -1,7 +1,9 @@
 ﻿from django.db.models import Q
 from datetime import date, datetime, time
+import unicodedata
 
-from django.db.models import Count
+from django.db.models import Case, Count, IntegerField, Value, When
+from django.db.models.functions import Coalesce
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -69,6 +71,72 @@ from apps.anomalies.services import (
     update_anomaly,
 )
 from apps.anomalies.services.classification_rules import immediate_action_q
+
+
+STATUS_SEARCH_LABELS = {
+    AnomalyStatus.REGISTERED: "registrado",
+    AnomalyStatus.IN_EVALUATION: "en evaluacion",
+    AnomalyStatus.IN_ANALYSIS: "en analisis",
+    AnomalyStatus.IN_TREATMENT: "en tratamiento",
+    AnomalyStatus.PENDING_VERIFICATION: "pendiente de verificacion",
+    AnomalyStatus.CLOSED: "cerrado",
+    AnomalyStatus.CANCELLED: "cancelado",
+    AnomalyStatus.REOPENED: "reabierto",
+}
+
+
+def normalize_search_text(value: str) -> str:
+    without_accents = unicodedata.normalize("NFKD", value)
+    ascii_value = "".join(char for char in without_accents if not unicodedata.combining(char))
+    return " ".join(ascii_value.lower().replace("_", " ").split())
+
+
+def matching_anomaly_status_values(term: str) -> list[str]:
+    normalized_term = normalize_search_text(term)
+    if not normalized_term:
+        return []
+
+    matches: list[str] = []
+    for status_value, status_label in AnomalyStatus.choices:
+        candidates = {
+            status_value,
+            status_value.replace("_", " "),
+            status_label,
+            STATUS_SEARCH_LABELS.get(status_value, ""),
+        }
+        if any(normalized_term in normalize_search_text(candidate) for candidate in candidates):
+            matches.append(status_value)
+    return matches
+
+
+def build_tracking_search_query(term: str) -> Q:
+    query = (
+        Q(code__icontains=term)
+        | Q(title__icontains=term)
+        | Q(area__code__icontains=term)
+        | Q(area__name__icontains=term)
+    )
+    if status_values := matching_anomaly_status_values(term):
+        query |= Q(current_status__in=status_values)
+    return query
+
+
+TRACKING_FILTER_PARAMS = {"search", "status", "stage", "site", "area", "owner", "ordering", "order", "order_by"}
+
+
+def has_active_tracking_filter(params) -> bool:
+    return any((params.get(name) or "").strip() for name in TRACKING_FILTER_PARAMS)
+
+
+def apply_default_tracking_order(queryset):
+    return queryset.annotate(
+        status_sort_priority=Case(
+            When(current_status=AnomalyStatus.REGISTERED, then=Value(0)),
+            When(current_status=AnomalyStatus.CLOSED, then=Value(2)),
+            default=Value(1),
+            output_field=IntegerField(),
+        )
+    ).order_by("status_sort_priority", "-detected_at", "code")
 
 
 class AnomalyWorkflowMetadataAPIView(APIView):
@@ -158,9 +226,20 @@ class AnomalyRepetitionStudyAPIView(APIView):
             .order_by("-count", "anomaly_type__name")
         )
         by_type_sector = list(
-            queryset.values("anomaly_type_id", "anomaly_type__name", "area_id", "area__name")
+            queryset.annotate(
+                assigned_area_id=Coalesce("imputed_area_id", "area_id"),
+                assigned_area_name=Coalesce("imputed_area__name", "area__name"),
+            )
+            .values(
+                "anomaly_type_id",
+                "anomaly_type__name",
+                "assigned_area_id",
+                "assigned_area_name",
+                "severity_id",
+                "severity__name",
+            )
             .annotate(count=Count("id"))
-            .order_by("-count", "anomaly_type__name", "area__name")
+            .order_by("-count", "anomaly_type__name", "assigned_area_name", "severity__name")
         )
 
         anomalies = [
@@ -174,8 +253,12 @@ class AnomalyRepetitionStudyAPIView(APIView):
                     "name": anomaly.anomaly_type.name,
                 },
                 "sector": {
-                    "id": str(anomaly.area_id),
-                    "name": anomaly.area.name,
+                    "id": str(anomaly.imputed_area_id or anomaly.area_id),
+                    "name": (anomaly.imputed_area.name if anomaly.imputed_area_id else anomaly.area.name),
+                },
+                "finding_type": {
+                    "id": str(anomaly.severity_id or ""),
+                    "name": anomaly.severity.name if anomaly.severity_id else "Sin tipo de hallazgo",
                 },
                 "registered_at": anomaly.created_at,
             }
@@ -199,8 +282,10 @@ class AnomalyRepetitionStudyAPIView(APIView):
                     {
                         "type_id": str(item["anomaly_type_id"]),
                         "type_name": item["anomaly_type__name"] or "Sin tipo de desvio",
-                        "sector_id": str(item["area_id"]),
-                        "sector_name": item["area__name"] or "Sin sector",
+                        "sector_id": str(item["assigned_area_id"] or ""),
+                        "sector_name": item["assigned_area_name"] or "Sin asignado a",
+                        "finding_type_id": str(item["severity_id"] or ""),
+                        "finding_type_name": item["severity__name"] or "Sin tipo de hallazgo",
                         "count": item["count"],
                     }
                     for item in by_type_sector
@@ -253,17 +338,9 @@ class AnomalyViewSet(viewsets.ModelViewSet):
         if reporter_id := params.get("reporter"):
             queryset = queryset.filter(reporter_id=reporter_id)
         if term := params.get("search"):
-            queryset = queryset.filter(
-                Q(code__icontains=term)
-                | Q(title__icontains=term)
-                | Q(description__icontains=term)
-                | Q(manufacturing_order_number__icontains=term)
-                | Q(affected_process__icontains=term)
-                | Q(reporter__username__icontains=term)
-                | Q(reporter__email__icontains=term)
-                | Q(reporter__first_name__icontains=term)
-                | Q(reporter__last_name__icontains=term)
-            )
+            queryset = queryset.filter(build_tracking_search_query(term))
+        if self.action == "list" and not has_active_tracking_filter(params):
+            queryset = apply_default_tracking_order(queryset)
 
         return queryset
 

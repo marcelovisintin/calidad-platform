@@ -190,7 +190,7 @@ export function TreatmentTrackingPage() {
             </select>
           </label>
           <label className="field">
-            <span>Elaborado por</span>
+            <span>Area</span>
             <select onChange={handleFilterChange(setProcessFilter)} value={processFilter}>
               <option value="">Todos</option>
               {(catalogData?.areas ?? []).map((area) => (
@@ -236,7 +236,7 @@ export function TreatmentTrackingPage() {
                     Usuario: {treatment.effectiveness_responsible?.full_name || treatment.primary_anomaly.reporter?.full_name || treatment.primary_anomaly.reporter?.username || "-"}
                   </small>
                   <small>
-                    Elaborado por: {treatment.primary_anomaly.affected_process || treatment.primary_anomaly.area?.name || "-"} | Fecha: {formatDate(relevantDate(treatment))}
+                    Area: {treatment.primary_anomaly.area?.name || "-"} | Fecha: {formatDate(relevantDate(treatment))}
                   </small>
                 </button>
               ))}
@@ -268,7 +268,7 @@ export function TreatmentTrackingPage() {
                     <dl className="key-grid compact">
                       <div><dt>Codigo</dt><dd>{detail.code}</dd></div>
                       <div><dt>Estado</dt><dd>{humanizeToken(treatmentDisplayStatus(detail))}</dd></div>
-                      <div><dt>Elaborado por</dt><dd>{detail.primary_anomaly.affected_process || selectedProcess}</dd></div>
+                      <div><dt>Area</dt><dd>{detail.primary_anomaly.area?.name || selectedProcess}</dd></div>
                       <div><dt>Programado</dt><dd>{formatDateTime(detail.scheduled_for)}</dd></div>
                       <div><dt>Creado</dt><dd>{formatDateTime(detail.created_at)}</dd></div>
                       <div><dt>Actualizado</dt><dd>{formatDateTime(detail.updated_at)}</dd></div>

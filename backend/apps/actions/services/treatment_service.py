@@ -220,9 +220,9 @@ def ensure_anomaly_available_for_treatment(anomaly, field: str = "anomaly") -> N
     if anomaly.current_status in {AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED}:
         raise ValidationError({field: "La anomalia esta cerrada o anulada y no puede vincularse a tratamiento."})
     if is_immediate_action_anomaly(anomaly):
-        raise ValidationError({field: "Las anomalias con REVICION DE HALLAZGOS como accion inmediata no pueden vincularse a un tratamiento."})
+        raise ValidationError({field: "Las anomalias con Revisión de hallazgos como accion inmediata no pueden vincularse a un tratamiento."})
     if anomaly.severity_id is None:
-        raise ValidationError({field: "La anomalia no tiene REVICION DE HALLAZGOS clasificada para tratamiento."})
+        raise ValidationError({field: "La anomalia no tiene Revisión de hallazgos clasificada para tratamiento."})
     if not hasattr(anomaly, "initial_verification"):
         raise ValidationError({field: "La anomalia no tiene verificacion inicial registrada."})
     classification = getattr(anomaly, "classification", None)

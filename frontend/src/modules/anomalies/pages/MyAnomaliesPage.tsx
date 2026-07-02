@@ -52,11 +52,11 @@ export function MyAnomaliesPage() {
 
     if (!canModifyClassification) {
       setClassificationMessage(null);
-      setClassificationError("No se puede modificar la REVICION DE HALLAZGOS.");
+      setClassificationError("No se puede modificar la Revisión de hallazgos.");
       return;
     }
 
-    if (!window.confirm("Esta seguro de la REVICION DE HALLAZGOS?")) {
+    if (!window.confirm("Esta seguro de la Revisión de hallazgos?")) {
       return;
     }
 
@@ -66,10 +66,10 @@ export function MyAnomaliesPage() {
 
     try {
       await classifyAnomalyBySeverity(anomalyId, severityId);
-      setClassificationMessage("REVICION DE HALLAZGOS actualizada.");
+      setClassificationMessage("Revisión de hallazgos actualizada.");
       await reload();
     } catch (err) {
-      setClassificationError(err instanceof Error ? err.message : "No se pudo actualizar la REVICION DE HALLAZGOS.");
+      setClassificationError(err instanceof Error ? err.message : "No se pudo actualizar la Revisión de hallazgos.");
     } finally {
       setUpdatingAnomalyId(null);
     }
@@ -86,10 +86,10 @@ export function MyAnomaliesPage() {
 
     try {
       await unlockAnomalyClassificationChange(anomalyId);
-      setClassificationMessage("Se habilita el cambio de REVICION DE HALLAZGOS.");
+      setClassificationMessage("Se habilita el cambio de Revisión de hallazgos.");
       await reload();
     } catch (err) {
-      setClassificationError(err instanceof Error ? err.message : "No se pudo habilitar el cambio de REVICION DE HALLAZGOS.");
+      setClassificationError(err instanceof Error ? err.message : "No se pudo habilitar el cambio de Revisión de hallazgos.");
     } finally {
       setUpdatingAnomalyId(null);
     }
@@ -102,13 +102,13 @@ export function MyAnomaliesPage() {
     <section className="page-shell">
       <PageHeader
         title="Seguimiento de anomalias"
-        description={adminUser ? "Listado completo de seguimiento para administracion." : "Listado filtrado por usuario reportante."}
+        description={adminUser ? "Listado completo de seguimiento para administracion." : "Listado filtrado por tus anomalias."}
         actionLabel="Nueva"
         actionTo="/anomalies/new"
       />
 
       <div className="toolbar-card anomaly-toolbar">
-        <input onChange={handleSearchChange} placeholder="Buscar por codigo, titulo, elaborado por o usuario reportante" type="search" value={search} />
+        <input onChange={handleSearchChange} placeholder="Buscar por codigo, titulo, area o estado de hallazgo" type="search" value={search} />
         {strictAdminUser ? (
           <Link className="button button-secondary" to="/anomalies/repetition-study">
             Estudio de repitencia
@@ -139,9 +139,10 @@ export function MyAnomaliesPage() {
                 <Link className="anomaly-row-main" to={`/anomalies/${item.id}`}>
                   <strong>{item.code}</strong>
                   <p>{item.title}</p>
+                  <small>{`Tipo de desvio: ${item.anomaly_type?.name || "Sin tipo de desvio"}`}</small>
                   <small>{`Reportada por: ${item.reporter?.full_name || item.reporter?.username || "Sin dato"}`}</small>
                   <small>
-                    {item.site?.name || "Sin area"} | {item.affected_process || item.area?.name || "Sin elaborado por"} | {formatDateTime(item.detected_at)}
+                    {item.site?.name || "Sin sitio"} | {item.area?.name || "Sin area"} | {formatDateTime(item.detected_at)}
                   </small>
                 </Link>
 
@@ -150,9 +151,9 @@ export function MyAnomaliesPage() {
 
                   {adminUser ? (
                     <label className="anomaly-classification-control">
-                      <span>REVICION DE HALLAZGOS</span>
+                      <span>Revisión de hallazgos</span>
                       <select
-                        aria-label={`REVICION DE HALLAZGOS de ${item.code}`}
+                        aria-label={`Revisión de hallazgos de ${item.code}`}
                         disabled={disableClassificationSelect}
                         onChange={(event) => void handleClassificationChange(item.id, event.target.value, canModifyClassification)}
                         value={item.severity?.id || ""}
@@ -175,11 +176,11 @@ export function MyAnomaliesPage() {
                         </button>
                       ) : null}
                       {!canModifyClassification && !canUnlockClassification ? (
-                        <small className="muted-copy">No se puede modificar la REVICION DE HALLAZGOS.</small>
+                        <small className="muted-copy">No se puede modificar la Revisión de hallazgos.</small>
                       ) : null}
                     </label>
                   ) : (
-                    <span className="status-badge info compact">{item.severity?.name || "Sin REVICION DE HALLAZGOS"}</span>
+                    <span className="status-badge info compact">{item.severity?.name || "Sin Revisión de hallazgos"}</span>
                   )}
                 </div>
               </article>

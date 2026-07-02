@@ -933,7 +933,7 @@ return (
     <section className="page-shell">
       <PageHeader
         title="Tratamientos"
-      description="Gestion de tratamientos por anomalia con REVICION DE HALLAZGOS: convocatoria, analisis de causa y tareas asociadas."
+      description="Gestion de tratamientos por anomalia con Revisión de hallazgos: convocatoria, analisis de causa y tareas asociadas."
       />
 
       <div className="toolbar-card treatment-toolbar">
@@ -945,7 +945,7 @@ return (
         />
         <div className="treatment-toolbar-actions">
           <select onChange={(event) => setSelectedCandidateId(event.target.value)} value={selectedCandidateId}>
-                    <option value="">Seleccionar anomalia con REVICION DE HALLAZGOS...</option>
+                    <option value="">Seleccionar anomalia con Revisión de hallazgos...</option>
             {(supportData?.createCandidates ?? []).map((candidate) => (
               <option key={candidate.id} value={candidate.id}>{`${candidate.code} - ${candidate.title}`}</option>
             ))}
@@ -1010,7 +1010,7 @@ return (
                     <p className="treatment-title">{anomaly.code}</p>
                     <p>{anomaly.title}</p>
                     <small>
-                      Generada por: {anomaly.reporter?.full_name || anomaly.reporter?.username || "Sin dato"} | Elaborado por: {anomaly.affected_process || anomaly.area?.name || "-"} | Asignado a: {anomaly.imputed_area?.name || anomaly.anomaly_origin?.name || "-"}
+                      Generada por: {anomaly.reporter?.full_name || anomaly.reporter?.username || "Sin dato"} | Area: {anomaly.area?.name || "-"} | Asignado a: {anomaly.imputed_area?.name || anomaly.anomaly_origin?.name || "-"}
                     </small>
                   </button>
                 );
@@ -1286,7 +1286,7 @@ return (
                           Limpiar filtros
                         </button>
                         <label className="field">
-                  <span>Anomalias con REVICION DE HALLAZGOS disponibles</span>
+                  <span>Anomalias con Revisión de hallazgos disponibles</span>
                           <select
                             disabled={treatmentLocked}
                             multiple
@@ -1317,7 +1317,7 @@ return (
                                 <strong>{link.anomaly.code}</strong>
                                 <p>{link.anomaly.title}</p>
                                 <small>
-                                  Elaborado por: {link.anomaly.affected_process || link.anomaly.area?.name || "-"} | Asignado a: {link.anomaly.imputed_area?.name || link.anomaly.anomaly_origin?.name || "-"}
+                                  Area: {link.anomaly.area?.name || "-"} | Asignado a: {link.anomaly.imputed_area?.name || link.anomaly.anomaly_origin?.name || "-"}
                                 </small>
                               </div>
                               {link.is_primary ? <span className="status-badge info compact">Principal</span> : null}

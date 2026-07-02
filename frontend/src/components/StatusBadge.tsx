@@ -44,7 +44,7 @@ const toneMap: Record<string, string> = {
 };
 
 const labelMap: Record<string, string> = {
-  classification: "REVICION DE HALLAZGOS",
+  classification: "Revisión de hallazgos",
   validated_effective: "Validado eficaz",
   not_effective: "No eficaz",
 };

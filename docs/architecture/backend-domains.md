@@ -72,7 +72,7 @@ flowchart LR
 
 - Catalogos con `code`, `name`, `is_active`, `display_order`
 - Nunca borrar maestros con historico
-- Debe permitir multisitio y futuras REVICION DE HALLAZGOS
+- Debe permitir multisitio y futuras Revisión de hallazgos
 
 ### `anomalies`
 

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { fetchDashboardSummary, fetchPendingActions } from "../../../api/actions";
 import { fetchMyAnomalies } from "../../../api/anomalies";
 import { fetchTreatments } from "../../../api/treatments";
-import type { DashboardSummaryCard } from "../../../api/types";
+import type { ActionItemSummary, AnomalyListItem, DashboardSummaryCard, DashboardSummaryResponse, PagedResponse, TreatmentSummary } from "../../../api/types";
 import { isAdminUser } from "../../../app/access";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { formatDate, formatDateTime } from "../../../app/utils";
@@ -31,14 +31,14 @@ const primarySectionsBase = [
   {
     sequence: 3,
     title: "Tratamientos",
-    description: "Gestiona convocatorias, analisis de causa raiz y tareas surgidas de anomalias con REVICION DE HALLAZGOS para tratamiento.",
+    description: "Gestiona convocatorias, analisis de causa raiz y tareas surgidas de anomalias con Revisión de hallazgos para tratamiento.",
     to: "/treatments",
     label: "Ver tratamientos",
   },
   {
     sequence: 4,
     title: "Accion inmediata",
-    description: "Cierre directo de anomalias con REVICION DE HALLAZGOS como accion inmediata, con responsable, evidencia y verificacion de eficacia.",
+    description: "Cierre directo de anomalias con Revisión de hallazgos como accion inmediata, con responsable, evidencia y verificacion de eficacia.",
     to: "/anomalies/immediate-actions",
     label: "Gestionar accion inmediata",
   },
@@ -86,8 +86,8 @@ const workflowSections = [
     helper: "Se trabaja desde Nueva anomalia y el detalle del caso.",
   },
   {
-    title: "REVICION DE HALLAZGOS y causa",
-    description: "Analisis tecnico, criterio de REVICION DE HALLAZGOS, origen y determinacion de causa raiz.",
+    title: "Revisión de hallazgos y causa",
+    description: "Analisis tecnico, criterio de Revisión de hallazgos, origen y determinacion de causa raiz.",
     helper: "Ideal para perfiles de calidad, supervision e ingenieria.",
   },
   {
@@ -112,7 +112,7 @@ const adminSections = [
   { title: "Lineas", description: "Lineas o puestos productivos, si el sector las utiliza.", to: "/management/catalogs?entity=lines" },
   { title: "Tipos de desvio", description: "Catalogo de defectos, desvios o eventos de calidad.", to: "/management/catalogs?entity=anomaly-types" },
   { title: "Asignado a", description: "Catalogo de asignaciones asociadas a la anomalia.", to: "/management/catalogs?entity=anomaly-origins" },
-  { title: "Criterios de REVICION DE HALLAZGOS", description: "Criterios usados para la REVICION DE HALLAZGOS de cada anomalia.", to: "/management/catalogs?entity=severities" },
+  { title: "Criterios de Revisión de hallazgos", description: "Criterios usados para la Revisión de hallazgos de cada anomalia.", to: "/management/catalogs?entity=severities" },
   { title: "Orden operativo", description: "Criterios internos de ordenamiento operativo y tratamiento.", to: "/management/catalogs?entity=priorities" },
   { title: "Tipos de accion", description: "Contencion, correctiva, preventiva o mejora.", to: "/management/catalogs?entity=action-types" },
   { title: "Panel admin Django", description: "Acceso completo al panel tecnico y maestros.", href: "/admin/" },
@@ -142,6 +142,24 @@ const viewLabels: Record<DashboardView, string> = {
   tracking: "Seguimiento operativo",
   admin: "Configuracion y maestros",
 };
+
+const EMPTY_SUMMARY: DashboardSummaryResponse = {
+  scope: "user",
+  cards: [],
+};
+
+function emptyPagedResponse<T>(): PagedResponse<T> {
+  return {
+    count: 0,
+    next: null,
+    previous: null,
+    results: [],
+  };
+}
+
+function viewNeedsDashboardData(view: DashboardView) {
+  return view === "overview" || view === "tracking";
+}
 
 function compactStatuses(card: DashboardSummaryCard) {
   const visible = card.statuses.filter((item) => item.count > 0).slice(0, 4);
@@ -274,7 +292,17 @@ export function DashboardPage() {
   );
 
   const primarySections = primarySectionsBase;
+  const needsDashboardData = viewNeedsDashboardData(activeView);
   const { data, loading, error, reload } = useAsyncTask(async () => {
+    if (!needsDashboardData) {
+      return {
+        summary: EMPTY_SUMMARY,
+        anomalies: emptyPagedResponse<AnomalyListItem>(),
+        treatments: emptyPagedResponse<TreatmentSummary>(),
+        pendingActions: emptyPagedResponse<ActionItemSummary>(),
+      };
+    }
+
     if (!user) {
       throw new Error("No hay usuario autenticado.");
     }
@@ -287,7 +315,7 @@ export function DashboardPage() {
     ]);
 
     return { summary, anomalies, treatments, pendingActions };
-  }, [user?.id]);
+  }, [user?.id, needsDashboardData]);
 
   const selectView = (viewId: DashboardView) => {
     setActiveView(viewId);

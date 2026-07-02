@@ -43,7 +43,6 @@ export function NewAnomalyPage() {
     priority: "",
     manufacturing_order_number: "",
     affected_quantity: "",
-    affected_process: "",
     detected_at: nowAsLocalDateTime(),
   });
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
@@ -86,25 +85,6 @@ export function NewAnomalyPage() {
     });
   }, [availableAreas]);
 
-  useEffect(() => {
-    if (!availableAreas.length) {
-      return;
-    }
-    setForm((current) => {
-      const selectedArea = availableAreas.find((item) => item.id === current.area);
-      const nextAffectedProcess = selectedArea?.name || availableAreas[0]?.name || "";
-
-      if (nextAffectedProcess === current.affected_process) {
-        return current;
-      }
-
-      return {
-        ...current,
-        affected_process: nextAffectedProcess,
-      };
-    });
-  }, [availableAreas, form.area]);
-
   const catalogsReady = Boolean(
     bootstrap &&
       bootstrap.sites.length &&
@@ -122,7 +102,6 @@ export function NewAnomalyPage() {
           ...current,
           area: value,
           site: selectedArea?.site?.id || current.site,
-          affected_process: selectedArea?.name || "",
         };
       }
       return { ...current, [name]: value };
@@ -169,7 +148,6 @@ export function NewAnomalyPage() {
         detected_at: toOffsetIso(form.detected_at),
         manufacturing_order_number: form.manufacturing_order_number.trim() || undefined,
         affected_quantity: form.affected_quantity ? Number(form.affected_quantity) : undefined,
-        affected_process: form.affected_process.trim() || undefined,
         code_reservation_id: codeReservation?.id,
       });
 
@@ -252,16 +230,59 @@ export function NewAnomalyPage() {
           <div className="section-head compact">
             <div>
               <p className="eyebrow">Paso 1</p>
-              <h2>Datos del evento</h2>
+              <h2>Datos de inicio</h2>
             </div>
             <span className="status-badge info compact">Carga inicial</span>
           </div>
 
           <div className="form-grid compact-form-grid">
+            <label className="field">
+              <span>Proceso / area afectada</span>
+              <select autoFocus disabled={!catalogsReady} name="area" onChange={handleChange} required value={form.area}>
+                <option value="">Seleccionar</option>
+                {availableAreas.map((item) => (
+                  <option key={`affected-area-${item.id}`} value={item.id}>{`${item.code} - ${item.name}`}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Fecha y hora</span>
+              <input name="detected_at" onChange={handleChange} required type="datetime-local" value={form.detected_at} />
+            </label>
+            <label className="field">
+              <span>Asignado a</span>
+              <select disabled={!catalogsReady} name="imputed_area" onChange={handleChange} required value={form.imputed_area}>
+                <option value="">Seleccionar</option>
+                {availableAreas.map((item) => (
+                  <option key={`imputed-area-${item.id}`} value={item.id}>{`${item.code} - ${item.name}`}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Tipo de desvio</span>
+              <select disabled={!catalogsReady} name="anomaly_type" onChange={handleChange} required value={form.anomaly_type}>
+                <option value="">Seleccionar</option>
+                {bootstrap?.anomalyTypes.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section className="form-section field-span-2">
+          <div className="section-head compact">
+            <div>
+              <p className="eyebrow">Paso 2</p>
+              <h2>Contexto</h2>
+            </div>
+            <span className="status-badge accent compact">Obligatorio</span>
+          </div>
+
+          <div className="form-grid compact-form-grid">
             <label className="field field-span-2">
-              <span>Titulo breve</span>
+              <span>Titulo</span>
               <input
-                autoFocus
                 name="title"
                 onChange={handleChange}
                 placeholder="Ej. Rayado en pieza final"
@@ -271,7 +292,7 @@ export function NewAnomalyPage() {
               />
             </label>
             <label className="field field-span-2">
-              <span>Descripcion detallada</span>
+              <span>Observacion</span>
               <textarea
                 name="description"
                 onChange={handleChange}
@@ -281,34 +302,13 @@ export function NewAnomalyPage() {
                 value={form.description}
               />
             </label>
-            <label className="field">
-              <span>Fecha y hora</span>
-              <input name="detected_at" onChange={handleChange} required type="datetime-local" value={form.detected_at} />
-            </label>
-            <label className="field">
-              <span>Elaborado por</span>
-              <select disabled={!catalogsReady} name="area" onChange={handleChange} required value={form.area}>
-                <option value="">Seleccionar</option>
-                {availableAreas.map((item) => (
-                  <option key={`elaborated-by-${item.id}`} value={item.id}>{`${item.code} - ${item.name}`}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Numero de OF</span>
-              <input name="manufacturing_order_number" onChange={handleChange} placeholder="Ej. 212EDFC" type="text" value={form.manufacturing_order_number} />
-            </label>
-            <label className="field">
-              <span>Cantidad de piezas afectadas</span>
-              <input inputMode="numeric" min="1" name="affected_quantity" onChange={handleChange} placeholder="Ej. 12" type="number" value={form.affected_quantity} />
-            </label>
             <label className="field field-span-2">
-              <span>Evidencia objetiva (imagenes, PDF, Word, Excel o texto)</span>
+              <span>Evidencia objetiva</span>
               <input accept={EVIDENCE_ACCEPT} multiple onChange={handleEvidenceChange} type="file" />
               <small className="muted-copy">
                 {evidenceFiles.length
                   ? `${evidenceFiles.length} archivo(s) listo(s) para adjuntar. Podes seleccionar mas de una vez para acumular archivos.`
-                  : "Opcional: podes adjuntar evidencias objetivas junto con el registro."}
+                  : "Opcional: imagenes, PDF, Word, Excel o texto."}
               </small>
               {evidenceFiles.length ? (
                 <div className="stack-list compact">
@@ -324,50 +324,10 @@ export function NewAnomalyPage() {
                     </div>
                   ))}
                   <button className="button button-secondary" onClick={handleClearEvidence} type="button">
-                    Limpiar evidencias
+                    Quitar todo
                   </button>
                 </div>
               ) : null}
-            </label>
-          </div>
-        </section>
-
-        <section className="form-section field-span-2">
-          <div className="section-head compact">
-            <div>
-              <p className="eyebrow">Paso 2</p>
-              <h2>Contexto operativo</h2>
-            </div>
-            <span className="status-badge accent compact">Obligatorio</span>
-          </div>
-
-          <div className="form-grid compact-form-grid">
-            <label className="field">
-              <span>Sitio</span>
-              <select disabled={!catalogsReady} name="site" onChange={handleChange} required value={form.site}>
-                <option value="">Seleccionar</option>
-                {bootstrap?.sites.map((item) => (
-                  <option key={item.id} value={item.id}>{`${item.code} - ${item.name}`}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Tipo de desvio</span>
-              <select disabled={!catalogsReady} name="anomaly_type" onChange={handleChange} required value={form.anomaly_type}>
-                <option value="">Seleccionar</option>
-                {bootstrap?.anomalyTypes.map((item) => (
-                  <option key={item.id} value={item.id}>{item.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Asignado a</span>
-              <select disabled={!catalogsReady} name="imputed_area" onChange={handleChange} required value={form.imputed_area}>
-                <option value="">Seleccionar</option>
-                {availableAreas.map((item) => (
-                  <option key={`imputed-area-${item.id}`} value={item.id}>{`${item.code} - ${item.name}`}</option>
-                ))}
-              </select>
             </label>
           </div>
         </section>

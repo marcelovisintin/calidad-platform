@@ -22,7 +22,7 @@ class AnomalyStage(models.TextChoices):
     REGISTRATION = "registration", "Registro"
     CONTAINMENT = "containment", "Contencion"
     INITIAL_VERIFICATION = "initial_verification", "Verificacion inicial"
-    CLASSIFICATION = "classification", "REVICION DE HALLAZGOS"
+    CLASSIFICATION = "classification", "Revisión de hallazgos"
     TREATMENT_CREATED = "treatment_created", "Tratamiento creado"
     CAUSE_ANALYSIS = "cause_analysis", "Analisis de causa"
     PROPOSALS = "proposals", "Propuestas"
@@ -333,8 +333,8 @@ class AnomalyClassification(AuditBaseModel):
     summary = models.TextField(blank=True)
 
     class Meta:
-        verbose_name = "REVICION DE HALLAZGOS de anomalia"
-        verbose_name_plural = "REVICION DE HALLAZGOS de anomalia"
+        verbose_name = "Revisión de hallazgos de anomalia"
+        verbose_name_plural = "Revisión de hallazgos de anomalia"
 
 
 class AnomalyCauseAnalysis(AuditBaseModel):
@@ -437,7 +437,8 @@ class AnomalyImmediateAction(AuditBaseModel):
         related_name="anomaly_immediate_actions",
     )
     action_date = models.DateField()
-    effectiveness_verified_at = models.DateTimeField()
+    effectiveness_verified_at = models.DateTimeField(null=True, blank=True)
+    effectiveness_is_effective = models.BooleanField(null=True, blank=True)
     observation = models.TextField()
     actions_taken = models.TextField()
     effectiveness_comment = models.TextField(blank=True)

@@ -55,7 +55,7 @@ export function Timeline({ items }: TimelineProps) {
                 </div>
                 <p className="timeline-comment">{item.comment}</p>
                 {evidenceText ? (
-                  <p className="timeline-evidence">
+                  <p className="timeline-evidence" style={{ whiteSpace: "pre-line" }}>
                     <strong>Evidencia:</strong> {evidenceText}
                   </p>
                 ) : null}

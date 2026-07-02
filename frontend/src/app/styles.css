@@ -717,6 +717,20 @@ small {
   align-items: center;
 }
 
+.repetition-study-button {
+  width: 100%;
+  border: 1px solid var(--border);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.repetition-study-button:hover,
+.repetition-study-button.selected {
+  border-color: var(--accent);
+}
+
 .repetition-study-row small {
   display: block;
   color: var(--muted);

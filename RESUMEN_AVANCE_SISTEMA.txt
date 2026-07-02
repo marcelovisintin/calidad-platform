@@ -1207,9 +1207,86 @@ sin afectar usuarios existentes de manera accidental.
 Se simpliofico no se cargaron fotos y otros detalles en la masiva. ECHO OK
 ..............................................................................................................................
 ___22/05/2026___________________________________________________________________________________________________________________
-revisar en nueva anomalia no deja elejir elaborado por solo miuestra una opcion de la lista
+revisar en nueva anomalia no deja elejir elaborado por solo miuestra una opcion de la lista.        ECHO OK
 ..................................................................................................................................
 _27/05___________________________________________________________________________________________________________________________
 
-Cambiar todas las leyendas "imputado a " por "Asignado a"
+Cambiar todas las leyendas "imputado a " por "Asignado a".      ECHO OK
 ..................................................................................................................................
+en resumen rapido eliminar el boton de nueva anomalia ECHO OK
+..................................................................................................................................
+_____28/05_______________________________________________________________________________________________________________________
+La prioridad inmediata no es corregir la app funcional, porque todavía no existe evidencia suficiente sobre ella; la prioridad es 
+desbloquear la auditabilidad. Primero, hace falta exponer la aplicación y sus artefactos operativos de forma verificable: 
+un compose.yaml o equivalente, definición de servicios, redes y volúmenes, política de variables/env_file, ubicación de logs y
+ un método reproducible para resetear datos de prueba. Docker define precisamente esos elementos en Compose, y además recomienda
+  no usar variables de entorno planas para secretos sensibles cuando puede usarse secrets. 
+
+Segundo, el servicio debe ser alcanzable desde el entorno de auditoría. Docker documenta que al publicar un puerto con -p el 
+backend de Docker hace accesible ese puerto al host o a la red local; también recuerda que el binding puede quedar en 0.0.0.0 
+o restringirse a 127.0.0.1. Si la app vive en una VM, en Docker Desktop o en otra capa aislada, la publicación del puerto y el
+ canal de acceso tienen que quedar explícitos. 
+
+Tercero, una vez desbloqueado el acceso, la secuencia óptima de auditoría debería ser esta: autenticación y gestión de sesión;
+ inventario de usuarios y roles reales; control de acceso por módulo y por request; ciclo de vida completo de anomalías/incidentes;
+  API discovery y pruebas no destructivas de auth bypass/IDOR/CSRF/XSS; uploads; password reset; logging y reporting; usabilidad, 
+  mobile y accesibilidad. Sobre esa segunda fase, los criterios más importantes son: mínimo privilegio y validación por request, 
+  sesiones con expiración server-side, no usar GET para cambios de estado, password reset robusto, uploads endurecidos, logging 
+  suficiente para detectar eventos sensibles, contraseñas basadas en longitud razonable y accesibilidad evaluada con WCAG 2.2. 
+
+Si se resuelve únicamente un requisito para destrabar la siguiente corrida, el más rentable es este: hacer que el login sea 
+realmente accesible desde el entorno de análisis y acompañarlo con el archivo Compose y la ruta de logs. Eso permitiría pasar 
+de un informe de bloqueo de infraestructura a una auditoría funcional y de seguridad verdadera, con hallazgos sobre la aplicación
+ y no sólo sobre la accesibilidad del entorno.
+ ..................................................................................................................................
+ __29/05___________________________________________________________________________________________________________________________
+ en acciones inmediatas al registrar la accion inmediata dividir la carga de datos en dos secciones, la primer seccion: responsable,
+  fecha de carga(dice ahora fecha de accion), observacion,acciones tomadas, Agregar un boton de 
+  carga y al presionarlo guardamos estos datos en el historial y visualizamos luego la segunda seccion con fecha de verificacio de eficacia,
+  selector eficaz si/ no observacion, si se opta por fue eficaz se cierra definitivamente si no fue eficaz queda pendiente y aparece cartel 
+  " No eficaz reveer acciones tomadas"  ECHO OK
+  ...................................................................................................................................
+  en seguimiento anomalias en las tarejtas del listado de anomalia debajo del titulo breve en cada anomalia deberia de estar 
+  el tipo de desvio de la misma, igualmente al seleccionarla para entrear al detalle e historial en la primer tarjeta deberia de figurar 
+  junto al titulo,y en estudio de repitencia en la tarjeta tipo de desvio por sector en cada tipo listado debe mostrar el "asignado a" en 
+  lugar de "elaborado por" ECHO OK
+  ____4/6/2026___________________________________________________________________________________________________________________
+
+  Ver asignacion de id a anomalias.
+  ......................................................................................................................................
+  8/6___________________________________________________________________________________________________________________
+ordenamos nueva anomalia: paso1 "datos de inicio" proceso/area afectada fecha y hora elaborado por asignado a tipo de desvio.
+y en paso 2 "contexto" titulo observacion y evidencia objetiva 
+___22/06_______________________________________________________________________________________________________________________________
+
+Revision con claudia mechi y jorge: Buscar la palabra revicion de haalazgos error ortografioco. OK echo
+.........................................................................................................
+Elaborado por en nueva anomalia   OK ECHO
+eliminar limpiar evidencias y agregar uno que diga quitar todo. ECHO OK
+......................................................................................................................
+buscar en seguimiento de anomalias por estado de hallazgo. EC HO OK
+.........................................................................................................................................
+Estudio de repitencia al hacer click en lo que queremos ver que aparezcan solo esas anomAlias. ECHO OK
+........................................................................................................................................
+estudio de repitencia agregar de filtrar por tipo de hallazgos    ECHO OK
+............................................................................................
+seguimiento de anomlaias revision de hallazgos observacion-no conformidad-oportunidad de mejoras-invalida  ECHO OK
+..........................................................................................
+si la anomalia es observacoion  aparece para observacion(reemplaza a acciona inmediata) y en tratamiento, al elejir un ade las dos desaparece de la otyra.
+.................................................................................................................
+en accion inmediata(observacion) fecha de carga cambiar por fecha de limite de ejecucion o agrego una fech
+agregar fecha de veridficacion en el responsable que hace la tarea. agegar evidencia objetiva
+en listado de tipos de descvio informacion erronea
+detalle anomalia no meustra la evidencia
+.......................................................................................
+en revision de hallazgos el admin asigna el responsable de hacer tratamiento observacion
+
+sacar el rol, sacar area, nota una sola elejor todos los usuarios y luego convocar.
+...................................................
+tratamiento responsable de tarea cualquiera
+
+controlar que fecha de evaluacion de eficacia sea posterior a fecha de cierre de acciones.
+..............................................................................................................
+en verificacion de eficacia antes de cerrar una vez que fue eficaz tilde de modifica procedimiento si/no, si si genera accion con responsable fecha. si es no pasa a lecciones aprendidas.
+
+validacion que aparazaca en admin todo el listado de todos los usuarios

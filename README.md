@@ -1,4 +1,4 @@
-﻿# Plataforma Corporativa de Calidad
+# Plataforma Corporativa de Calidad
 
 Sistema corporativo para gestion de anomalias, acciones, tareas y trazabilidad operativa.
 
@@ -13,7 +13,7 @@ Hoy el sistema ya tiene implementado y validado:
 - Catalogos maestros para sitios, areas, tipos de desvio, origenes, severidad, prioridad y tipos de accion
 - Modulo completo de anomalias con workflow de 12 etapas
 - Verificacion inicial con enfoque 6M
-- REVICION DE HALLAZGOS, analisis de causa, propuestas, planes de accion, ejecucion, resultados, verificacion de eficacia, cierre y aprendizaje
+- Revisión de hallazgos, analisis de causa, propuestas, planes de accion, ejecucion, resultados, verificacion de eficacia, cierre y aprendizaje
 - Planes de accion, acciones, evidencias y trazabilidad de cambios
 - Bandeja interna, tareas pendientes y notificaciones por usuario
 - Auditoria transversal de eventos
@@ -28,7 +28,7 @@ El modulo principal contempla estas etapas:
 1. Registro
 2. Contencion
 3. Verificacion inicial
-4. REVICION DE HALLAZGOS
+4. Revisión de hallazgos
 5. Analisis de causa
 6. Propuestas
 7. Plan de accion
@@ -62,7 +62,7 @@ Toda transicion relevante registra usuario, fecha y hora, comentario, estado ant
   Catalogos reutilizables de negocio.
 
 - `backend/apps/anomalies`
-  Entidad principal de anomalia, workflow, verificacion inicial, REVICION DE HALLAZGOS, analisis de causa, propuestas, verificaciones de eficacia, aprendizaje, comentarios, adjuntos, participantes e historial.
+  Entidad principal de anomalia, workflow, verificacion inicial, Revisión de hallazgos, analisis de causa, propuestas, verificaciones de eficacia, aprendizaje, comentarios, adjuntos, participantes e historial.
 
 - `backend/apps/actions`
   Planes de accion, acciones individuales, prioridades, evidencia esperada, evidencia cargada, comentario de cierre e historial de acciones.
@@ -209,6 +209,8 @@ Se definio una arquitectura inicial para servidor local de planta con estas piez
 Documentacion principal de despliegue:
 
 - `docs/deployment/local-cloud-ready.md`
+- `docs/deployment/raspberry-native.md`
+- `docs/deployment/vercel-frontend-preview.md`
 - `deploy/docker/docker-compose.local.yml`
 - `deploy/docker/.env.server.example`
 - archivo real: `deploy/docker/.env.server.local` (excluido del repo por `.gitignore`)

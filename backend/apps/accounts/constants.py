@@ -15,7 +15,7 @@ ROLE_DEFINITIONS = {
     },
     ROLE_CALIDAD: {
         "name": "Calidad",
-        "description": "Realiza REVICION DE HALLAZGOS, verifica eficacia y formaliza cierres del modulo.",
+        "description": "Realiza Revisión de hallazgos, verifica eficacia y formaliza cierres del modulo.",
     },
     ROLE_INGENIERIA: {
         "name": "Ingenieria",
@@ -106,7 +106,7 @@ PERMISSION_DEFINITIONS = {
         "app_label": "anomalies",
         "model": "anomaly",
         "codename": "classify_anomaly",
-        "name": "Puede realizar REVICION DE HALLAZGOS de anomalias",
+        "name": "Puede realizar Revisión de hallazgos de anomalias",
     },
     PERMISSION_ANALYZE_ANOMALY: {
         "app_label": "anomalies",

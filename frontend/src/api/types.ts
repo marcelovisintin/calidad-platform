@@ -629,6 +629,8 @@ export interface AnomalyRepetitionStudyBucket {
 export interface AnomalyRepetitionStudySectorBucket extends AnomalyRepetitionStudyBucket {
   sector_id: UUID;
   sector_name: string;
+  finding_type_id: UUID | "";
+  finding_type_name: string;
 }
 
 export interface AnomalyRepetitionStudyItem {
@@ -642,6 +644,10 @@ export interface AnomalyRepetitionStudyItem {
   };
   sector: {
     id: UUID;
+    name: string;
+  };
+  finding_type: {
+    id: UUID | "";
     name: string;
   };
   registered_at: string;
@@ -751,7 +757,8 @@ export interface AnomalyImmediateAction {
   id: UUID;
   responsible?: UserSummary | null;
   action_date: string;
-  effectiveness_verified_at: string;
+  effectiveness_verified_at?: string | null;
+  effectiveness_is_effective?: boolean | null;
   observation: string;
   actions_taken: string;
   effectiveness_comment?: string;
@@ -831,9 +838,10 @@ export interface AnomalyDetail extends AnomalyListItem {
 export interface ImmediateActionPayload {
   responsible: UUID;
   action_date: string;
-  effectiveness_verified_at: string;
   observation: string;
   actions_taken: string;
+  effectiveness_verified_at?: string | null;
+  effectiveness_is_effective?: boolean | null;
   effectiveness_comment?: string;
   closure_comment?: string;
 }

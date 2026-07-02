@@ -1,8 +1,10 @@
 ﻿from __future__ import annotations
 
+from datetime import timedelta
+
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
-from django.db.models import Max
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
@@ -169,30 +171,52 @@ def _extract_sequence_from_code(code: str | None, *, year: int) -> int:
     return int(suffix)
 
 
+def _reservation_expiration_cutoff():
+    minutes = max(1, int(getattr(settings, "ANOMALY_CODE_RESERVATION_MINUTES", 30)))
+    return timezone.now() - timedelta(minutes=minutes)
+
+
+def _release_expired_code_reservations() -> None:
+    AnomalyCodeReservation.objects.filter(
+        anomaly__isnull=True,
+        consumed_at__isnull=True,
+        created_at__lt=_reservation_expiration_cutoff(),
+    ).delete()
+
+
+def _reservation_is_expired(reservation: AnomalyCodeReservation) -> bool:
+    return reservation.created_at < _reservation_expiration_cutoff()
+
+
 def _next_sequence_for_year(year: int) -> int:
     prefix = str(year)
-    last_code = (
-        Anomaly.objects.filter(code__startswith=prefix, code__regex=rf"^{year}\\d{{4}}$")
-        .order_by("-code")
+    used_sequences = {
+        _extract_sequence_from_code(code, year=year)
+        for code in Anomaly.objects.filter(code__startswith=prefix, code__regex=rf"^{year}\\d{{4}}$")
         .values_list("code", flat=True)
-        .first()
+    }
+    reserved_sequences = set(
+        AnomalyCodeReservation.objects.filter(year=year, anomaly__isnull=True, consumed_at__isnull=True)
+        .values_list("sequence", flat=True)
     )
-    anomaly_sequence = _extract_sequence_from_code(last_code, year=year)
-    reservation_sequence = (
-        AnomalyCodeReservation.objects.filter(year=year).aggregate(max_sequence=Max("sequence")).get("max_sequence")
-        or 0
-    )
-    return max(anomaly_sequence, reservation_sequence) + 1
+    unavailable_sequences = used_sequences | reserved_sequences
+
+    for sequence in range(1, 10001):
+        if sequence not in unavailable_sequences:
+            return sequence
+
+    raise ValidationError("No hay codigos visibles disponibles para el año actual.")
 
 
 def _code_is_reserved_or_used(code: str) -> bool:
     return (
         Anomaly.objects.filter(code=code).exists()
-        or AnomalyCodeReservation.objects.filter(code=code, anomaly__isnull=True).exists()
+        or AnomalyCodeReservation.objects.filter(code=code, anomaly__isnull=True, consumed_at__isnull=True).exists()
     )
 
 
 def generate_anomaly_code() -> str:
+    _release_expired_code_reservations()
     year = timezone.localdate().year
     sequence = _next_sequence_for_year(year)
 
@@ -210,14 +234,18 @@ def reserve_anomaly_code(*, user) -> AnomalyCodeReservation:
     if not _can_create_anomaly(user):
         raise PermissionDenied("No tiene permisos para reservar codigos de anomalia.")
 
+    _release_expired_code_reservations()
+
     existing = (
         AnomalyCodeReservation.objects.select_for_update()
-        .filter(reserved_by=user, anomaly__isnull=True)
+        .filter(reserved_by=user, anomaly__isnull=True, consumed_at__isnull=True)
         .order_by("-created_at")
         .first()
     )
-    if existing and not Anomaly.objects.filter(code=existing.code).exists():
+    if existing and not _reservation_is_expired(existing) and not Anomaly.objects.filter(code=existing.code).exists():
         return existing
+    if existing and _reservation_is_expired(existing):
+        existing.delete()
 
     year = timezone.localdate().year
     sequence = _next_sequence_for_year(year)
@@ -279,7 +307,23 @@ def _ensure_participant_role(*, anomaly: Anomaly, participant_user, role: str, a
         participant.full_clean()
         participant.save()
 
-def _write_status_history(*, anomaly: Anomaly, from_status: str, to_status: str, from_stage: str, to_stage: str, comment: str, actor, changed_at):
+
+def _user_label(user) -> str:
+    return user.full_name or user.username or user.email or str(user.pk)
+
+
+def _write_status_history(
+    *,
+    anomaly: Anomaly,
+    from_status: str,
+    to_status: str,
+    from_stage: str,
+    to_stage: str,
+    comment: str,
+    actor,
+    changed_at,
+    evidence_note: str = "",
+):
     return AnomalyStatusHistory.objects.create(
         anomaly=anomaly,
         from_status=from_status,
@@ -287,6 +331,7 @@ def _write_status_history(*, anomaly: Anomaly, from_status: str, to_status: str,
         from_stage=from_stage,
         to_stage=to_stage,
         comment=comment,
+        evidence_note=evidence_note,
         changed_by=actor,
         changed_at=changed_at,
         created_by=actor,
@@ -324,11 +369,17 @@ def create_anomaly(*, user, data: dict, request_id: str = "") -> Anomaly:
     if reservation_id:
         reservation = (
             AnomalyCodeReservation.objects.select_for_update()
-            .filter(pk=reservation_id, reserved_by=user, anomaly__isnull=True)
+            .filter(pk=reservation_id, reserved_by=user, anomaly__isnull=True, consumed_at__isnull=True)
             .first()
         )
         if reservation is None:
             raise ValidationError({"code_reservation_id": "La reserva de codigo no existe o ya fue consumida."})
+        if _reservation_is_expired(reservation):
+            expired_code = reservation.code
+            reservation.delete()
+            raise ValidationError(
+                {"code_reservation_id": f"La reserva del codigo {expired_code} vencio. Solicite un nuevo codigo."}
+            )
         code = reservation.code
     elif requested_code:
         code = requested_code
@@ -338,7 +389,7 @@ def create_anomaly(*, user, data: dict, request_id: str = "") -> Anomaly:
     if Anomaly.objects.filter(code=code).exists():
         raise ValidationError({"code": "El codigo de anomalia ya existe. Solicite una nueva reserva."})
 
-    if reservation is None and AnomalyCodeReservation.objects.filter(code=code, anomaly__isnull=True).exists():
+    if reservation is None and AnomalyCodeReservation.objects.filter(code=code, anomaly__isnull=True, consumed_at__isnull=True).exists():
         raise ValidationError({"code": "El codigo esta reservado para otra carga. Solicite una nueva reserva."})
 
     if not data.get("priority"):
@@ -416,7 +467,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     if severity_in_payload:
         access_level = getattr(user, "access_level", "")
         if not (user.is_superuser or access_level in {"administrador", "desarrollador"}):
-            raise PermissionDenied("Solo usuarios ADMIN pueden realizar REVICION DE HALLAZGOS de anomalias.")
+            raise PermissionDenied("Solo usuarios ADMIN pueden realizar Revisión de hallazgos de anomalias.")
 
     for field, value in data.items():
         setattr(locked, field, value)
@@ -429,10 +480,10 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     severity_changed = severity_in_payload and previous_severity_id != locked.severity_id
     if severity_changed:
         if locked.severity_id is None:
-            raise ValidationError({"severity": "Debe seleccionar una REVICION DE HALLAZGOS valida."})
+            raise ValidationError({"severity": "Debe seleccionar una Revisión de hallazgos valida."})
 
         if not can_modify_classification(locked):
-            raise ValidationError({"severity": "No se puede modificar la REVICION DE HALLAZGOS."})
+            raise ValidationError({"severity": "No se puede modificar la Revisión de hallazgos."})
 
         if previous_severity_id is not None:
             locked.classification_change_count = (locked.classification_change_count or 0) + 1
@@ -442,7 +493,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     should_sync_classification = severity_in_payload and locked.severity_id is not None
     if should_sync_classification:
         severity_name = locked.severity.name
-        locked.classification_summary = f"Criterio de REVICION DE HALLAZGOS aplicado: {severity_name}."
+        locked.classification_summary = f"Criterio de Revisión de hallazgos aplicado: {severity_name}."
 
         if locked.current_status not in {AnomalyStatus.CANCELLED, AnomalyStatus.CLOSED} and locked.current_stage in {
             AnomalyStage.REGISTRATION,
@@ -455,7 +506,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
             locked.current_stage = AnomalyStage.CLASSIFICATION
             locked.current_status = resolve_status_for_stage(AnomalyStage.CLASSIFICATION)
             locked.last_transition_at = timezone.now()
-            transition_comment = f"Se registra verificacion inicial y REVICION DE HALLAZGOS: {severity_name}."
+            transition_comment = f"Se registra verificacion inicial y Revisión de hallazgos: {severity_name}."
     locked.updated_by = user
     _bump_version(locked)
     locked.full_clean()
@@ -494,7 +545,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
         )
 
 
-        classification_summary = locked.classification_summary or f"Criterio de REVICION DE HALLAZGOS aplicado: {locked.severity.name}."
+        classification_summary = locked.classification_summary or f"Criterio de Revisión de hallazgos aplicado: {locked.severity.name}."
         classification = _get_related_or_none(locked, "classification")
         if classification is None:
             classification = AnomalyClassification(
@@ -659,7 +710,7 @@ def save_initial_verification(*, anomaly: Anomaly, user, data: dict, request_id:
 @transaction.atomic
 def save_classification(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyClassification:
     _ensure_anomaly_is_editable(anomaly)
-    _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para realizar REVICION DE HALLAZGOS de la anomalia.")
+    _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para realizar Revisión de hallazgos de la anomalia.")
     classification = _get_related_or_none(anomaly, "classification") or AnomalyClassification(anomaly=anomaly)
     classification, created = _upsert_single_related(
         classification,
@@ -686,14 +737,14 @@ def save_classification(*, anomaly: Anomaly, user, data: dict, request_id: str =
 @transaction.atomic
 def unlock_classification_change(*, anomaly: Anomaly, user, request_id: str = "") -> Anomaly:
     _ensure_anomaly_is_editable(anomaly)
-    _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para habilitar cambio de REVICION DE HALLAZGOS.")
+    _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para habilitar cambio de Revisión de hallazgos.")
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
 
     if not stage_allows_classification_change(locked):
-        raise ValidationError({"severity": "No se puede modificar la REVICION DE HALLAZGOS."})
+        raise ValidationError({"severity": "No se puede modificar la Revisión de hallazgos."})
 
     if locked.severity_id is None:
-        raise ValidationError({"severity": "La anomalia no tiene REVICION DE HALLAZGOS registrada."})
+        raise ValidationError({"severity": "La anomalia no tiene Revisión de hallazgos registrada."})
 
     if not can_unlock_classification_change(locked):
         return locked
@@ -713,7 +764,7 @@ def unlock_classification_change(*, anomaly: Anomaly, user, request_id: str = ""
         to_status=locked.current_status,
         from_stage=locked.current_stage,
         to_stage=locked.current_stage,
-        comment="Se habilita el cambio de REVICION DE HALLAZGOS.",
+        comment="Se habilita el cambio de Revisión de hallazgos.",
         actor=user,
         changed_at=now,
     )
@@ -854,19 +905,22 @@ def save_immediate_action(*, anomaly: Anomaly, user, data: dict, request_id: str
     _require_permission(user, PERMISSION_CLOSE_ANOMALY, "No tiene permisos para gestionar accion inmediata.")
 
     if not is_immediate_action_anomaly(anomaly):
-        raise ValidationError({"anomaly": "La anomalia no tiene REVICION DE HALLAZGOS como accion inmediata."})
+        raise ValidationError({"anomaly": "La anomalia no tiene Revisión de hallazgos como accion inmediata."})
 
     required_fields = {
         "observation": "Debe registrar una observacion.",
         "responsible": "Debe seleccionar un responsable.",
-        "action_date": "Debe indicar la fecha de accion.",
+        "action_date": "Debe indicar la fecha de carga.",
         "actions_taken": "Debe registrar las acciones realizadas.",
-        "effectiveness_verified_at": "Debe indicar la fecha de verificacion de eficacia.",
     }
     for field_name, message in required_fields.items():
         value = data.get(field_name)
         if value is None or (isinstance(value, str) and not value.strip()):
             raise ValidationError({field_name: message})
+
+    has_effectiveness_result = data.get("effectiveness_is_effective") is not None
+    if has_effectiveness_result and not data.get("effectiveness_verified_at"):
+        raise ValidationError({"effectiveness_verified_at": "Debe indicar la fecha de verificacion de eficacia."})
 
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
     before = snapshot_anomaly(locked)
@@ -876,7 +930,8 @@ def save_immediate_action(*, anomaly: Anomaly, user, data: dict, request_id: str
     immediate_action.responsible = data["responsible"]
     immediate_action.action_date = data["action_date"]
     immediate_action.actions_taken = data["actions_taken"].strip()
-    immediate_action.effectiveness_verified_at = data["effectiveness_verified_at"]
+    immediate_action.effectiveness_verified_at = data.get("effectiveness_verified_at")
+    immediate_action.effectiveness_is_effective = data.get("effectiveness_is_effective")
     immediate_action.effectiveness_comment = (data.get("effectiveness_comment") or "").strip()
     immediate_action.closure_comment = (data.get("closure_comment") or "").strip()
     if immediate_action.pk is None:
@@ -884,21 +939,6 @@ def save_immediate_action(*, anomaly: Anomaly, user, data: dict, request_id: str
     immediate_action.updated_by = user
     immediate_action.full_clean()
     immediate_action.save()
-
-    check_comment = immediate_action.effectiveness_comment or "Accion inmediata verificada como eficaz."
-    check = AnomalyEffectivenessCheck(
-        anomaly=locked,
-        verified_by=immediate_action.responsible,
-        verified_at=immediate_action.effectiveness_verified_at,
-        is_effective=True,
-        evidence_summary=immediate_action.actions_taken,
-        comment=check_comment,
-        recommended_stage="",
-        created_by=user,
-        updated_by=user,
-    )
-    check.full_clean()
-    check.save()
 
     _ensure_participant_role(
         anomaly=locked,
@@ -918,17 +958,65 @@ def save_immediate_action(*, anomaly: Anomaly, user, data: dict, request_id: str
     now = timezone.now()
     previous_status = locked.current_status
     previous_stage = locked.current_stage
+    history_evidence_lines = [
+        f"Responsable: {_user_label(immediate_action.responsible)}",
+        f"Fecha de carga: {immediate_action.action_date.isoformat()}",
+        f"Observacion: {immediate_action.observation}",
+        f"Acciones tomadas: {immediate_action.actions_taken}",
+    ]
 
     locked.owner = immediate_action.responsible
     locked.containment_summary = immediate_action.observation
     locked.resolution_summary = immediate_action.actions_taken
-    locked.result_summary = check_comment
-    locked.effectiveness_summary = check_comment
-    locked.current_stage = AnomalyStage.CLOSURE
-    locked.current_status = AnomalyStatus.CLOSED
-    locked.closed_at = now
+    locked.current_stage = AnomalyStage.EFFECTIVENESS_VERIFICATION
+    locked.current_status = AnomalyStatus.PENDING_VERIFICATION
+    locked.closed_at = None
     locked.last_transition_at = now
-    locked.closure_comment = immediate_action.closure_comment or "Cierre directo por accion inmediata."
+    history_comment = "Carga de accion inmediata pendiente de verificacion de eficacia."
+
+    if has_effectiveness_result:
+        is_effective = bool(immediate_action.effectiveness_is_effective)
+        check_comment = immediate_action.effectiveness_comment or (
+            "Accion inmediata verificada como eficaz."
+            if is_effective
+            else "No eficaz reveer acciones tomadas"
+        )
+        history_evidence_lines.extend(
+            [
+                f"Fecha de verificacion de eficacia: {immediate_action.effectiveness_verified_at.isoformat()}",
+                f"Resultado: {'Eficaz' if is_effective else 'No eficaz'}",
+                f"Observacion de eficacia: {check_comment}",
+            ]
+        )
+        check = AnomalyEffectivenessCheck(
+            anomaly=locked,
+            verified_by=immediate_action.responsible,
+            verified_at=immediate_action.effectiveness_verified_at,
+            is_effective=is_effective,
+            evidence_summary=immediate_action.actions_taken,
+            comment=check_comment,
+            recommended_stage="",
+            created_by=user,
+            updated_by=user,
+        )
+        check.full_clean()
+        check.save()
+
+        locked.result_summary = check_comment
+        locked.effectiveness_summary = check_comment
+        if is_effective:
+            locked.current_stage = AnomalyStage.CLOSURE
+            locked.current_status = AnomalyStatus.CLOSED
+            locked.closed_at = now
+            locked.closure_comment = immediate_action.closure_comment or "Cierre directo por accion inmediata eficaz."
+            history_comment = "Cierre directo por accion inmediata con verificacion de eficacia."
+        else:
+            locked.current_stage = AnomalyStage.EFFECTIVENESS_VERIFICATION
+            locked.current_status = AnomalyStatus.PENDING_VERIFICATION
+            locked.closed_at = None
+            locked.closure_comment = ""
+            history_comment = "Accion inmediata no eficaz. No eficaz reveer acciones tomadas."
+
     locked.updated_by = user
     _bump_version(locked)
     locked.full_clean()
@@ -940,7 +1028,8 @@ def save_immediate_action(*, anomaly: Anomaly, user, data: dict, request_id: str
         to_status=locked.current_status,
         from_stage=previous_stage,
         to_stage=locked.current_stage,
-        comment="Cierre directo por accion inmediata con verificacion de eficacia.",
+        comment=history_comment,
+        evidence_note="\n".join(history_evidence_lines),
         actor=user,
         changed_at=now,
     )

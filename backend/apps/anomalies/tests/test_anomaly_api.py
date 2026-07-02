@@ -1,9 +1,12 @@
 ﻿from django.utils import timezone
+from datetime import timedelta
+
+from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import User
-from apps.anomalies.models import Anomaly, AnomalyCodeReservation, AnomalyParticipant, AnomalyStage, AnomalyStatus, ParticipantRole
+from apps.anomalies.models import Anomaly, AnomalyCodeReservation, AnomalyImmediateAction, AnomalyParticipant, AnomalyStage, AnomalyStatus, ParticipantRole
 from apps.catalog.models import AnomalyOrigin, AnomalyType, Area, Priority, Severity, Site
 
 
@@ -44,6 +47,25 @@ class AnomalyCreateApiTests(APITestCase):
             payload["severity"] = str(self.severity.pk)
         return payload
 
+    def _immediate_anomaly(self, code="AI-001"):
+        return Anomaly.objects.create(
+            code=code,
+            title=f"Accion inmediata {code}",
+            description="Caso de accion inmediata",
+            site=self.site,
+            area=self.area,
+            reporter=self.user,
+            anomaly_type=self.anomaly_type,
+            anomaly_origin=self.anomaly_origin,
+            severity=self.severity,
+            priority=self.priority,
+            detected_at=timezone.now(),
+            classification_summary="accion inmediata",
+            current_stage=AnomalyStage.CLASSIFICATION,
+            current_status=AnomalyStatus.IN_EVALUATION,
+            created_by=self.user,
+        )
+
     def test_create_anomaly_returns_confirmation_payload(self):
         payload = self._build_payload("001")
 
@@ -59,6 +81,15 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(response.data["manufacturing_order_number"], "OF-001")
         self.assertEqual(response.data["affected_quantity"], 12)
         self.assertRegex(response.data["code"], rf"^{timezone.localdate().year}\d{{4}}$")
+
+    def test_create_anomaly_does_not_require_affected_process(self):
+        payload = self._build_payload("010")
+        payload.pop("affected_process")
+
+        response = self.client.post("/api/v1/anomalies/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["affected_process"], "")
 
     def test_create_anomaly_generates_consecutive_visible_codes(self):
         first = self.client.post("/api/v1/anomalies/", self._build_payload("001"), format="json")
@@ -84,6 +115,65 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(second.status_code, status.HTTP_201_CREATED)
         self.assertEqual(second.data["id"], response.data["id"])
 
+    def test_reserve_code_assigns_distinct_codes_to_distinct_users(self):
+        first_user = User.objects.create_user(
+            username="operario_reserva_1",
+            email="operario_reserva_1@example.com",
+            password="secret123",
+            access_level=User.AccessLevel.USUARIO_ACTIVO,
+            primary_sector=self.area,
+        )
+        second_user = User.objects.create_user(
+            username="operario_reserva_2",
+            email="operario_reserva_2@example.com",
+            password="secret123",
+            access_level=User.AccessLevel.USUARIO_ACTIVO,
+            primary_sector=self.area,
+        )
+
+        self.client.force_authenticate(user=first_user)
+        first = self.client.post("/api/v1/anomalies/reserve-code/", {}, format="json")
+        self.client.force_authenticate(user=second_user)
+        second = self.client.post("/api/v1/anomalies/reserve-code/", {}, format="json")
+
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED)
+        self.assertNotEqual(first.data["id"], second.data["id"])
+        self.assertNotEqual(first.data["code"], second.data["code"])
+
+    @override_settings(ANOMALY_CODE_RESERVATION_MINUTES=30)
+    def test_expired_unconsumed_reservation_is_released_and_reused(self):
+        first_user = User.objects.create_user(
+            username="operario_reserva_vencida_1",
+            email="operario_reserva_vencida_1@example.com",
+            password="secret123",
+            access_level=User.AccessLevel.USUARIO_ACTIVO,
+            primary_sector=self.area,
+        )
+        second_user = User.objects.create_user(
+            username="operario_reserva_vencida_2",
+            email="operario_reserva_vencida_2@example.com",
+            password="secret123",
+            access_level=User.AccessLevel.USUARIO_ACTIVO,
+            primary_sector=self.area,
+        )
+
+        self.client.force_authenticate(user=first_user)
+        first = self.client.post("/api/v1/anomalies/reserve-code/", {}, format="json")
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+
+        AnomalyCodeReservation.objects.filter(pk=first.data["id"]).update(
+            created_at=timezone.now() - timedelta(minutes=31)
+        )
+
+        self.client.force_authenticate(user=second_user)
+        second = self.client.post("/api/v1/anomalies/reserve-code/", {}, format="json")
+
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second.data["code"], first.data["code"])
+        self.assertNotEqual(second.data["id"], first.data["id"])
+        self.assertFalse(AnomalyCodeReservation.objects.filter(pk=first.data["id"]).exists())
+
     def test_create_anomaly_consumes_reserved_code(self):
         reserve_response = self.client.post("/api/v1/anomalies/reserve-code/", {}, format="json")
         self.assertEqual(reserve_response.status_code, status.HTTP_201_CREATED)
@@ -106,6 +196,100 @@ class AnomalyCreateApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIsNone(response.data["severity"])
+
+    def test_immediate_action_load_keeps_anomaly_pending_verification(self):
+        anomaly = self._immediate_anomaly()
+
+        response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/immediate-action/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": timezone.localdate().isoformat(),
+                "observation": "Observacion inicial",
+                "actions_taken": "Acciones tomadas",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["current_status"], AnomalyStatus.PENDING_VERIFICATION)
+        self.assertEqual(response.data["current_stage"], AnomalyStage.EFFECTIVENESS_VERIFICATION)
+        immediate_action = AnomalyImmediateAction.objects.get(anomaly=anomaly)
+        self.assertIsNone(immediate_action.effectiveness_verified_at)
+        self.assertIsNone(immediate_action.effectiveness_is_effective)
+        history = response.data["status_history"][0]
+        self.assertIn("Acciones tomadas", history["evidence_note"])
+        self.assertIn("Observacion inicial", history["evidence_note"])
+
+    def test_immediate_action_not_effective_stays_pending(self):
+        anomaly = self._immediate_anomaly("AI-002")
+        base_payload = {
+            "responsible": str(self.user.pk),
+            "action_date": timezone.localdate().isoformat(),
+            "observation": "Observacion inicial",
+            "actions_taken": "Acciones tomadas",
+        }
+        self.client.post(f"/api/v1/anomalies/{anomaly.pk}/immediate-action/", base_payload, format="json")
+
+        response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/immediate-action/",
+            base_payload
+            | {
+                "effectiveness_verified_at": timezone.now().isoformat(),
+                "effectiveness_is_effective": False,
+                "effectiveness_comment": "No eficaz reveer acciones tomadas",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["current_status"], AnomalyStatus.PENDING_VERIFICATION)
+        self.assertEqual(response.data["current_stage"], AnomalyStage.EFFECTIVENESS_VERIFICATION)
+        self.assertEqual(response.data["immediate_action"]["effectiveness_is_effective"], False)
+        self.assertIn("No eficaz", response.data["effectiveness_summary"])
+        self.assertEqual(len(response.data["effectiveness_checks"]), 1)
+        self.assertIn("Resultado: No eficaz", response.data["status_history"][0]["evidence_note"])
+
+        second_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/immediate-action/",
+            base_payload
+            | {
+                "actions_taken": "Acciones corregidas",
+                "effectiveness_verified_at": timezone.now().isoformat(),
+                "effectiveness_is_effective": False,
+                "effectiveness_comment": "Sigue no eficaz",
+            },
+            format="json",
+        )
+
+        self.assertEqual(second_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(second_response.data["current_status"], AnomalyStatus.PENDING_VERIFICATION)
+        self.assertEqual(len(second_response.data["effectiveness_checks"]), 2)
+        no_effective_history = [
+            item for item in second_response.data["status_history"]
+            if "No eficaz" in item["comment"]
+        ]
+        self.assertEqual(len(no_effective_history), 2)
+        self.assertIn("Acciones corregidas", no_effective_history[0]["evidence_note"])
+
+    def test_immediate_action_effective_closes_anomaly(self):
+        anomaly = self._immediate_anomaly("AI-003")
+        payload = {
+            "responsible": str(self.user.pk),
+            "action_date": timezone.localdate().isoformat(),
+            "observation": "Observacion inicial",
+            "actions_taken": "Acciones tomadas",
+            "effectiveness_verified_at": timezone.now().isoformat(),
+            "effectiveness_is_effective": True,
+            "effectiveness_comment": "Fue eficaz",
+        }
+
+        response = self.client.post(f"/api/v1/anomalies/{anomaly.pk}/immediate-action/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["current_status"], AnomalyStatus.CLOSED)
+        self.assertEqual(response.data["current_stage"], AnomalyStage.CLOSURE)
+        self.assertEqual(response.data["immediate_action"]["effectiveness_is_effective"], True)
 
     def test_usuario_activo_can_create_anomaly(self):
         active_user = User.objects.create_user(
@@ -188,8 +372,84 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertIn(f"{year}9001", codes)
         self.assertIn(f"{year}9002", codes)
 
+    def test_default_tracking_order_prioritizes_registered_and_sends_closed_last(self):
+        admin_user = User.objects.create_user(
+            username="adminorden",
+            email="adminorden@example.com",
+            password="secret123",
+            access_level=User.AccessLevel.ADMINISTRADOR,
+            primary_sector=self.area,
+        )
+        year = timezone.localdate().year
+        now = timezone.now()
 
-    def test_admin_can_search_anomalies_by_reporter_user_data(self):
+        closed = Anomaly.objects.create(
+            code=f"{year}9020",
+            title="Orden seguimiento",
+            description="Cerrada reciente",
+            current_status=AnomalyStatus.CLOSED,
+            current_stage=AnomalyStage.CLOSURE,
+            site=self.site,
+            area=self.area,
+            reporter=self.user,
+            anomaly_type=self.anomaly_type,
+            anomaly_origin=self.anomaly_origin,
+            priority=self.priority,
+            detected_at=now,
+            created_by=self.user,
+            updated_by=self.user,
+        )
+        middle = Anomaly.objects.create(
+            code=f"{year}9021",
+            title="Orden seguimiento",
+            description="En analisis intermedia",
+            current_status=AnomalyStatus.IN_ANALYSIS,
+            current_stage=AnomalyStage.CAUSE_ANALYSIS,
+            site=self.site,
+            area=self.area,
+            reporter=self.user,
+            anomaly_type=self.anomaly_type,
+            anomaly_origin=self.anomaly_origin,
+            priority=self.priority,
+            detected_at=now - timedelta(minutes=1),
+            created_by=self.user,
+            updated_by=self.user,
+        )
+        registered = Anomaly.objects.create(
+            code=f"{year}9022",
+            title="Orden seguimiento",
+            description="Registrada antigua",
+            current_status=AnomalyStatus.REGISTERED,
+            current_stage=AnomalyStage.REGISTRATION,
+            site=self.site,
+            area=self.area,
+            reporter=self.user,
+            anomaly_type=self.anomaly_type,
+            anomaly_origin=self.anomaly_origin,
+            priority=self.priority,
+            detected_at=now - timedelta(minutes=2),
+            created_by=self.user,
+            updated_by=self.user,
+        )
+
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.get("/api/v1/anomalies/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in response.data["results"][:3]],
+            [str(registered.pk), str(middle.pk), str(closed.pk)],
+        )
+
+        search_response = self.client.get("/api/v1/anomalies/?search=Orden%20seguimiento")
+        self.assertEqual(search_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in search_response.data["results"][:3]],
+            [str(closed.pk), str(middle.pk), str(registered.pk)],
+        )
+
+
+    def test_admin_can_search_anomalies_by_area_and_status_not_reporter(self):
         reporter_a = User.objects.create_user(
             username="usuario_busqueda",
             email="busqueda@example.com",
@@ -217,9 +477,9 @@ class AnomalyCreateApiTests(APITestCase):
         )
 
         year = timezone.localdate().year
-        anomaly_a = Anomaly.objects.create(
+        Anomaly.objects.create(
             code=f"{year}9010",
-            title="Anomalia de Lucia",
+            title="Anomalia registrada",
             description="Detalle",
             current_status=AnomalyStatus.REGISTERED,
             current_stage=AnomalyStage.REGISTRATION,
@@ -233,12 +493,12 @@ class AnomalyCreateApiTests(APITestCase):
             created_by=self.user,
             updated_by=self.user,
         )
-        Anomaly.objects.create(
+        anomaly_b = Anomaly.objects.create(
             code=f"{year}9011",
             title="Anomalia de Carlos",
             description="Detalle",
-            current_status=AnomalyStatus.REGISTERED,
-            current_stage=AnomalyStage.REGISTRATION,
+            current_status=AnomalyStatus.IN_ANALYSIS,
+            current_stage=AnomalyStage.CAUSE_ANALYSIS,
             site=self.site,
             area=self.area,
             reporter=reporter_b,
@@ -252,20 +512,86 @@ class AnomalyCreateApiTests(APITestCase):
 
         self.client.force_authenticate(user=admin_user)
 
-        response_username = self.client.get("/api/v1/anomalies/?search=usuario_busqueda")
-        self.assertEqual(response_username.status_code, status.HTTP_200_OK)
-        self.assertEqual(response_username.data["count"], 1)
-        self.assertEqual(response_username.data["results"][0]["id"], str(anomaly_a.pk))
+        response_reporter = self.client.get("/api/v1/anomalies/?search=Lucia")
+        self.assertEqual(response_reporter.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_reporter.data["count"], 0)
 
-        response_name = self.client.get("/api/v1/anomalies/?search=Lucia")
-        self.assertEqual(response_name.status_code, status.HTTP_200_OK)
-        self.assertEqual(response_name.data["count"], 1)
-        self.assertEqual(response_name.data["results"][0]["id"], str(anomaly_a.pk))
+        response_area = self.client.get("/api/v1/anomalies/?search=Area 1")
+        self.assertEqual(response_area.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_area.data["count"], 2)
 
-        response_email = self.client.get("/api/v1/anomalies/?search=busqueda@example.com")
-        self.assertEqual(response_email.status_code, status.HTTP_200_OK)
-        self.assertEqual(response_email.data["count"], 1)
-        self.assertEqual(response_email.data["results"][0]["id"], str(anomaly_a.pk))
+        response_status = self.client.get("/api/v1/anomalies/?search=en%20an%C3%A1lisis")
+        self.assertEqual(response_status.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_status.data["count"], 1)
+        self.assertEqual(response_status.data["results"][0]["id"], str(anomaly_b.pk))
+
+        response_status_without_accent = self.client.get("/api/v1/anomalies/?search=analisis")
+        self.assertEqual(response_status_without_accent.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_status_without_accent.data["count"], 1)
+        self.assertEqual(response_status_without_accent.data["results"][0]["id"], str(anomaly_b.pk))
+
+    def test_repetition_study_groups_by_type_assigned_area_and_finding_type(self):
+        admin_user = User.objects.create_user(
+            username="adminrepitencia",
+            email="adminrepitencia@example.com",
+            password="secret123",
+            access_level=User.AccessLevel.ADMINISTRADOR,
+            primary_sector=self.area,
+        )
+        year = timezone.localdate().year
+
+        first = Anomaly.objects.create(
+            code=f"{year}9030",
+            title="Repitencia triple A",
+            description="Mismo desvio y proceso, hallazgo alto",
+            current_status=AnomalyStatus.IN_ANALYSIS,
+            current_stage=AnomalyStage.CAUSE_ANALYSIS,
+            site=self.site,
+            area=self.area,
+            imputed_area=self.area,
+            reporter=self.user,
+            anomaly_type=self.anomaly_type,
+            anomaly_origin=self.anomaly_origin,
+            severity=self.severity,
+            priority=self.priority,
+            detected_at=timezone.now(),
+            created_by=self.user,
+            updated_by=self.user,
+        )
+        second = Anomaly.objects.create(
+            code=f"{year}9031",
+            title="Repitencia triple B",
+            description="Mismo desvio y proceso, hallazgo medio",
+            current_status=AnomalyStatus.IN_ANALYSIS,
+            current_stage=AnomalyStage.CAUSE_ANALYSIS,
+            site=self.site,
+            area=self.area,
+            imputed_area=self.area,
+            reporter=self.user,
+            anomaly_type=self.anomaly_type,
+            anomaly_origin=self.anomaly_origin,
+            severity=self.severity_alt,
+            priority=self.priority,
+            detected_at=timezone.now(),
+            created_by=self.user,
+            updated_by=self.user,
+        )
+
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.get(f"/api/v1/anomalies/repetition-study/?date_from={timezone.localdate().isoformat()}")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        matching_rows = [
+            item for item in response.data["by_type_sector"]
+            if item["type_id"] == str(self.anomaly_type.pk) and item["sector_id"] == str(self.area.pk)
+        ]
+        self.assertEqual({item["finding_type_id"] for item in matching_rows}, {str(self.severity.pk), str(self.severity_alt.pk)})
+        self.assertEqual({item["finding_type_name"] for item in matching_rows}, {self.severity.name, self.severity_alt.name})
+        self.assertTrue(all(item["count"] == 1 for item in matching_rows))
+
+        anomalies_by_id = {item["id"]: item for item in response.data["anomalies"]}
+        self.assertEqual(anomalies_by_id[str(first.pk)]["finding_type"]["id"], str(self.severity.pk))
+        self.assertEqual(anomalies_by_id[str(second.pk)]["finding_type"]["id"], str(self.severity_alt.pk))
 
     def test_admin_classification_registers_verification_and_classification_records(self):
         payload = self._build_payload("005", include_severity=False)
@@ -285,7 +611,7 @@ class AnomalyCreateApiTests(APITestCase):
 
         self.assertIsNotNone(patch_response.data["initial_verification"])
         self.assertIsNotNone(patch_response.data["classification"])
-        self.assertIn("Criterio de REVICION DE HALLAZGOS aplicado", patch_response.data["classification"]["summary"])
+        self.assertIn("Criterio de Revisión de hallazgos aplicado", patch_response.data["classification"]["summary"])
         self.assertIn(self.severity.name, patch_response.data["classification"]["summary"])
 
         participant_exists = AnomalyParticipant.objects.filter(
@@ -330,7 +656,7 @@ class AnomalyCreateApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(blocked_change.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("No se puede modificar la REVICION DE HALLAZGOS", str(blocked_change.data))
+        self.assertIn("No se puede modificar la Revisión de hallazgos", str(blocked_change.data))
 
         unlock_response = self.client.post(f"/api/v1/anomalies/{anomaly_id}/classification/unlock/", {}, format="json")
         self.assertEqual(unlock_response.status_code, status.HTTP_200_OK)
@@ -358,7 +684,7 @@ class AnomalyCreateApiTests(APITestCase):
 
         unlock_response = self.client.post(f"/api/v1/anomalies/{anomaly.pk}/classification/unlock/", {}, format="json")
         self.assertEqual(unlock_response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("No se puede modificar la REVICION DE HALLAZGOS", str(unlock_response.data))
+        self.assertIn("No se puede modificar la Revisión de hallazgos", str(unlock_response.data))
 
 
     def test_create_treatment_moves_anomaly_to_treatment_created_and_blocks_classification(self):

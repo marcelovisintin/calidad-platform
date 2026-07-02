@@ -142,7 +142,7 @@ function LearnedLessonCard({
         </div>
         <dl className="key-grid compact">
           <div><dt>Anomalia</dt><dd>{treatment.primary_anomaly.code}</dd></div>
-          <div><dt>Elaborado por</dt><dd>{treatment.primary_anomaly.affected_process || treatment.primary_anomaly.area?.name || "-"}</dd></div>
+          <div><dt>Area</dt><dd>{treatment.primary_anomaly.area?.name || "-"}</dd></div>
           <div><dt>Validado</dt><dd>{formatDate(treatment.effectiveness_validated_at)}</dd></div>
           <div><dt>Responsable</dt><dd>{treatment.effectiveness_responsible?.full_name || treatment.effectiveness_responsible?.username || "-"}</dd></div>
         </dl>
@@ -256,7 +256,7 @@ export function LearnedLessonsPage() {
       <section className="toolbar-card">
         <label className="field">
           <span>Buscar tratamiento</span>
-          <input onChange={handleSearch} placeholder="Codigo, anomalia o elaborado por" type="search" value={search} />
+          <input onChange={handleSearch} placeholder="Codigo, anomalia o area" type="search" value={search} />
         </label>
       </section>
 
