@@ -13,6 +13,7 @@ from apps.anomalies.models import (
     AnomalyStage,
     AnomalyStatus,
     AnomalyStatusHistory,
+    ObservationResolutionPath,
 )
 from apps.catalog.models import AnomalyOrigin, AnomalyType, Area, Priority, Severity, Site
 
@@ -146,6 +147,21 @@ class TreatmentCandidatesApiTests(APITestCase):
         )
         return anomaly
 
+    def _create_observation_anomaly(self, *, code: str = "20269010"):
+        anomaly = self._create_anomaly(
+            code=code,
+            title="Anomalia Observacion",
+            reporter=self.reporter_one,
+            area=self.area_one,
+            detected_at=timezone.now(),
+        )
+        anomaly.classification_summary = "Observacion"
+        anomaly.save(update_fields=["classification_summary"])
+        classification = anomaly.classification
+        classification.summary = "Observacion"
+        classification.save(update_fields=["summary"])
+        return anomaly
+
     def test_candidates_for_selected_treatment_include_anomalies_from_other_treatments(self):
         default_response = self.client.get("/api/v1/actions/treatments/candidates/")
         self.assertEqual(default_response.status_code, status.HTTP_200_OK)
@@ -218,6 +234,87 @@ class TreatmentCandidatesApiTests(APITestCase):
                 is_primary=True,
             ).exists()
         )
+
+    def test_observation_anomaly_is_available_for_treatment_until_path_is_selected(self):
+        anomaly = self._create_observation_anomaly()
+
+        candidates_response = self.client.get("/api/v1/actions/treatments/candidates/")
+        self.assertEqual(candidates_response.status_code, status.HTTP_200_OK)
+        candidate_ids = {item["id"] for item in candidates_response.data["results"]}
+        self.assertIn(str(anomaly.pk), candidate_ids)
+
+        create_response = self.client.post(
+            "/api/v1/actions/treatments/",
+            {
+                "primary_anomaly": str(anomaly.pk),
+                "status": "pending",
+                "force_create_new": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        anomaly.refresh_from_db()
+        self.assertEqual(anomaly.observation_resolution_path, ObservationResolutionPath.TREATMENT)
+
+        observation_response = self.client.get("/api/v1/anomalies/immediate-actions/")
+        self.assertEqual(observation_response.status_code, status.HTTP_200_OK)
+        observation_ids = {item["id"] for item in observation_response.data["results"]}
+        self.assertNotIn(str(anomaly.pk), observation_ids)
+
+        save_observation_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/immediate-action/",
+            {
+                "responsible": str(self.admin.pk),
+                "action_date": timezone.localdate().isoformat(),
+                "observation": "Intento de Observacion",
+                "actions_taken": "Acciones tomadas",
+            },
+            format="json",
+        )
+        self.assertEqual(save_observation_response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        history = AnomalyStatusHistory.objects.filter(
+            anomaly=anomaly,
+            comment__icontains="Camino elegido: TREATMENT",
+        ).latest("created_at")
+        self.assertIn("Camino nuevo: TREATMENT", history.evidence_note)
+
+    def test_observation_managed_as_observation_is_not_available_for_treatment(self):
+        anomaly = self._create_observation_anomaly(code="20269011")
+
+        observation_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/immediate-action/",
+            {
+                "responsible": str(self.admin.pk),
+                "action_date": timezone.localdate().isoformat(),
+                "observation": "Observacion inicial",
+                "actions_taken": "Acciones tomadas",
+            },
+            format="json",
+        )
+
+        self.assertEqual(observation_response.status_code, status.HTTP_200_OK)
+        anomaly.refresh_from_db()
+        self.assertEqual(anomaly.observation_resolution_path, ObservationResolutionPath.OBSERVATION)
+
+        candidates_response = self.client.get("/api/v1/actions/treatments/candidates/")
+        self.assertEqual(candidates_response.status_code, status.HTTP_200_OK)
+        candidate_ids = {item["id"] for item in candidates_response.data["results"]}
+        self.assertNotIn(str(anomaly.pk), candidate_ids)
+
+        create_response = self.client.post(
+            "/api/v1/actions/treatments/",
+            {
+                "primary_anomaly": str(anomaly.pk),
+                "status": "pending",
+                "force_create_new": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("primary_anomaly", create_response.data)
 
     def test_tasks_history_for_participant_only_returns_own_tasks(self):
         TreatmentParticipant.objects.create(

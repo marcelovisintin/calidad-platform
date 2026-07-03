@@ -33,8 +33,8 @@ class Migration(migrations.Migration):
                 ('updated_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='%(class)s_updated', to=settings.AUTH_USER_MODEL)),
             ],
             options={
-                'verbose_name': 'Accion inmediata de anomalia',
-                'verbose_name_plural': 'Acciones inmediatas de anomalia',
+                'verbose_name': 'Observacion de anomalia',
+                'verbose_name_plural': 'Observaciones de anomalia',
             },
         ),
     ]

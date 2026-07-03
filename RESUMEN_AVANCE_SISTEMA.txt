@@ -267,8 +267,8 @@ secciones principales acciones y pendientes,  en el panel izq. "mis acciones" qu
  paginacion como las otras listas.
 __________________________________________________________________________________________________________________________
 
- cuando una anomalia es clasificada como accion inmediata, no se debe permitir crear tratamiento, se deberia abrir 
- nueva pantalla para anomalias con accion inmediata y dentro de esta poner una observacion un responsable fecha y acciones 
+ cuando una anomalia es clasificada como Observacion, no se debe permitir crear tratamiento, se deberia abrir 
+ nueva pantalla para anomalias con Observacion y dentro de esta poner una observacion un responsable fecha y acciones 
  a tomar o que se tomaron. fecha verificacion de eficacia y luego cierre directo sin mas.
 
 ------------------------------------------------------------------------------------------------------------------------
@@ -384,7 +384,7 @@ Permisos / alcances disponibles:
 1. Menú contextual
 2. Nueva anomalía
 3. Seguimiento de anomalía
-4. Acción inmediata
+4. Observacion
 5. Tratamientos
    5a. Creación de tratamientos
    5b. Convocatoria
@@ -438,7 +438,7 @@ y "Usuarios". Necesito que en "Alcances de usuario" exista una interfaz tipo che
 
 El sistema debe contemplar los niveles de acceso: Usuario activo, Mando medio activo, Administrador y Desarrollador.
 
-Los permisos disponibles deben incluir: Menú contextual, Nueva anomalía, Seguimiento de anomalía, Acción inmediata, Tratamientos, 
+Los permisos disponibles deben incluir: Menú contextual, Nueva anomalía, Seguimiento de anomalía, Observacion, Tratamientos, 
 Creación de tratamientos, Convocatoria, Análisis, Acciones, Pendientes y Verificación de eficacia.
 
 Primero analizá la estructura existente y no modifiques nada hasta tener claro cómo está armado. Después implementá la mejora de forma limpia 
@@ -810,7 +810,7 @@ Analizar cómo está implementado actualmente:
  ECHO OK
 ```
 .............................................................................................................................
-Acciones inmediatas cerradas por mes filtrar por analisis de repetitividad 
+Observaciones cerradas por mes filtrar por analisis de repetitividad 
 (teniendo en cuenta y aca agregar cuando claudia ahace el analisis que tenga un campo desplegable con los diferentes 
 tipos de anomalias o c ausas)acciones de repitencia agregar en tratemiento convocatoria lugar de la convocatoria carga
  de evidencia de tarea obligatorio. 
@@ -1108,7 +1108,7 @@ Desde “Crear Tratamiento”, el sistema debe permitir tomar anomalías ya revi
  a un tratamiento abierto existente y solo creando uno nuevo cuando corresponda. ECHO OK
 ..........................................................................................................................
 con el objetivo de hacer todo mas facil de seguir en secciones principales tarjeta, arriba a la derecha agregar 
-un numero  en rojo facil de ver: 1 registrar anomalia 2 seguimiento 3 tratamiento 4 accion inmediata 5 accion inmediata 6 acciones y pendientes 
+un numero  en rojo facil de ver: 1 registrar anomalia 2 seguimiento 3 tratamiento 4 Observacion 5 Observacion 6 acciones y pendientes 
 7validacion 8 lecciones aprendidas 9 bandeja interna. ECHO OK
 ............................................................................................................................
 en lecciones aprendidas evidencia objetiva ,ai cargo evidencioa objetiva y luego  quiero verlo en evidencias lecciones aprendidas_evidencias cargadas
@@ -1240,7 +1240,7 @@ de un informe de bloqueo de infraestructura a una auditoría funcional y de segu
  y no sólo sobre la accesibilidad del entorno.
  ..................................................................................................................................
  __29/05___________________________________________________________________________________________________________________________
- en acciones inmediatas al registrar la accion inmediata dividir la carga de datos en dos secciones, la primer seccion: responsable,
+ en observaciones al registrar la Observacion dividir la carga de datos en dos secciones, la primer seccion: responsable,
   fecha de carga(dice ahora fecha de accion), observacion,acciones tomadas, Agregar un boton de 
   carga y al presionarlo guardamos estos datos en el historial y visualizamos luego la segunda seccion con fecha de verificacio de eficacia,
   selector eficaz si/ no observacion, si se opta por fue eficaz se cierra definitivamente si no fue eficaz queda pendiente y aparece cartel 
@@ -1272,9 +1272,9 @@ estudio de repitencia agregar de filtrar por tipo de hallazgos    ECHO OK
 ............................................................................................
 seguimiento de anomlaias revision de hallazgos observacion-no conformidad-oportunidad de mejoras-invalida  ECHO OK
 ..........................................................................................
-si la anomalia es observacoion  aparece para observacion(reemplaza a acciona inmediata) y en tratamiento, al elejir un ade las dos desaparece de la otyra.
+si la anomalia es observacoion  aparece para observacion(reemplaza a Observacion) y en tratamiento, al elejir un ade las dos desaparece de la otyra.
 .................................................................................................................
-en accion inmediata(observacion) fecha de carga cambiar por fecha de limite de ejecucion o agrego una fech
+en Observacion(observacion) fecha de carga cambiar por fecha de limite de ejecucion o agrego una fech
 agregar fecha de veridficacion en el responsable que hace la tarea. agegar evidencia objetiva
 en listado de tipos de descvio informacion erronea
 detalle anomalia no meustra la evidencia

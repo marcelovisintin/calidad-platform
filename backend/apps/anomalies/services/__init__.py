@@ -12,9 +12,12 @@
     save_immediate_action,
     save_initial_verification,
     save_learning,
+    save_observation_action_taken,
+    save_observation_load,
     snapshot_anomaly,
     transition_anomaly,
     update_anomaly,
+    verify_observation_effectiveness,
 )
 from .workflow import ALLOWED_STAGE_TRANSITIONS, REOPENABLE_STAGES, resolve_status_for_stage
 
@@ -35,9 +38,12 @@ __all__ = [
     "save_immediate_action",
     "save_initial_verification",
     "save_learning",
+    "save_observation_action_taken",
+    "save_observation_load",
     "snapshot_anomaly",
     "transition_anomaly",
     "update_anomaly",
+    "verify_observation_effectiveness",
 ]
 
 

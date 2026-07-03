@@ -1,4 +1,5 @@
-﻿export type UUID = string;
+export type UUID = string;
+export type ObservationResolutionPath = "OBSERVATION" | "TREATMENT";
 
 export interface SiteSummary {
   id: UUID;
@@ -612,6 +613,7 @@ export interface AnomalyListItem {
   is_locked_by_effective_treatment?: boolean;
   classification_change_count?: number;
   classification_change_unlocked?: boolean;
+  observation_resolution_path?: ObservationResolutionPath | null;
   manufacturing_order_number?: string;
   affected_quantity?: number | null;
   affected_process?: string;
@@ -757,6 +759,8 @@ export interface AnomalyImmediateAction {
   id: UUID;
   responsible?: UserSummary | null;
   action_date: string;
+  action_completed_at?: string | null;
+  effectiveness_due_at?: string | null;
   effectiveness_verified_at?: string | null;
   effectiveness_is_effective?: boolean | null;
   observation: string;
@@ -839,9 +843,30 @@ export interface ImmediateActionPayload {
   responsible: UUID;
   action_date: string;
   observation: string;
-  actions_taken: string;
+  action_completed_at?: string | null;
+  effectiveness_due_at?: string | null;
+  actions_taken?: string;
   effectiveness_verified_at?: string | null;
   effectiveness_is_effective?: boolean | null;
+  effectiveness_comment?: string;
+  closure_comment?: string;
+}
+
+export interface ObservationLoadPayload {
+  responsible: UUID;
+  action_date: string;
+  observation: string;
+}
+
+export interface ObservationActionPayload {
+  action_completed_at: string;
+  actions_taken: string;
+  effectiveness_due_at: string;
+}
+
+export interface ObservationVerificationPayload {
+  effectiveness_verified_at: string;
+  effectiveness_is_effective: boolean;
   effectiveness_comment?: string;
   closure_comment?: string;
 }

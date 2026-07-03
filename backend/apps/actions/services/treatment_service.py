@@ -23,7 +23,14 @@ from apps.actions.models import (
     TreatmentTaskEvidence,
 )
 from apps.audit.services import record_audit_event
-from apps.anomalies.models import AnomalyCauseAnalysis, AnomalyStage, AnomalyStatus, AnomalyStatusHistory
+from apps.anomalies.models import (
+    Anomaly,
+    AnomalyCauseAnalysis,
+    AnomalyStage,
+    AnomalyStatus,
+    AnomalyStatusHistory,
+    ObservationResolutionPath,
+)
 from apps.anomalies.services.classification_rules import is_immediate_action_anomaly
 
 
@@ -219,8 +226,10 @@ def is_open_treatment_for_association(treatment: Treatment) -> bool:
 def ensure_anomaly_available_for_treatment(anomaly, field: str = "anomaly") -> None:
     if anomaly.current_status in {AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED}:
         raise ValidationError({field: "La anomalia esta cerrada o anulada y no puede vincularse a tratamiento."})
-    if is_immediate_action_anomaly(anomaly):
-        raise ValidationError({field: "Las anomalias con Revisión de hallazgos como accion inmediata no pueden vincularse a un tratamiento."})
+    if is_immediate_action_anomaly(anomaly) and anomaly.observation_resolution_path:
+        if anomaly.observation_resolution_path == ObservationResolutionPath.OBSERVATION:
+            raise ValidationError({field: "La anomalia ya fue tomada por Observacion y no puede vincularse a tratamiento."})
+        raise ValidationError({field: "La anomalia ya fue derivada a Tratamiento."})
     if anomaly.severity_id is None:
         raise ValidationError({field: "La anomalia no tiene Revisión de hallazgos clasificada para tratamiento."})
     if not hasattr(anomaly, "initial_verification"):
@@ -228,6 +237,38 @@ def ensure_anomaly_available_for_treatment(anomaly, field: str = "anomaly") -> N
     classification = getattr(anomaly, "classification", None)
     if not classification or not classification.requires_action_plan:
         raise ValidationError({field: "La anomalia no esta clasificada para tratamiento."})
+
+
+def _mark_observation_path_for_treatment(*, anomaly, user, treatment_code: str | None = None) -> None:
+    locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
+    ensure_anomaly_available_for_treatment(locked)
+
+    if not is_immediate_action_anomaly(locked):
+        return
+
+    previous_path = locked.observation_resolution_path
+    now = timezone.now()
+    locked.observation_resolution_path = ObservationResolutionPath.TREATMENT
+    locked.updated_by = user
+    _bump_version(locked)
+    locked.full_clean()
+    locked.save(update_fields=["observation_resolution_path", "updated_by", "row_version", "updated_at"])
+
+    treatment_label = f" {treatment_code}" if treatment_code else ""
+    _register_anomaly_history_event(
+        anomaly=locked,
+        user=user,
+        comment=f"Camino elegido: TREATMENT. La Observacion se deriva a Tratamiento{treatment_label}.",
+        evidence_note=f"Camino anterior: {previous_path or 'sin definir'}\nCamino nuevo: {ObservationResolutionPath.TREATMENT}",
+        changed_at=now,
+    )
+    record_audit_event(
+        entity=locked,
+        action="anomaly.observation_path_selected",
+        actor=user,
+        before_data={"observation_resolution_path": previous_path or ""},
+        after_data={"observation_resolution_path": ObservationResolutionPath.TREATMENT},
+    )
 
 
 def ensure_treatment_is_editable(treatment: Treatment) -> None:
@@ -619,6 +660,12 @@ def create_treatment(*, primary_anomaly, user, data: dict, request_id: str = "")
     treatment.full_clean()
     treatment.save()
 
+    _mark_observation_path_for_treatment(
+        anomaly=primary_anomaly,
+        user=user,
+        treatment_code=treatment.code,
+    )
+
     TreatmentAnomaly.objects.create(
         treatment=treatment,
         anomaly=primary_anomaly,
@@ -802,6 +849,11 @@ def add_treatment_anomaly(*, treatment: Treatment, anomaly, user, request_id: st
     if not is_open_treatment_for_association(treatment):
         raise ValidationError({"treatment": "Solo se pueden asociar anomalias a tratamientos abiertos y no validados."})
     ensure_anomaly_available_for_treatment(anomaly)
+    _mark_observation_path_for_treatment(
+        anomaly=anomaly,
+        user=user,
+        treatment_code=treatment.code,
+    )
     link, created = TreatmentAnomaly.objects.get_or_create(
         treatment=treatment,
         anomaly=anomaly,

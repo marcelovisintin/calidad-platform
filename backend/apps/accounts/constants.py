@@ -1,4 +1,4 @@
-﻿ROLE_OPERARIO = "OPERARIO"
+ROLE_OPERARIO = "OPERARIO"
 ROLE_SUPERVISOR = "SUPERVISOR"
 ROLE_CALIDAD = "CALIDAD"
 ROLE_INGENIERIA = "INGENIERIA"
@@ -262,8 +262,8 @@ USER_SCOPE_OPTIONS = [
     },
     {
         "key": "immediate_action",
-        "label": "Accion inmediata",
-        "description": "Gestion directa de anomalias con accion inmediata.",
+        "label": "Observacion",
+        "description": "Gestion directa de anomalias con Observacion.",
         "permission_keys": [PERMISSION_CLASSIFY_ANOMALY, PERMISSION_CLOSE_ANOMALY],
     },
     {

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import timedelta
 
@@ -38,6 +38,7 @@ from apps.anomalies.models import (
     AnomalyStage,
     AnomalyStatus,
     AnomalyStatusHistory,
+    ObservationResolutionPath,
     ParticipantRole,
 )
 from apps.anomalies.services.classification_rules import (
@@ -148,6 +149,7 @@ def snapshot_anomaly(anomaly: Anomaly) -> dict:
         "affected_quantity": anomaly.affected_quantity,
         "affected_process": anomaly.affected_process,
         "last_transition_at": anomaly.last_transition_at,
+        "observation_resolution_path": anomaly.observation_resolution_path,
         "classification_change_count": anomaly.classification_change_count,
         "classification_change_unlocked": anomaly.classification_change_unlocked,
         "closed_at": anomaly.closed_at,
@@ -643,6 +645,17 @@ def add_attachment(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
         after_data={"attachment_id": str(attachment.pk), "original_name": attachment.original_name},
         request_id=_request_id(request_id),
     )
+    _write_status_history(
+        anomaly=anomaly,
+        from_status=anomaly.current_status,
+        to_status=anomaly.current_status,
+        from_stage=anomaly.current_stage,
+        to_stage=anomaly.current_stage,
+        comment=f"Evidencia cargada: {attachment.original_name}.",
+        evidence_note=f"Archivo: {attachment.original_name}\nTipo: {attachment.content_type or 'sin tipo'}",
+        actor=user,
+        changed_at=timezone.now(),
+    )
     return attachment
 
 
@@ -899,41 +912,42 @@ def save_learning(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -
 
 
 
-@transaction.atomic
-def save_immediate_action(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyImmediateAction:
-    _ensure_anomaly_is_editable(anomaly)
-    _require_permission(user, PERMISSION_CLOSE_ANOMALY, "No tiene permisos para gestionar accion inmediata.")
 
-    if not is_immediate_action_anomaly(anomaly):
-        raise ValidationError({"anomaly": "La anomalia no tiene Revisión de hallazgos como accion inmediata."})
+def _ensure_observation_path_available(locked: Anomaly) -> None:
+    if not is_immediate_action_anomaly(locked):
+        raise ValidationError({"anomaly": "La anomalia no tiene Revision de hallazgos como Observacion."})
+    if locked.observation_resolution_path == ObservationResolutionPath.TREATMENT:
+        raise ValidationError({"anomaly": "La anomalia ya fue derivada a Tratamiento y no puede gestionarse como Observacion."})
+
+
+def _get_observation_record(locked: Anomaly) -> AnomalyImmediateAction:
+    return _get_related_or_none(locked, "immediate_action") or AnomalyImmediateAction(anomaly=locked)
+
+
+@transaction.atomic
+def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyImmediateAction:
+    _ensure_anomaly_is_editable(anomaly)
+    _require_permission(user, PERMISSION_CLOSE_ANOMALY, "No tiene permisos para gestionar Observacion.")
 
     required_fields = {
         "observation": "Debe registrar una observacion.",
         "responsible": "Debe seleccionar un responsable.",
-        "action_date": "Debe indicar la fecha de carga.",
-        "actions_taken": "Debe registrar las acciones realizadas.",
+        "action_date": "Debe indicar la fecha limite de ejecucion.",
     }
     for field_name, message in required_fields.items():
         value = data.get(field_name)
         if value is None or (isinstance(value, str) and not value.strip()):
             raise ValidationError({field_name: message})
 
-    has_effectiveness_result = data.get("effectiveness_is_effective") is not None
-    if has_effectiveness_result and not data.get("effectiveness_verified_at"):
-        raise ValidationError({"effectiveness_verified_at": "Debe indicar la fecha de verificacion de eficacia."})
-
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
+    _ensure_observation_path_available(locked)
     before = snapshot_anomaly(locked)
+    previous_resolution_path = locked.observation_resolution_path
 
-    immediate_action = _get_related_or_none(locked, "immediate_action") or AnomalyImmediateAction(anomaly=locked)
+    immediate_action = _get_observation_record(locked)
     immediate_action.observation = data["observation"].strip()
     immediate_action.responsible = data["responsible"]
     immediate_action.action_date = data["action_date"]
-    immediate_action.actions_taken = data["actions_taken"].strip()
-    immediate_action.effectiveness_verified_at = data.get("effectiveness_verified_at")
-    immediate_action.effectiveness_is_effective = data.get("effectiveness_is_effective")
-    immediate_action.effectiveness_comment = (data.get("effectiveness_comment") or "").strip()
-    immediate_action.closure_comment = (data.get("closure_comment") or "").strip()
     if immediate_action.pk is None:
         immediate_action.created_by = user
     immediate_action.updated_by = user
@@ -945,78 +959,201 @@ def save_immediate_action(*, anomaly: Anomaly, user, data: dict, request_id: str
         participant_user=immediate_action.responsible,
         role=ParticipantRole.OWNER,
         actor=user,
-        note="Responsable de accion inmediata.",
+        note="Responsable de Observacion.",
     )
     _ensure_participant_role(
         anomaly=locked,
         participant_user=user,
         role=ParticipantRole.VERIFIER,
         actor=user,
-        note="Registra y verifica cierre por accion inmediata.",
+        note="Registra y verifica cierre por Observacion.",
     )
 
     now = timezone.now()
     previous_status = locked.current_status
     previous_stage = locked.current_stage
-    history_evidence_lines = [
-        f"Responsable: {_user_label(immediate_action.responsible)}",
-        f"Fecha de carga: {immediate_action.action_date.isoformat()}",
-        f"Observacion: {immediate_action.observation}",
-        f"Acciones tomadas: {immediate_action.actions_taken}",
-    ]
-
     locked.owner = immediate_action.responsible
+    locked.observation_resolution_path = ObservationResolutionPath.OBSERVATION
     locked.containment_summary = immediate_action.observation
+    locked.closed_at = None
+    locked.updated_by = user
+    _bump_version(locked)
+    locked.full_clean()
+    locked.save()
+
+    _write_status_history(
+        anomaly=locked,
+        from_status=previous_status,
+        to_status=locked.current_status,
+        from_stage=previous_stage,
+        to_stage=locked.current_stage,
+        comment="Carga de Observacion confirmada.",
+        evidence_note="\n".join(
+            [
+                f"Camino elegido: {ObservationResolutionPath.OBSERVATION}",
+                f"Camino anterior: {previous_resolution_path or 'sin definir'}",
+                f"Responsable: {_user_label(immediate_action.responsible)}",
+                f"Fecha limite de ejecucion: {immediate_action.action_date.isoformat()}",
+                f"Observacion: {immediate_action.observation}",
+            ]
+        ),
+        actor=user,
+        changed_at=now,
+    )
+
+    record_audit_event(
+        entity=locked,
+        action="anomaly.observation_loaded",
+        actor=user,
+        before_data=before,
+        after_data=snapshot_anomaly(locked) | {
+            "immediate_action_id": str(immediate_action.pk),
+            "observation_resolution_path": ObservationResolutionPath.OBSERVATION,
+        },
+        request_id=_request_id(request_id),
+    )
+    return immediate_action
+
+
+@transaction.atomic
+def save_observation_action_taken(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyImmediateAction:
+    _ensure_anomaly_is_editable(anomaly)
+    _require_permission(user, PERMISSION_CLOSE_ANOMALY, "No tiene permisos para gestionar Observacion.")
+
+    required_fields = {
+        "action_completed_at": "Debe indicar la fecha de realizado.",
+        "actions_taken": "Debe registrar el detalle de la accion.",
+        "effectiveness_due_at": "Debe indicar la fecha de verificacion de eficacia.",
+    }
+    for field_name, message in required_fields.items():
+        value = data.get(field_name)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            raise ValidationError({field_name: message})
+
+    locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
+    _ensure_observation_path_available(locked)
+    immediate_action = _get_related_or_none(locked, "immediate_action")
+    if immediate_action is None:
+        raise ValidationError({"observation": "Primero debe confirmar la carga de Observacion."})
+
+    before = snapshot_anomaly(locked)
+    previous_status = locked.current_status
+    previous_stage = locked.current_stage
+    now = timezone.now()
+
+    immediate_action.action_completed_at = data["action_completed_at"]
+    immediate_action.actions_taken = data["actions_taken"].strip()
+    immediate_action.effectiveness_due_at = data["effectiveness_due_at"]
+    immediate_action.effectiveness_verified_at = None
+    immediate_action.effectiveness_is_effective = None
+    immediate_action.effectiveness_comment = ""
+    immediate_action.closure_comment = ""
+    immediate_action.updated_by = user
+    immediate_action.full_clean()
+    immediate_action.save()
+
     locked.resolution_summary = immediate_action.actions_taken
     locked.current_stage = AnomalyStage.EFFECTIVENESS_VERIFICATION
     locked.current_status = AnomalyStatus.PENDING_VERIFICATION
     locked.closed_at = None
+    locked.closure_comment = ""
     locked.last_transition_at = now
-    history_comment = "Carga de accion inmediata pendiente de verificacion de eficacia."
+    locked.updated_by = user
+    _bump_version(locked)
+    locked.full_clean()
+    locked.save()
 
-    if has_effectiveness_result:
-        is_effective = bool(immediate_action.effectiveness_is_effective)
-        check_comment = immediate_action.effectiveness_comment or (
-            "Accion inmediata verificada como eficaz."
-            if is_effective
-            else "No eficaz reveer acciones tomadas"
-        )
-        history_evidence_lines.extend(
+    _write_status_history(
+        anomaly=locked,
+        from_status=previous_status,
+        to_status=locked.current_status,
+        from_stage=previous_stage,
+        to_stage=locked.current_stage,
+        comment="Acciones tomadas confirmadas.",
+        evidence_note="\n".join(
             [
-                f"Fecha de verificacion de eficacia: {immediate_action.effectiveness_verified_at.isoformat()}",
-                f"Resultado: {'Eficaz' if is_effective else 'No eficaz'}",
-                f"Observacion de eficacia: {check_comment}",
+                f"Fecha de realizado: {immediate_action.action_completed_at.isoformat()}",
+                f"Detalle de la accion: {immediate_action.actions_taken}",
+                f"Fecha de verificacion de eficacia: {immediate_action.effectiveness_due_at.isoformat()}",
             ]
-        )
-        check = AnomalyEffectivenessCheck(
-            anomaly=locked,
-            verified_by=immediate_action.responsible,
-            verified_at=immediate_action.effectiveness_verified_at,
-            is_effective=is_effective,
-            evidence_summary=immediate_action.actions_taken,
-            comment=check_comment,
-            recommended_stage="",
-            created_by=user,
-            updated_by=user,
-        )
-        check.full_clean()
-        check.save()
+        ),
+        actor=user,
+        changed_at=now,
+    )
+    record_audit_event(
+        entity=locked,
+        action="anomaly.observation_action_taken",
+        actor=user,
+        before_data=before,
+        after_data=snapshot_anomaly(locked) | {"immediate_action_id": str(immediate_action.pk)},
+        request_id=_request_id(request_id),
+    )
+    return immediate_action
 
-        locked.result_summary = check_comment
-        locked.effectiveness_summary = check_comment
-        if is_effective:
-            locked.current_stage = AnomalyStage.CLOSURE
-            locked.current_status = AnomalyStatus.CLOSED
-            locked.closed_at = now
-            locked.closure_comment = immediate_action.closure_comment or "Cierre directo por accion inmediata eficaz."
-            history_comment = "Cierre directo por accion inmediata con verificacion de eficacia."
-        else:
-            locked.current_stage = AnomalyStage.EFFECTIVENESS_VERIFICATION
-            locked.current_status = AnomalyStatus.PENDING_VERIFICATION
-            locked.closed_at = None
-            locked.closure_comment = ""
-            history_comment = "Accion inmediata no eficaz. No eficaz reveer acciones tomadas."
 
+@transaction.atomic
+def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyImmediateAction:
+    _ensure_anomaly_is_editable(anomaly)
+    _require_permission(user, PERMISSION_CLOSE_ANOMALY, "No tiene permisos para gestionar Observacion.")
+
+    if data.get("effectiveness_is_effective") is None:
+        raise ValidationError({"effectiveness_is_effective": "Debe indicar si fue eficaz."})
+    if not data.get("effectiveness_verified_at"):
+        raise ValidationError({"effectiveness_verified_at": "Debe indicar la fecha de verificacion de eficacia."})
+
+    locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
+    _ensure_observation_path_available(locked)
+    immediate_action = _get_related_or_none(locked, "immediate_action")
+    if immediate_action is None or not (immediate_action.actions_taken or "").strip():
+        raise ValidationError({"actions_taken": "Primero debe confirmar una accion tomada."})
+
+    before = snapshot_anomaly(locked)
+    previous_status = locked.current_status
+    previous_stage = locked.current_stage
+    now = timezone.now()
+    is_effective = bool(data["effectiveness_is_effective"])
+    check_comment = (data.get("effectiveness_comment") or "").strip() or (
+        "Observacion verificada como eficaz." if is_effective else "No eficaz. Queda abierta para nueva accion tomada."
+    )
+
+    immediate_action.effectiveness_verified_at = data["effectiveness_verified_at"]
+    immediate_action.effectiveness_is_effective = is_effective
+    immediate_action.effectiveness_comment = check_comment
+    immediate_action.closure_comment = (data.get("closure_comment") or "").strip()
+    immediate_action.updated_by = user
+    immediate_action.full_clean()
+    immediate_action.save()
+
+    check = AnomalyEffectivenessCheck(
+        anomaly=locked,
+        verified_by=immediate_action.responsible,
+        verified_at=immediate_action.effectiveness_verified_at,
+        is_effective=is_effective,
+        evidence_summary=immediate_action.actions_taken,
+        comment=check_comment,
+        recommended_stage="",
+        created_by=user,
+        updated_by=user,
+    )
+    check.full_clean()
+    check.save()
+
+    locked.result_summary = check_comment
+    locked.effectiveness_summary = check_comment
+    if is_effective:
+        locked.current_stage = AnomalyStage.CLOSURE
+        locked.current_status = AnomalyStatus.CLOSED
+        locked.closed_at = now
+        locked.closure_comment = immediate_action.closure_comment or "Cierre directo por Observacion eficaz."
+        history_comment = "Verificacion de eficacia confirmada. Anomalia cerrada."
+    else:
+        locked.current_stage = AnomalyStage.EFFECTIVENESS_VERIFICATION
+        locked.current_status = AnomalyStatus.PENDING_VERIFICATION
+        locked.closed_at = None
+        locked.closure_comment = ""
+        history_comment = "Verificacion de eficacia No eficaz. La anomalia queda abierta para nueva accion tomada."
+
+    locked.last_transition_at = now
     locked.updated_by = user
     _bump_version(locked)
     locked.full_clean()
@@ -1029,21 +1166,40 @@ def save_immediate_action(*, anomaly: Anomaly, user, data: dict, request_id: str
         from_stage=previous_stage,
         to_stage=locked.current_stage,
         comment=history_comment,
-        evidence_note="\n".join(history_evidence_lines),
+        evidence_note="\n".join(
+            [
+                f"Fecha: {immediate_action.effectiveness_verified_at.isoformat()}",
+                f"Resultado: {'Eficaz' if is_effective else 'No eficaz'}",
+                f"Observacion: {check_comment}",
+            ]
+        ),
         actor=user,
         changed_at=now,
     )
-
     record_audit_event(
         entity=locked,
-        action="anomaly.immediate_action_saved",
+        action="anomaly.observation_effectiveness_verified",
         actor=user,
         before_data=before,
         after_data=snapshot_anomaly(locked) | {"immediate_action_id": str(immediate_action.pk)},
         request_id=_request_id(request_id),
     )
     return immediate_action
+
+
 @transaction.atomic
+def save_immediate_action(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyImmediateAction:
+    immediate_action = save_observation_load(anomaly=anomaly, user=user, data=data, request_id=request_id)
+    if (data.get("actions_taken") or "").strip():
+        data = {
+            **data,
+            "action_completed_at": data.get("action_completed_at") or data.get("action_date"),
+            "effectiveness_due_at": data.get("effectiveness_due_at") or data.get("action_date"),
+        }
+        immediate_action = save_observation_action_taken(anomaly=anomaly, user=user, data=data, request_id=request_id)
+    if data.get("effectiveness_is_effective") is not None:
+        immediate_action = verify_observation_effectiveness(anomaly=anomaly, user=user, data=data, request_id=request_id)
+    return immediate_action
 def transition_anomaly(*, anomaly: Anomaly, user, target_stage: str | None = None, target_status: str | None = None, comment: str, request_id: str = "") -> Anomaly:
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
     _ensure_anomaly_is_editable(locked)

@@ -1,4 +1,4 @@
-﻿from django.db.models import Q
+from django.db.models import Q
 from datetime import date, datetime, time
 import unicodedata
 
@@ -36,6 +36,9 @@ from apps.anomalies.api.serializers import (
     AnomalyLearningSerializer,
     AnomalyLearningWriteSerializer,
     AnomalyListSerializer,
+    AnomalyObservationActionWriteSerializer,
+    AnomalyObservationLoadWriteSerializer,
+    AnomalyObservationVerificationWriteSerializer,
     AnomalyParticipantSerializer,
     AnomalyParticipantWriteSerializer,
     AnomalyProposalSerializer,
@@ -50,6 +53,7 @@ from apps.anomalies.models import (
     AnomalyCommentType,
     AnomalyStage,
     AnomalyStatus,
+    ObservationResolutionPath,
     ParticipantRole,
 )
 from apps.anomalies.selectors import build_anomaly_queryset, filter_anomaly_queryset_for_user
@@ -67,8 +71,11 @@ from apps.anomalies.services import (
     unlock_classification_change,
     save_initial_verification,
     save_learning,
+    save_observation_action_taken,
+    save_observation_load,
     transition_anomaly,
     update_anomaly,
+    verify_observation_effectiveness,
 )
 from apps.anomalies.services.classification_rules import immediate_action_q
 
@@ -375,6 +382,12 @@ class AnomalyViewSet(viewsets.ModelViewSet):
             return AnomalyLearningWriteSerializer
         if self.action == "save_immediate_action":
             return AnomalyImmediateActionWriteSerializer
+        if self.action == "save_observation_load":
+            return AnomalyObservationLoadWriteSerializer
+        if self.action == "save_observation_action_taken":
+            return AnomalyObservationActionWriteSerializer
+        if self.action == "verify_observation_effectiveness":
+            return AnomalyObservationVerificationWriteSerializer
         if self.action == "add_attachment":
             return AnomalyAttachmentWriteSerializer
         return AnomalyDetailSerializer
@@ -428,13 +441,14 @@ class AnomalyViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="immediate-actions")
     def immediate_actions(self, request):
         if not (request.user.is_superuser or request.user.has_perm(PERMISSION_CLOSE_ANOMALY)):
-            return Response({"detail": "No tiene permisos para gestionar accion inmediata."}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "No tiene permisos para gestionar Observacion."}, status=status.HTTP_403_FORBIDDEN)
 
         params = request.query_params
         include_closed = (params.get("include_closed") or "").strip().lower() in {"1", "true", "yes", "si"}
         queryset = (
             filter_anomaly_queryset_for_user(build_anomaly_queryset(detailed=False), request.user)
             .filter(immediate_action_q())
+            .exclude(observation_resolution_path=ObservationResolutionPath.TREATMENT)
             .distinct()
             .order_by("-detected_at", "-created_at")
         )
@@ -467,6 +481,45 @@ class AnomalyViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         save_immediate_action(
+            anomaly=anomaly,
+            user=request.user,
+            data=dict(serializer.validated_data),
+            request_id=self._request_id(),
+        )
+        return self._detail_response(anomaly.pk)
+
+    @action(detail=True, methods=["post"], url_path="observation/load")
+    def save_observation_load(self, request, pk=None):
+        anomaly = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        save_observation_load(
+            anomaly=anomaly,
+            user=request.user,
+            data=dict(serializer.validated_data),
+            request_id=self._request_id(),
+        )
+        return self._detail_response(anomaly.pk)
+
+    @action(detail=True, methods=["post"], url_path="observation/actions-taken")
+    def save_observation_action_taken(self, request, pk=None):
+        anomaly = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        save_observation_action_taken(
+            anomaly=anomaly,
+            user=request.user,
+            data=dict(serializer.validated_data),
+            request_id=self._request_id(),
+        )
+        return self._detail_response(anomaly.pk)
+
+    @action(detail=True, methods=["post"], url_path="observation/effectiveness")
+    def verify_observation_effectiveness(self, request, pk=None):
+        anomaly = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        verify_observation_effectiveness(
             anomaly=anomaly,
             user=request.user,
             data=dict(serializer.validated_data),

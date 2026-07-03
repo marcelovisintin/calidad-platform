@@ -470,6 +470,8 @@ class AnomalyImmediateActionSerializer(serializers.ModelSerializer):
             "id",
             "responsible",
             "action_date",
+            "action_completed_at",
+            "effectiveness_due_at",
             "effectiveness_verified_at",
             "effectiveness_is_effective",
             "observation",
@@ -530,6 +532,7 @@ class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin
             "due_at",
             "closed_at",
             "reopened_count",
+            "observation_resolution_path",
         )
 
 
@@ -631,6 +634,7 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
             "last_transition_at",
             "containment_summary",
             "classification_summary",
+            "observation_resolution_path",
             "root_cause_summary",
             "resolution_summary",
             "result_summary",
@@ -877,12 +881,34 @@ class AnomalyLearningWriteSerializer(serializers.ModelSerializer):
 class AnomalyImmediateActionWriteSerializer(serializers.Serializer):
     responsible = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True))
     action_date = serializers.DateField()
+    action_completed_at = serializers.DateField(required=False, allow_null=True)
+    effectiveness_due_at = serializers.DateField(required=False, allow_null=True)
     effectiveness_verified_at = serializers.DateTimeField(required=False, allow_null=True, style=DATETIME_INPUT_STYLE)
     effectiveness_is_effective = serializers.BooleanField(required=False, allow_null=True)
     observation = serializers.CharField()
-    actions_taken = serializers.CharField()
+    actions_taken = serializers.CharField(required=False, allow_blank=True)
     effectiveness_comment = serializers.CharField(required=False, allow_blank=True)
     closure_comment = serializers.CharField(required=False, allow_blank=True)
+
+
+class AnomalyObservationLoadWriteSerializer(serializers.Serializer):
+    responsible = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True))
+    action_date = serializers.DateField()
+    observation = serializers.CharField()
+
+
+class AnomalyObservationActionWriteSerializer(serializers.Serializer):
+    action_completed_at = serializers.DateField()
+    actions_taken = serializers.CharField()
+    effectiveness_due_at = serializers.DateField()
+
+
+class AnomalyObservationVerificationWriteSerializer(serializers.Serializer):
+    effectiveness_verified_at = serializers.DateTimeField(style=DATETIME_INPUT_STYLE)
+    effectiveness_is_effective = serializers.BooleanField()
+    effectiveness_comment = serializers.CharField(required=False, allow_blank=True)
+    closure_comment = serializers.CharField(required=False, allow_blank=True)
+
 
 class AnomalyAttachmentWriteSerializer(serializers.Serializer):
     file = serializers.FileField()

@@ -136,8 +136,8 @@ def _treatment_candidate_queryset(visible):
             initial_verification__isnull=False,
             classification__requires_action_plan=True,
         )
+        .filter(~immediate_action_q() | Q(observation_resolution_path__isnull=True))
         .exclude(current_status__in=[AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED])
-        .exclude(immediate_action_q())
     )
 
 

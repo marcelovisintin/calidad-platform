@@ -1,7 +1,14 @@
-﻿import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchUsers } from "../../../api/accounts";
-import { fetchAnomalyDetail, fetchImmediateActionAnomalies, saveImmediateAction } from "../../../api/anomalies";
+import {
+  fetchAnomalyDetail,
+  fetchImmediateActionAnomalies,
+  saveObservationActionTaken,
+  saveObservationLoad,
+  uploadAnomalyAttachment,
+  verifyObservationEffectiveness,
+} from "../../../api/anomalies";
 import type { UserDirectoryItem } from "../../../api/types";
 import { isAdminUser } from "../../../app/access";
 import { useAuth } from "../../../app/providers/AuthProvider";
@@ -34,7 +41,7 @@ function buildUserLabel(user: UserDirectoryItem) {
 }
 
 export function ImmediateActionsPage() {
-  usePageTitle("Accion inmediata");
+  usePageTitle("Observacion");
   const { user } = useAuth();
   const adminUser = useMemo(() => isAdminUser(user), [user]);
 
@@ -46,7 +53,11 @@ export function ImmediateActionsPage() {
   const [responsibleId, setResponsibleId] = useState("");
   const [actionDate, setActionDate] = useState(nowAsDate());
   const [observation, setObservation] = useState("");
+  const [actionCompletedAt, setActionCompletedAt] = useState(nowAsDate());
   const [actionsTaken, setActionsTaken] = useState("");
+  const [effectivenessDueAt, setEffectivenessDueAt] = useState(nowAsDate());
+  const [objectiveEvidenceFiles, setObjectiveEvidenceFiles] = useState<File[]>([]);
+  const [objectiveEvidenceInputKey, setObjectiveEvidenceInputKey] = useState(0);
   const [effectivenessVerifiedAt, setEffectivenessVerifiedAt] = useState(nowAsLocalDateTime());
   const [effectivenessResult, setEffectivenessResult] = useState<"" | "effective" | "not_effective">("");
   const [effectivenessComment, setEffectivenessComment] = useState("");
@@ -62,7 +73,7 @@ export function ImmediateActionsPage() {
     reload,
   } = useAsyncTask(async () => {
     if (!adminUser) {
-      throw new Error("Solo usuarios administradores pueden gestionar accion inmediata.");
+      throw new Error("Solo usuarios administradores pueden gestionar Observacion.");
     }
 
     const [anomalies, users] = await Promise.all([
@@ -110,7 +121,9 @@ export function ImmediateActionsPage() {
     setResponsibleId(existing?.responsible?.id || selectedAnomaly.owner?.id || selectedAnomaly.current_responsible?.id || "");
     setActionDate(existing?.action_date || nowAsDate());
     setObservation(existing?.observation || selectedAnomaly.containment_summary || "");
+    setActionCompletedAt(existing?.action_completed_at || nowAsDate());
     setActionsTaken(existing?.actions_taken || selectedAnomaly.resolution_summary || "");
+    setEffectivenessDueAt(existing?.effectiveness_due_at || nowAsDate());
     setEffectivenessVerifiedAt(existing?.effectiveness_verified_at ? existing.effectiveness_verified_at.slice(0, 16) : nowAsLocalDateTime());
     setEffectivenessResult(
       existing?.effectiveness_is_effective === true
@@ -120,6 +133,8 @@ export function ImmediateActionsPage() {
           : "",
     );
     setEffectivenessComment(existing?.effectiveness_comment || selectedAnomaly.effectiveness_summary || "");
+    setObjectiveEvidenceFiles([]);
+    setObjectiveEvidenceInputKey((current) => current + 1);
     setFormError(null);
     setMessage(null);
   }, [selectedAnomalyId, selectedAnomaly]);
@@ -132,12 +147,12 @@ export function ImmediateActionsPage() {
   const handleLoadAction = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedAnomalyId) {
-      setFormError("Selecciona una anomalia para registrar accion inmediata.");
+      setFormError("Selecciona una anomalia para registrar Observacion.");
       return;
     }
 
-    if (!responsibleId || !actionDate || !observation.trim() || !actionsTaken.trim()) {
-      setFormError("Completa responsable, fecha de carga, observacion y acciones tomadas.");
+    if (!responsibleId || !actionDate || !observation.trim()) {
+      setFormError("Completa responsable, fecha limite de ejecucion y observacion.");
       return;
     }
 
@@ -146,17 +161,66 @@ export function ImmediateActionsPage() {
     setMessage(null);
 
     try {
-      await saveImmediateAction(selectedAnomalyId, {
+      await saveObservationLoad(selectedAnomalyId, {
         responsible: responsibleId,
         action_date: actionDate,
         observation: observation.trim(),
-        actions_taken: actionsTaken.trim(),
       });
 
-      setMessage("Accion inmediata cargada. Ahora registra la verificacion de eficacia.");
+      setMessage("Observacion cargada. Ahora registra las acciones tomadas.");
       await Promise.all([reload(), reloadDetail()]);
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "No se pudo cargar la accion inmediata.");
+      setFormError(err instanceof Error ? err.message : "No se pudo cargar la Observacion.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleObjectiveEvidenceChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setObjectiveEvidenceFiles(Array.from(event.target.files ?? []));
+  };
+
+  const handleSaveActionsTaken = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedAnomalyId) {
+      setFormError("Selecciona una anomalia para registrar acciones tomadas.");
+      return;
+    }
+
+    if (!selectedAnomaly?.immediate_action) {
+      setFormError("Primero confirma la carga de Observacion.");
+      return;
+    }
+
+    if (!actionCompletedAt || !actionsTaken.trim() || !effectivenessDueAt) {
+      setFormError("Completa fecha de realizado, detalle de la accion y fecha de verificacion de eficacia.");
+      return;
+    }
+
+    setSubmitting(true);
+    setFormError(null);
+    setMessage(null);
+
+    try {
+      await saveObservationActionTaken(selectedAnomalyId, {
+        action_completed_at: actionCompletedAt,
+        actions_taken: actionsTaken.trim(),
+        effectiveness_due_at: effectivenessDueAt,
+      });
+
+      for (const file of objectiveEvidenceFiles) {
+        await uploadAnomalyAttachment(selectedAnomalyId, {
+          file,
+          originalName: file.name,
+        });
+      }
+
+      setObjectiveEvidenceFiles([]);
+      setObjectiveEvidenceInputKey((current) => current + 1);
+      setMessage("Acciones tomadas confirmadas.");
+      await Promise.all([reload(), reloadDetail()]);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "No se pudieron cargar las acciones tomadas.");
     } finally {
       setSubmitting(false);
     }
@@ -169,8 +233,8 @@ export function ImmediateActionsPage() {
       return;
     }
 
-    if (!responsibleId || !actionDate || !observation.trim() || !actionsTaken.trim()) {
-      setFormError("Primero carga la accion inmediata.");
+    if (!selectedAnomaly?.immediate_action?.actions_taken) {
+      setFormError("Primero confirma una accion tomada.");
       return;
     }
 
@@ -186,17 +250,13 @@ export function ImmediateActionsPage() {
     const isEffective = effectivenessResult === "effective";
 
     try {
-      await saveImmediateAction(selectedAnomalyId, {
-        responsible: responsibleId,
-        action_date: actionDate,
-        observation: observation.trim(),
-        actions_taken: actionsTaken.trim(),
+      await verifyObservationEffectiveness(selectedAnomalyId, {
         effectiveness_verified_at: toOffsetIso(effectivenessVerifiedAt),
         effectiveness_is_effective: isEffective,
         effectiveness_comment: effectivenessComment.trim() || undefined,
       });
 
-      setMessage(isEffective ? "Accion inmediata eficaz. Anomalia cerrada definitivamente." : "No eficaz reveer acciones tomadas");
+      setMessage(isEffective ? "Observacion eficaz. Anomalia cerrada definitivamente." : "No eficaz reveer acciones tomadas");
       await Promise.all([reload(), reloadDetail()]);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "No se pudo verificar la eficacia.");
@@ -209,13 +269,14 @@ export function ImmediateActionsPage() {
   const anomalies = listData?.anomalies.results ?? [];
   const totalCount = listData?.anomalies.count ?? 0;
   const hasLoadedAction = Boolean(selectedAnomaly?.immediate_action);
+  const hasConfirmedActions = Boolean(selectedAnomaly?.immediate_action?.actions_taken);
   const notEffective = selectedAnomaly?.immediate_action?.effectiveness_is_effective === false || effectivenessResult === "not_effective";
 
   return (
     <section className="page-shell">
       <PageHeader
-        title="Accion inmediata"
-      description="Gestion directa para anomalias con Revisión de hallazgos como accion inmediata. No generan tratamiento: se ejecuta, verifica eficacia y se cierra en este flujo."
+        title="Observacion"
+      description="Gestion directa para anomalias con Revisión de hallazgos como Observacion. No generan tratamiento: se ejecuta, verifica eficacia y se cierra en este flujo."
       />
 
       <div className="toolbar-card">
@@ -236,8 +297,8 @@ export function ImmediateActionsPage() {
         error={error}
         onRetry={reload}
         empty={totalCount === 0}
-        emptyTitle="No hay anomalias de accion inmediata"
-        emptyDescription="Realiza Revisión de hallazgos de una anomalia con criterio de accion inmediata para gestionarla desde aqui."
+        emptyTitle="No hay anomalias de Observacion"
+        emptyDescription="Realiza Revisión de hallazgos de una anomalia con criterio de Observacion para gestionarla desde aqui."
       >
         <div className="treatment-layout">
           <article className="panel">
@@ -304,7 +365,7 @@ export function ImmediateActionsPage() {
 
                   <form className="form-section" onSubmit={handleLoadAction}>
                     <div className="section-head compact">
-                      <h3>Carga de accion inmediata</h3>
+                      <h3>Carga de Observacion</h3>
                     </div>
 
                     <div className="form-grid">
@@ -321,7 +382,7 @@ export function ImmediateActionsPage() {
                       </label>
 
                       <label className="field">
-                        <span>Fecha de carga</span>
+                        <span>Fecha limite de ejecucion</span>
                         <input onChange={(event) => setActionDate(event.target.value)} required type="date" value={actionDate} />
                       </label>
 
@@ -329,16 +390,11 @@ export function ImmediateActionsPage() {
                         <span>Observacion</span>
                         <textarea onChange={(event) => setObservation(event.target.value)} required rows={3} value={observation} />
                       </label>
-
-                      <label className="field field-span-2">
-                        <span>Acciones tomadas</span>
-                        <textarea onChange={(event) => setActionsTaken(event.target.value)} required rows={3} value={actionsTaken} />
-                      </label>
                     </div>
 
                     <div className="form-actions">
                       <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed"} type="submit">
-                        {submitting ? "Guardando..." : "Cargar accion"}
+                        {submitting ? "Guardando..." : "Cargar observacion"}
                       </button>
                     </div>
                   </form>
@@ -347,6 +403,65 @@ export function ImmediateActionsPage() {
                   {!hasLoadedAction && message ? <div className="panel success">{message}</div> : null}
 
                   {hasLoadedAction ? (
+                    <form className="form-section" onSubmit={handleSaveActionsTaken}>
+                      <div className="section-head compact">
+                        <h3>Acciones tomadas</h3>
+                      </div>
+
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Fecha de realizado</span>
+                          <input onChange={(event) => setActionCompletedAt(event.target.value)} required type="date" value={actionCompletedAt} />
+                        </label>
+
+                        <label className="field">
+                          <span>Fecha de verificacion de eficacia</span>
+                          <input onChange={(event) => setEffectivenessDueAt(event.target.value)} required type="date" value={effectivenessDueAt} />
+                        </label>
+
+                        <label className="field field-span-2">
+                          <span>Detalle de la accion</span>
+                          <textarea onChange={(event) => setActionsTaken(event.target.value)} required rows={3} value={actionsTaken} />
+                        </label>
+
+                        <label className="field field-span-2">
+                          <span>Evidencias objetivas</span>
+                          <input key={objectiveEvidenceInputKey} multiple onChange={handleObjectiveEvidenceChange} type="file" />
+                        </label>
+                      </div>
+
+                      {objectiveEvidenceFiles.length ? (
+                        <p className="muted-copy">
+                          {objectiveEvidenceFiles.length} archivo(s) seleccionado(s)
+                        </p>
+                      ) : null}
+
+                      {selectedAnomaly.attachments.length ? (
+                        <div className="stack-list compact">
+                          {selectedAnomaly.attachments.map((attachment) => (
+                            <a className="text-link" href={attachment.file_url} key={attachment.id} rel="noopener noreferrer" target="_blank">
+                              {attachment.original_name}
+                            </a>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {!hasConfirmedActions && formError ? <div className="panel danger">{formError}</div> : null}
+                      {!hasConfirmedActions && message ? <div className="panel success">{message}</div> : null}
+
+                      <div className="form-actions">
+                        <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed"} type="submit">
+                          {submitting ? "Guardando..." : "Confirmar acciones tomadas"}
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="panel muted">
+                      <p>Primero confirma la carga de Observacion para habilitar acciones tomadas.</p>
+                    </div>
+                  )}
+
+                  {hasConfirmedActions ? (
                     <form className="form-section" onSubmit={handleVerifyEffectiveness}>
                       <div className="section-head compact">
                         <h3>Verificacion de eficacia</h3>
@@ -391,14 +506,14 @@ export function ImmediateActionsPage() {
                   </form>
                   ) : (
                     <div className="panel muted">
-                      <p>Primero carga la accion inmediata para habilitar la verificacion de eficacia.</p>
+                      <p>Primero confirma acciones tomadas para habilitar la verificacion de eficacia.</p>
                     </div>
                   )}
                 </>
               ) : (
                 <div className="panel muted">
                   <h2>Selecciona una anomalia</h2>
-                        <p>Elige una anomalia con Revisión de hallazgos como accion inmediata para cargar ejecucion, eficacia y cierre directo.</p>
+                        <p>Elige una anomalia con Revisión de hallazgos como Observacion para cargar ejecucion, eficacia y cierre directo.</p>
                 </div>
               )}
             </DataState>

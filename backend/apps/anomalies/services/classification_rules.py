@@ -1,11 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import unicodedata
 
 from django.db.models import Q
 
 
-IMMEDIATE_TERMS = ("accion inmediata", "inmediata", "immediate")
+IMMEDIATE_TERMS = ("observacion", "inmediata", "immediate")
 CLASSIFICATION_EDITABLE_STAGES = {
     "registration",
     "containment",
@@ -51,10 +51,14 @@ def immediate_action_q(prefix: str = "") -> Q:
     return (
         Q(**{f"{prefix}severity__name__icontains": "inmediata"})
         | Q(**{f"{prefix}severity__code__icontains": "inmediata"})
-        | Q(**{f"{prefix}classification_summary__icontains": "accion inmediata"})
-        | Q(**{f"{prefix}classification_summary__icontains": "acción inmediata"})
-        | Q(**{f"{prefix}classification__summary__icontains": "accion inmediata"})
-        | Q(**{f"{prefix}classification__summary__icontains": "acción inmediata"})
+        | Q(**{f"{prefix}severity__name__icontains": "Observacion"})
+        | Q(**{f"{prefix}severity__code__icontains": "Observacion"})
+        | Q(**{f"{prefix}severity__name__icontains": "Observación"})
+        | Q(**{f"{prefix}severity__code__icontains": "Observación"})
+        | Q(**{f"{prefix}classification_summary__icontains": "Observacion"})
+        | Q(**{f"{prefix}classification_summary__icontains": "Observación"})
+        | Q(**{f"{prefix}classification__summary__icontains": "Observacion"})
+        | Q(**{f"{prefix}classification__summary__icontains": "Observación"})
     )
 
 

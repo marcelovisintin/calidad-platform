@@ -7,6 +7,9 @@ import type {
   AnomalyListItem,
   AnomalyRepetitionStudyResponse,
   ImmediateActionPayload,
+  ObservationActionPayload,
+  ObservationLoadPayload,
+  ObservationVerificationPayload,
   PagedResponse,
   WorkflowMetadata,
 } from "./types";
@@ -70,6 +73,27 @@ export function createAnomaly(payload: AnomalyCreatePayload) {
 
 export function saveImmediateAction(anomalyId: string, payload: ImmediateActionPayload) {
   return apiRequest<AnomalyDetail>(`/anomalies/${anomalyId}/immediate-action/`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function saveObservationLoad(anomalyId: string, payload: ObservationLoadPayload) {
+  return apiRequest<AnomalyDetail>(`/anomalies/${anomalyId}/observation/load/`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function saveObservationActionTaken(anomalyId: string, payload: ObservationActionPayload) {
+  return apiRequest<AnomalyDetail>(`/anomalies/${anomalyId}/observation/actions-taken/`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function verifyObservationEffectiveness(anomalyId: string, payload: ObservationVerificationPayload) {
+  return apiRequest<AnomalyDetail>(`/anomalies/${anomalyId}/observation/effectiveness/`, {
     method: "POST",
     body: payload,
   });

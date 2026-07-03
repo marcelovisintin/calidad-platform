@@ -37,10 +37,10 @@ const primarySectionsBase = [
   },
   {
     sequence: 4,
-    title: "Accion inmediata",
-    description: "Cierre directo de anomalias con Revisión de hallazgos como accion inmediata, con responsable, evidencia y verificacion de eficacia.",
-    to: "/anomalies/immediate-actions",
-    label: "Gestionar accion inmediata",
+    title: "Observacion",
+    description: "Cierre directo de anomalias con Revisión de hallazgos como Observacion, con responsable, evidencia y verificacion de eficacia.",
+    to: "/anomalies/observations",
+    label: "Gestionar Observacion",
   },
   {
     sequence: 5,

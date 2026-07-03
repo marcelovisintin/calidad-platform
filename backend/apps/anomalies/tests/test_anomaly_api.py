@@ -1,12 +1,24 @@
-﻿from django.utils import timezone
 from datetime import timedelta
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import User
-from apps.anomalies.models import Anomaly, AnomalyCodeReservation, AnomalyImmediateAction, AnomalyParticipant, AnomalyStage, AnomalyStatus, ParticipantRole
+from apps.anomalies.models import (
+    Anomaly,
+    AnomalyClassification,
+    AnomalyCodeReservation,
+    AnomalyImmediateAction,
+    AnomalyInitialVerification,
+    AnomalyParticipant,
+    AnomalyStage,
+    AnomalyStatus,
+    ObservationResolutionPath,
+    ParticipantRole,
+)
 from apps.catalog.models import AnomalyOrigin, AnomalyType, Area, Priority, Severity, Site
 
 
@@ -26,6 +38,7 @@ class AnomalyCreateApiTests(APITestCase):
         self.severity = Severity.objects.create(code="ALTA", name="Alta")
         self.severity_alt = Severity.objects.create(code="MEDIA", name="Media")
         self.severity_extra = Severity.objects.create(code="BAJA", name="Baja")
+        self.severity_observation = Severity.objects.create(code="OBSERVACION", name="Observacion")
         self.priority = Priority.objects.create(code="P1", name="Prioridad 1")
 
     def _build_payload(self, suffix: str, *, include_severity: bool = True):
@@ -48,10 +61,10 @@ class AnomalyCreateApiTests(APITestCase):
         return payload
 
     def _immediate_anomaly(self, code="AI-001"):
-        return Anomaly.objects.create(
+        anomaly = Anomaly.objects.create(
             code=code,
-            title=f"Accion inmediata {code}",
-            description="Caso de accion inmediata",
+            title=f"Observacion {code}",
+            description="Caso de Observacion",
             site=self.site,
             area=self.area,
             reporter=self.user,
@@ -60,11 +73,30 @@ class AnomalyCreateApiTests(APITestCase):
             severity=self.severity,
             priority=self.priority,
             detected_at=timezone.now(),
-            classification_summary="accion inmediata",
+            classification_summary="Observacion",
             current_stage=AnomalyStage.CLASSIFICATION,
             current_status=AnomalyStatus.IN_EVALUATION,
             created_by=self.user,
         )
+        AnomalyInitialVerification.objects.create(
+            anomaly=anomaly,
+            verified_by=self.user,
+            verified_at=timezone.now(),
+            summary="Verificacion inicial registrada.",
+            created_by=self.user,
+            updated_by=self.user,
+        )
+        AnomalyClassification.objects.create(
+            anomaly=anomaly,
+            classified_by=self.user,
+            classified_at=timezone.now(),
+            requires_action_plan=True,
+            requires_effectiveness_verification=True,
+            summary="Observacion",
+            created_by=self.user,
+            updated_by=self.user,
+        )
+        return anomaly
 
     def test_create_anomaly_returns_confirmation_payload(self):
         payload = self._build_payload("001")
@@ -214,12 +246,48 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["current_status"], AnomalyStatus.PENDING_VERIFICATION)
         self.assertEqual(response.data["current_stage"], AnomalyStage.EFFECTIVENESS_VERIFICATION)
+        self.assertEqual(response.data["observation_resolution_path"], ObservationResolutionPath.OBSERVATION)
+        anomaly.refresh_from_db()
+        self.assertEqual(anomaly.observation_resolution_path, ObservationResolutionPath.OBSERVATION)
         immediate_action = AnomalyImmediateAction.objects.get(anomaly=anomaly)
         self.assertIsNone(immediate_action.effectiveness_verified_at)
         self.assertIsNone(immediate_action.effectiveness_is_effective)
-        history = response.data["status_history"][0]
-        self.assertIn("Acciones tomadas", history["evidence_note"])
-        self.assertIn("Observacion inicial", history["evidence_note"])
+        history_entries = response.data["status_history"]
+        self.assertTrue(any("Acciones tomadas" in item["evidence_note"] for item in history_entries))
+        load_history = next(item for item in history_entries if "Carga de Observacion" in item["comment"])
+        self.assertIn("Observacion inicial", load_history["evidence_note"])
+        self.assertIn("Camino elegido: OBSERVATION", load_history["evidence_note"])
+
+        list_response = self.client.get("/api/v1/anomalies/immediate-actions/")
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        anomaly_ids = {item["id"] for item in list_response.data["results"]}
+        self.assertIn(str(anomaly.pk), anomaly_ids)
+
+    def test_observation_list_includes_anomaly_classified_by_severity_only(self):
+        anomaly = Anomaly.objects.create(
+            code="OBS-SEV-001",
+            title="Observacion por severidad",
+            description="Caso clasificado desde catalogo",
+            site=self.site,
+            area=self.area,
+            reporter=self.user,
+            anomaly_type=self.anomaly_type,
+            anomaly_origin=self.anomaly_origin,
+            severity=self.severity_observation,
+            priority=self.priority,
+            detected_at=timezone.now(),
+            classification_summary="Criterio de revision aplicado.",
+            current_stage=AnomalyStage.CLASSIFICATION,
+            current_status=AnomalyStatus.IN_EVALUATION,
+            created_by=self.user,
+            updated_by=self.user,
+        )
+
+        response = self.client.get("/api/v1/anomalies/immediate-actions/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        anomaly_ids = {item["id"] for item in response.data["results"]}
+        self.assertIn(str(anomaly.pk), anomaly_ids)
 
     def test_immediate_action_not_effective_stays_pending(self):
         anomaly = self._immediate_anomaly("AI-002")
@@ -270,7 +338,7 @@ class AnomalyCreateApiTests(APITestCase):
             if "No eficaz" in item["comment"]
         ]
         self.assertEqual(len(no_effective_history), 2)
-        self.assertIn("Acciones corregidas", no_effective_history[0]["evidence_note"])
+        self.assertTrue(any("Sigue no eficaz" in item["evidence_note"] for item in no_effective_history))
 
     def test_immediate_action_effective_closes_anomaly(self):
         anomaly = self._immediate_anomaly("AI-003")
@@ -290,6 +358,90 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(response.data["current_status"], AnomalyStatus.CLOSED)
         self.assertEqual(response.data["current_stage"], AnomalyStage.CLOSURE)
         self.assertEqual(response.data["immediate_action"]["effectiveness_is_effective"], True)
+
+    def test_observation_flow_records_load_action_evidence_and_effectiveness(self):
+        anomaly = self._immediate_anomaly("AI-004")
+
+        load_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": (timezone.localdate() + timedelta(days=3)).isoformat(),
+                "observation": "Observacion cargada desde flujo nuevo",
+            },
+            format="json",
+        )
+
+        self.assertEqual(load_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(load_response.data["observation_resolution_path"], ObservationResolutionPath.OBSERVATION)
+        self.assertTrue(
+            any("Carga de Observacion" in item["comment"] for item in load_response.data["status_history"])
+        )
+
+        action_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions-taken/",
+            {
+                "action_completed_at": timezone.localdate().isoformat(),
+                "actions_taken": "Se ajusto el proceso y se comunico al responsable",
+                "effectiveness_due_at": (timezone.localdate() + timedelta(days=7)).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(action_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(action_response.data["current_status"], AnomalyStatus.PENDING_VERIFICATION)
+        self.assertEqual(action_response.data["current_stage"], AnomalyStage.EFFECTIVENESS_VERIFICATION)
+        self.assertTrue(
+            any("Acciones tomadas" in item["comment"] for item in action_response.data["status_history"])
+        )
+
+        evidence = SimpleUploadedFile("evidencia.txt", b"ok", content_type="text/plain")
+        upload_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/attachments/",
+            {"file": evidence, "original_name": "evidencia.txt", "content_type": "text/plain"},
+            format="multipart",
+        )
+
+        self.assertEqual(upload_response.status_code, status.HTTP_201_CREATED)
+
+        ineffective_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/effectiveness/",
+            {
+                "effectiveness_verified_at": timezone.now().isoformat(),
+                "effectiveness_is_effective": False,
+                "effectiveness_comment": "No eficaz, requiere nueva accion",
+            },
+            format="json",
+        )
+
+        self.assertEqual(ineffective_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(ineffective_response.data["current_status"], AnomalyStatus.PENDING_VERIFICATION)
+        self.assertEqual(ineffective_response.data["current_stage"], AnomalyStage.EFFECTIVENESS_VERIFICATION)
+        self.assertIsNone(ineffective_response.data["closed_at"])
+        self.assertTrue(
+            any("Evidencia cargada" in item["comment"] for item in ineffective_response.data["status_history"])
+        )
+        self.assertTrue(
+            any("No eficaz" in item["comment"] for item in ineffective_response.data["status_history"])
+        )
+
+        effective_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/effectiveness/",
+            {
+                "effectiveness_verified_at": timezone.now().isoformat(),
+                "effectiveness_is_effective": True,
+                "effectiveness_comment": "Eficaz",
+                "closure_comment": "Cierre por verificacion eficaz",
+            },
+            format="json",
+        )
+
+        self.assertEqual(effective_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(effective_response.data["current_status"], AnomalyStatus.CLOSED)
+        self.assertEqual(effective_response.data["current_stage"], AnomalyStage.CLOSURE)
+        self.assertTrue(
+            any("Anomalia cerrada" in item["comment"] for item in effective_response.data["status_history"])
+        )
 
     def test_usuario_activo_can_create_anomaly(self):
         active_user = User.objects.create_user(

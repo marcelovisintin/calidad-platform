@@ -18,6 +18,11 @@ class AnomalyStatus(models.TextChoices):
     REOPENED = "reopened", "Reabierta"
 
 
+class ObservationResolutionPath(models.TextChoices):
+    OBSERVATION = "OBSERVATION", "Observacion"
+    TREATMENT = "TREATMENT", "Tratamiento"
+
+
 class AnomalyStage(models.TextChoices):
     REGISTRATION = "registration", "Registro"
     CONTAINMENT = "containment", "Contencion"
@@ -144,6 +149,13 @@ class Anomaly(AuditBaseModel):
     last_transition_at = models.DateTimeField(null=True, blank=True)
     containment_summary = models.TextField(blank=True)
     classification_summary = models.TextField(blank=True)
+    observation_resolution_path = models.CharField(
+        max_length=20,
+        choices=ObservationResolutionPath.choices,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
     classification_change_count = models.PositiveIntegerField(default=0)
     classification_change_unlocked = models.BooleanField(default=False)
     root_cause_summary = models.TextField(blank=True)
@@ -437,14 +449,16 @@ class AnomalyImmediateAction(AuditBaseModel):
         related_name="anomaly_immediate_actions",
     )
     action_date = models.DateField()
+    action_completed_at = models.DateField(null=True, blank=True)
+    effectiveness_due_at = models.DateField(null=True, blank=True)
     effectiveness_verified_at = models.DateTimeField(null=True, blank=True)
     effectiveness_is_effective = models.BooleanField(null=True, blank=True)
     observation = models.TextField()
-    actions_taken = models.TextField()
+    actions_taken = models.TextField(blank=True, default="")
     effectiveness_comment = models.TextField(blank=True)
     closure_comment = models.TextField(blank=True)
 
     class Meta:
-        verbose_name = "Accion inmediata de anomalia"
-        verbose_name_plural = "Acciones inmediatas de anomalia"
+        verbose_name = "Observacion de anomalia"
+        verbose_name_plural = "Observaciones de anomalia"
 
