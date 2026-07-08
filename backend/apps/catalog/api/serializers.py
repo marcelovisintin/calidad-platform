@@ -29,6 +29,8 @@ class CatalogSummarySerializer(serializers.Serializer):
     id = serializers.UUIDField(read_only=True)
     code = serializers.CharField(read_only=True)
     name = serializers.CharField(read_only=True)
+    requires_classification_responsible = serializers.BooleanField(read_only=True, required=False)
+    closes_anomaly_as_invalid = serializers.BooleanField(read_only=True, required=False)
 
 
 class CatalogApiRootSerializer(serializers.Serializer):
@@ -106,6 +108,10 @@ class AnomalyOriginManagementSerializer(CatalogManagementSerializer):
 class SeverityManagementSerializer(CatalogManagementSerializer):
     class Meta(CatalogManagementSerializer.Meta):
         model = Severity
+        fields = CatalogManagementSerializer.Meta.fields + (
+            "requires_classification_responsible",
+            "closes_anomaly_as_invalid",
+        )
 
 
 class PriorityManagementSerializer(CatalogManagementSerializer):

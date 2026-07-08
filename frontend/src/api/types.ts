@@ -18,6 +18,8 @@ export interface CatalogSummary {
   id: UUID;
   code: string;
   name: string;
+  requires_classification_responsible?: boolean;
+  closes_anomaly_as_invalid?: boolean;
 }
 
 export type CatalogEntity =

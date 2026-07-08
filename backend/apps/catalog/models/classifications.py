@@ -18,6 +18,9 @@ class AnomalyOrigin(ActiveCatalogModel):
 
 
 class Severity(ActiveCatalogModel):
+    requires_classification_responsible = models.BooleanField(default=True)
+    closes_anomaly_as_invalid = models.BooleanField(default=False)
+
     class Meta(ActiveCatalogModel.Meta):
         verbose_name = "Severidad"
         verbose_name_plural = "Severidades"

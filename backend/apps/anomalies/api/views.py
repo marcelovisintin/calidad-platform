@@ -13,7 +13,6 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.constants import PERMISSION_CLOSE_ANOMALY
 from apps.accounts.permissions import CanCreateAnomaly, CanEditAnomaly
 from apps.anomalies.api.serializers import (
     AnomalyAttachmentSerializer,
@@ -90,6 +89,12 @@ STATUS_SEARCH_LABELS = {
     AnomalyStatus.CANCELLED: "cancelado",
     AnomalyStatus.REOPENED: "reabierto",
 }
+
+
+def is_admin_access_user(user) -> bool:
+    if not user or not user.is_authenticated:
+        return False
+    return bool(user.is_superuser or getattr(user, "access_level", "") in {"administrador", "desarrollador"})
 
 
 def normalize_search_text(value: str) -> str:
@@ -440,9 +445,6 @@ class AnomalyViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="immediate-actions")
     def immediate_actions(self, request):
-        if not (request.user.is_superuser or request.user.has_perm(PERMISSION_CLOSE_ANOMALY)):
-            return Response({"detail": "No tiene permisos para gestionar Observacion."}, status=status.HTTP_403_FORBIDDEN)
-
         params = request.query_params
         include_closed = (params.get("include_closed") or "").strip().lower() in {"1", "true", "yes", "si"}
         queryset = (
@@ -452,6 +454,9 @@ class AnomalyViewSet(viewsets.ModelViewSet):
             .distinct()
             .order_by("-detected_at", "-created_at")
         )
+
+        if not is_admin_access_user(request.user):
+            queryset = queryset.filter(Q(owner=request.user) | Q(immediate_action__responsible=request.user))
 
         if not include_closed:
             queryset = queryset.exclude(current_status__in=[AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED])

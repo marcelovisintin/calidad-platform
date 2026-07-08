@@ -117,12 +117,17 @@ export function uploadAnomalyAttachment(
   });
 }
 
-export function classifyAnomalyBySeverity(anomalyId: string, severityId: string) {
+export function classifyAnomalyBySeverity(
+  anomalyId: string,
+  payload: {
+    severity: string;
+    classification_responsible?: string;
+    classification_reason?: string;
+  },
+) {
   return apiRequest<AnomalyDetail>(`/anomalies/${anomalyId}/`, {
     method: "PATCH",
-    body: {
-      severity: severityId,
-    },
+    body: payload,
   });
 }
 

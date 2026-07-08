@@ -6,7 +6,9 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.accounts.constants import PERMISSION_CLASSIFY_ANOMALY, PERMISSION_EDIT_ANOMALY
 from apps.accounts.models import User
+from apps.accounts.services.role_setup import ensure_required_permissions
 from apps.anomalies.models import (
     Anomaly,
     AnomalyClassification,
@@ -39,7 +41,16 @@ class AnomalyCreateApiTests(APITestCase):
         self.severity_alt = Severity.objects.create(code="MEDIA", name="Media")
         self.severity_extra = Severity.objects.create(code="BAJA", name="Baja")
         self.severity_observation = Severity.objects.create(code="OBSERVACION", name="Observacion")
+        self.severity_invalid = Severity.objects.create(
+            code="INVALIDA",
+            name="Invalida",
+            requires_classification_responsible=False,
+            closes_anomaly_as_invalid=True,
+        )
         self.priority = Priority.objects.create(code="P1", name="Prioridad 1")
+
+    def _classification_payload(self, severity):
+        return {"severity": str(severity.pk), "classification_responsible": str(self.user.pk)}
 
     def _build_payload(self, suffix: str, *, include_severity: bool = True):
         payload = {
@@ -288,6 +299,61 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         anomaly_ids = {item["id"] for item in response.data["results"]}
         self.assertIn(str(anomaly.pk), anomaly_ids)
+
+    def test_observation_is_visible_and_manageable_only_by_assigned_responsible(self):
+        responsible = User.objects.create_user(
+            username="responsable_observacion",
+            email="responsable_observacion@example.com",
+            password="secret123",
+            primary_sector=self.area,
+        )
+        other_user = User.objects.create_user(
+            username="otro_observacion",
+            email="otro_observacion@example.com",
+            password="secret123",
+            primary_sector=self.area,
+        )
+        assigned = self._immediate_anomaly("AI-RESP-001")
+        assigned.owner = responsible
+        assigned.save(update_fields=["owner", "updated_at"])
+        other_assigned = self._immediate_anomaly("AI-RESP-002")
+        other_assigned.owner = other_user
+        other_assigned.save(update_fields=["owner", "updated_at"])
+
+        self.client.force_authenticate(user=responsible)
+        list_response = self.client.get("/api/v1/anomalies/immediate-actions/")
+
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        anomaly_ids = {item["id"] for item in list_response.data["results"]}
+        self.assertIn(str(assigned.pk), anomaly_ids)
+        self.assertNotIn(str(other_assigned.pk), anomaly_ids)
+
+        load_response = self.client.post(
+            f"/api/v1/anomalies/{assigned.pk}/observation/load/",
+            {
+                "responsible": str(responsible.pk),
+                "action_date": timezone.localdate().isoformat(),
+                "observation": "Gestionada por responsable asignado",
+            },
+            format="json",
+        )
+
+        self.assertEqual(load_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(load_response.data["immediate_action"]["responsible"]["id"], str(responsible.pk))
+
+        evidence = SimpleUploadedFile("evidencia-responsable.txt", b"ok", content_type="text/plain")
+        upload_response = self.client.post(
+            f"/api/v1/anomalies/{assigned.pk}/attachments/",
+            {"file": evidence, "original_name": "evidencia-responsable.txt", "content_type": "text/plain"},
+            format="multipart",
+        )
+
+        self.assertEqual(upload_response.status_code, status.HTTP_201_CREATED)
+
+        self.client.force_authenticate(user=other_user)
+        other_list_response = self.client.get("/api/v1/anomalies/immediate-actions/")
+        other_ids = {item["id"] for item in other_list_response.data["results"]}
+        self.assertNotIn(str(assigned.pk), other_ids)
 
     def test_immediate_action_not_effective_stays_pending(self):
         anomaly = self._immediate_anomaly("AI-002")
@@ -753,7 +819,7 @@ class AnomalyCreateApiTests(APITestCase):
         anomaly_id = create_response.data["id"]
         patch_response = self.client.patch(
             f"/api/v1/anomalies/{anomaly_id}/",
-            {"severity": str(self.severity.pk)},
+            self._classification_payload(self.severity),
             format="json",
         )
 
@@ -773,6 +839,112 @@ class AnomalyCreateApiTests(APITestCase):
         ).exists()
         self.assertTrue(participant_exists)
 
+        owner_exists = AnomalyParticipant.objects.filter(
+            anomaly_id=anomaly_id,
+            user=self.user,
+            role=ParticipantRole.OWNER,
+        ).exists()
+        self.assertTrue(owner_exists)
+        self.assertEqual(patch_response.data["owner"]["id"], str(self.user.pk))
+        self.assertTrue(
+            any("Responsable asignado" in item["evidence_note"] for item in patch_response.data["status_history"])
+        )
+
+    def test_valid_classification_requires_responsible(self):
+        payload = self._build_payload("011", include_severity=False)
+        create_response = self.client.post("/api/v1/anomalies/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        response = self.client.patch(
+            f"/api/v1/anomalies/{create_response.data['id']}/",
+            {"severity": str(self.severity.pk)},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("classification_responsible", response.data)
+
+    def test_non_admin_cannot_classify_even_with_permissions(self):
+        permissions = ensure_required_permissions()
+        non_admin = User.objects.create_user(
+            username="clasificador_no_admin",
+            email="clasificador_no_admin@example.com",
+            password="secret123",
+            access_level=User.AccessLevel.USUARIO_ACTIVO,
+            primary_sector=self.area,
+        )
+        non_admin.user_permissions.add(
+            permissions[PERMISSION_EDIT_ANOMALY],
+            permissions[PERMISSION_CLASSIFY_ANOMALY],
+        )
+
+        payload = self._build_payload("013", include_severity=False)
+        create_response = self.client.post("/api/v1/anomalies/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        anomaly_id = create_response.data["id"]
+
+        self.client.force_authenticate(user=non_admin)
+        patch_response = self.client.patch(
+            f"/api/v1/anomalies/{anomaly_id}/",
+            self._classification_payload(self.severity),
+            format="json",
+        )
+
+        self.assertEqual(patch_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("Solo usuarios ADMIN", str(patch_response.data))
+
+        direct_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly_id}/classification/",
+            {
+                "containment_required": True,
+                "requires_action_plan": True,
+                "requires_effectiveness_verification": True,
+                "summary": "Intento no admin",
+            },
+            format="json",
+        )
+
+        self.assertEqual(direct_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("Solo usuarios ADMIN", str(direct_response.data))
+
+        unlock_response = self.client.post(f"/api/v1/anomalies/{anomaly_id}/classification/unlock/", {}, format="json")
+
+        self.assertEqual(unlock_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("Solo usuarios ADMIN", str(unlock_response.data))
+
+    def test_invalid_classification_requires_reason_and_closes_anomaly(self):
+        payload = self._build_payload("012", include_severity=False)
+        create_response = self.client.post("/api/v1/anomalies/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        anomaly_id = create_response.data["id"]
+
+        missing_reason = self.client.patch(
+            f"/api/v1/anomalies/{anomaly_id}/",
+            {"severity": str(self.severity_invalid.pk)},
+            format="json",
+        )
+
+        self.assertEqual(missing_reason.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("classification_reason", missing_reason.data)
+
+        response = self.client.patch(
+            f"/api/v1/anomalies/{anomaly_id}/",
+            {
+                "severity": str(self.severity_invalid.pk),
+                "classification_reason": "No corresponde gestionar como anomalia.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["current_status"], AnomalyStatus.CLOSED)
+        self.assertEqual(response.data["current_stage"], AnomalyStage.CLOSURE)
+        self.assertIsNotNone(response.data["closed_at"])
+        self.assertIn("No corresponde gestionar como anomalia", response.data["closure_comment"])
+        self.assertEqual(response.data["classification"]["requires_action_plan"], False)
+        self.assertTrue(
+            any("Resultado: Invalida" in item["evidence_note"] for item in response.data["status_history"])
+        )
 
 
 
@@ -787,14 +959,14 @@ class AnomalyCreateApiTests(APITestCase):
 
         first_classification = self.client.patch(
             f"/api/v1/anomalies/{anomaly_id}/",
-            {"severity": str(self.severity.pk)},
+            self._classification_payload(self.severity),
             format="json",
         )
         self.assertEqual(first_classification.status_code, status.HTTP_200_OK)
 
         second_classification = self.client.patch(
             f"/api/v1/anomalies/{anomaly_id}/",
-            {"severity": str(self.severity_alt.pk)},
+            self._classification_payload(self.severity_alt),
             format="json",
         )
         self.assertEqual(second_classification.status_code, status.HTTP_200_OK)
@@ -804,7 +976,7 @@ class AnomalyCreateApiTests(APITestCase):
 
         blocked_change = self.client.patch(
             f"/api/v1/anomalies/{anomaly_id}/",
-            {"severity": str(self.severity_extra.pk)},
+            self._classification_payload(self.severity_extra),
             format="json",
         )
         self.assertEqual(blocked_change.status_code, status.HTTP_400_BAD_REQUEST)
@@ -816,7 +988,7 @@ class AnomalyCreateApiTests(APITestCase):
 
         unlocked_change = self.client.patch(
             f"/api/v1/anomalies/{anomaly_id}/",
-            {"severity": str(self.severity_extra.pk)},
+            self._classification_payload(self.severity_extra),
             format="json",
         )
         self.assertEqual(unlocked_change.status_code, status.HTTP_200_OK)
@@ -847,7 +1019,7 @@ class AnomalyCreateApiTests(APITestCase):
         anomaly_id = create_response.data["id"]
         classify_response = self.client.patch(
             f"/api/v1/anomalies/{anomaly_id}/",
-            {"severity": str(self.severity.pk)},
+            self._classification_payload(self.severity),
             format="json",
         )
         self.assertEqual(classify_response.status_code, status.HTTP_200_OK)

@@ -716,9 +716,7 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
         status_changed = True
 
     if (
-        "method_used" in data
-        or "observations" in data
-        or "effectiveness_evaluation_date" in data
+        "effectiveness_evaluation_date" in data
         or "effectiveness_responsible" in data
         or data.get("status") == TreatmentStatus.COMPLETED
     ):

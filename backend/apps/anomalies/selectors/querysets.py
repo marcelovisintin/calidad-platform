@@ -105,9 +105,11 @@ def filter_anomaly_queryset_for_user(queryset, user):
     if user.is_superuser or access_level in {"administrador", "desarrollador"}:
         return queryset
 
+    direct_queryset = queryset.filter(reporter=user) | queryset.filter(owner=user) | queryset.filter(immediate_action__responsible=user)
+
     if not any(user.has_perm(permission) for permission in VISIBLE_ANOMALY_PERMISSIONS):
-        return queryset.filter(reporter=user)
+        return direct_queryset.distinct()
 
     scoped_queryset = filter_queryset_by_sector_scope(queryset, user)
-    return (scoped_queryset | queryset.filter(reporter=user)).distinct()
+    return (scoped_queryset | direct_queryset).distinct()
 

@@ -72,6 +72,37 @@ def _require_any_permission(user, permissions: set[str], message: str) -> None:
     raise PermissionDenied(message)
 
 
+def _require_admin_access_level(user, message: str) -> None:
+    if user.is_superuser:
+        return
+    if getattr(user, "access_level", "") in {"administrador", "desarrollador"}:
+        return
+    raise PermissionDenied(message)
+
+
+def _is_admin_access_level(user) -> bool:
+    return bool(user and (user.is_superuser or getattr(user, "access_level", "") in {"administrador", "desarrollador"}))
+
+
+def _observation_responsible_id(anomaly: Anomaly, immediate_action: AnomalyImmediateAction | None = None):
+    if immediate_action is not None and getattr(immediate_action, "responsible_id", None):
+        return immediate_action.responsible_id
+    return getattr(anomaly, "owner_id", None)
+
+
+def _can_manage_observation(anomaly: Anomaly, user, immediate_action: AnomalyImmediateAction | None = None) -> bool:
+    if _is_admin_access_level(user):
+        return True
+    responsible_id = _observation_responsible_id(anomaly, immediate_action)
+    return bool(responsible_id and user and user.is_authenticated and user.id == responsible_id)
+
+
+def _require_observation_manager(anomaly: Anomaly, user, immediate_action: AnomalyImmediateAction | None = None) -> None:
+    if _can_manage_observation(anomaly, user, immediate_action):
+        return
+    raise PermissionDenied("Solo el responsable asignado o usuarios ADMIN pueden gestionar Observacion.")
+
+
 def _can_create_anomaly(user) -> bool:
     if user.is_superuser:
         return True
@@ -458,6 +489,8 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
     _ensure_anomaly_is_editable(locked)
     before = snapshot_anomaly(locked)
+    classification_responsible = data.pop("classification_responsible", None)
+    classification_reason = (data.pop("classification_reason", "") or "").strip()
 
     next_site = data.get("site", locked.site)
     next_area = data.get("area", locked.area)
@@ -467,9 +500,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     previous_severity_id = locked.severity_id
 
     if severity_in_payload:
-        access_level = getattr(user, "access_level", "")
-        if not (user.is_superuser or access_level in {"administrador", "desarrollador"}):
-            raise PermissionDenied("Solo usuarios ADMIN pueden realizar Revisión de hallazgos de anomalias.")
+        _require_admin_access_level(user, "Solo usuarios ADMIN pueden realizar Revisión de hallazgos de anomalias.")
 
     for field, value in data.items():
         setattr(locked, field, value)
@@ -478,6 +509,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     transition_from_status = locked.current_status
     transition_from_stage = locked.current_stage
     transition_comment = ""
+    now = timezone.now()
 
     severity_changed = severity_in_payload and previous_severity_id != locked.severity_id
     if severity_changed:
@@ -495,9 +527,31 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     should_sync_classification = severity_in_payload and locked.severity_id is not None
     if should_sync_classification:
         severity_name = locked.severity.name
+        closes_as_invalid = bool(getattr(locked.severity, "closes_anomaly_as_invalid", False))
+        requires_responsible = bool(getattr(locked.severity, "requires_classification_responsible", True))
+
+        if closes_as_invalid:
+            if not classification_reason:
+                raise ValidationError({"classification_reason": "Debe registrar una observacion o motivo para clasificar como Invalida."})
+        elif requires_responsible and classification_responsible is None:
+            raise ValidationError({"classification_responsible": "Debe seleccionar un responsable para continuar el flujo."})
         locked.classification_summary = f"Criterio de Revisión de hallazgos aplicado: {severity_name}."
 
-        if locked.current_status not in {AnomalyStatus.CANCELLED, AnomalyStatus.CLOSED} and locked.current_stage in {
+        if closes_as_invalid:
+            transition_applied = True
+            transition_from_status = locked.current_status
+            transition_from_stage = locked.current_stage
+            locked.current_stage = AnomalyStage.CLOSURE
+            locked.current_status = AnomalyStatus.CLOSED
+            locked.closed_at = now
+            locked.last_transition_at = now
+            locked.closure_comment = classification_reason
+            locked.result_summary = classification_reason
+            transition_comment = f"Revision de hallazgos: {severity_name}. Anomalia cerrada por administracion."
+        elif classification_responsible is not None:
+            locked.owner = classification_responsible
+
+        if not closes_as_invalid and locked.current_status not in {AnomalyStatus.CANCELLED, AnomalyStatus.CLOSED} and locked.current_stage in {
             AnomalyStage.REGISTRATION,
             AnomalyStage.CONTAINMENT,
             AnomalyStage.INITIAL_VERIFICATION,
@@ -507,7 +561,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
             transition_from_stage = locked.current_stage
             locked.current_stage = AnomalyStage.CLASSIFICATION
             locked.current_status = resolve_status_for_stage(AnomalyStage.CLASSIFICATION)
-            locked.last_transition_at = timezone.now()
+            locked.last_transition_at = now
             transition_comment = f"Se registra verificacion inicial y Revisión de hallazgos: {severity_name}."
     locked.updated_by = user
     _bump_version(locked)
@@ -516,7 +570,6 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     _ensure_default_participants(locked, user)
 
     if should_sync_classification:
-        now = timezone.now()
         verification_summary = "Verificacion inicial registrada en seguimiento de anomalias."
 
         verification = _get_related_or_none(locked, "initial_verification")
@@ -548,6 +601,8 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
 
 
         classification_summary = locked.classification_summary or f"Criterio de Revisión de hallazgos aplicado: {locked.severity.name}."
+        if closes_as_invalid and classification_reason:
+            classification_summary = f"{classification_summary} Motivo: {classification_reason}"
         classification = _get_related_or_none(locked, "classification")
         if classification is None:
             classification = AnomalyClassification(
@@ -560,23 +615,53 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
             )
         else:
             classification.classified_by = user
-            if not classification.classified_at:
-                classification.classified_at = now
+            classification.classified_at = now
             classification.summary = classification_summary
             classification.updated_by = user
+        classification.containment_required = not closes_as_invalid
+        classification.requires_action_plan = not closes_as_invalid
+        classification.requires_effectiveness_verification = not closes_as_invalid
         classification.full_clean()
         classification.save()
 
-    if transition_applied:
+        if classification_responsible is not None and not closes_as_invalid:
+            _ensure_participant_role(
+                anomaly=locked,
+                participant_user=classification_responsible,
+                role=ParticipantRole.OWNER,
+                actor=user,
+                note=f"Responsable asignado por Revision de hallazgos: {locked.severity.name}.",
+            )
+
+    if should_sync_classification:
+        evidence_lines = [
+            f"Clasificacion: {locked.severity.name}",
+            f"Confirmado por: {_user_label(user)}",
+            f"Fecha/hora: {now.isoformat()}",
+        ]
+        if closes_as_invalid:
+            evidence_lines.append("Resultado: Invalida")
+            evidence_lines.append(f"Motivo: {classification_reason}")
+        elif classification_responsible is not None:
+            evidence_lines.append(f"Responsable asignado: {_user_label(classification_responsible)}")
+        evidence_lines.extend(
+            [
+                f"Estado anterior: {transition_from_status}",
+                f"Estado nuevo: {locked.current_status}",
+                f"Etapa anterior: {transition_from_stage}",
+                f"Etapa nueva: {locked.current_stage}",
+            ]
+        )
         _write_status_history(
             anomaly=locked,
             from_status=transition_from_status,
             to_status=locked.current_status,
             from_stage=transition_from_stage,
             to_stage=locked.current_stage,
-            comment=transition_comment,
+            comment=transition_comment or f"Revision de hallazgos confirmada: {locked.severity.name}.",
+            evidence_note="\n".join(evidence_lines),
             actor=user,
-            changed_at=locked.last_transition_at or timezone.now(),
+            changed_at=locked.last_transition_at or now,
         )
 
     record_audit_event(
@@ -620,11 +705,13 @@ def add_comment(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> 
 @transaction.atomic
 def add_attachment(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyAttachment:
     _ensure_anomaly_is_editable(anomaly)
-    _require_any_permission(
-        user,
-        {PERMISSION_EDIT_ANOMALY, PERMISSION_CREATE_ANOMALY, PERMISSION_ANALYZE_ANOMALY},
-        "No tiene permisos para adjuntar evidencia.",
-    )
+    attachment_permissions = {PERMISSION_EDIT_ANOMALY, PERMISSION_CREATE_ANOMALY, PERMISSION_ANALYZE_ANOMALY}
+    can_attach = user.is_superuser or any(user.has_perm(permission) for permission in attachment_permissions)
+    if not can_attach:
+        if is_immediate_action_anomaly(anomaly):
+            _require_observation_manager(anomaly, user, _get_related_or_none(anomaly, "immediate_action"))
+        else:
+            raise PermissionDenied("No tiene permisos para adjuntar evidencia.")
     file_obj = data["file"]
     attachment = AnomalyAttachment(
         anomaly=anomaly,
@@ -724,6 +811,7 @@ def save_initial_verification(*, anomaly: Anomaly, user, data: dict, request_id:
 def save_classification(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyClassification:
     _ensure_anomaly_is_editable(anomaly)
     _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para realizar Revisión de hallazgos de la anomalia.")
+    _require_admin_access_level(user, "Solo usuarios ADMIN pueden realizar Revisión de hallazgos de anomalias.")
     classification = _get_related_or_none(anomaly, "classification") or AnomalyClassification(anomaly=anomaly)
     classification, created = _upsert_single_related(
         classification,
@@ -751,6 +839,7 @@ def save_classification(*, anomaly: Anomaly, user, data: dict, request_id: str =
 def unlock_classification_change(*, anomaly: Anomaly, user, request_id: str = "") -> Anomaly:
     _ensure_anomaly_is_editable(anomaly)
     _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para habilitar cambio de Revisión de hallazgos.")
+    _require_admin_access_level(user, "Solo usuarios ADMIN pueden habilitar cambio de Revisión de hallazgos.")
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
 
     if not stage_allows_classification_change(locked):
@@ -927,7 +1016,6 @@ def _get_observation_record(locked: Anomaly) -> AnomalyImmediateAction:
 @transaction.atomic
 def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyImmediateAction:
     _ensure_anomaly_is_editable(anomaly)
-    _require_permission(user, PERMISSION_CLOSE_ANOMALY, "No tiene permisos para gestionar Observacion.")
 
     required_fields = {
         "observation": "Debe registrar una observacion.",
@@ -941,10 +1029,16 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
 
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
     _ensure_observation_path_available(locked)
+    immediate_action = _get_observation_record(locked)
+    _require_observation_manager(locked, user, immediate_action if immediate_action.pk else None)
+    if locked.owner_id and data["responsible"].pk != locked.owner_id:
+        raise ValidationError({"responsible": "La Observacion debe gestionarla el responsable asignado en Revision de hallazgos."})
+    if immediate_action.pk and immediate_action.responsible_id and data["responsible"].pk != immediate_action.responsible_id:
+        raise ValidationError({"responsible": "No se puede cambiar el responsable de una Observacion ya cargada."})
+
     before = snapshot_anomaly(locked)
     previous_resolution_path = locked.observation_resolution_path
 
-    immediate_action = _get_observation_record(locked)
     immediate_action.observation = data["observation"].strip()
     immediate_action.responsible = data["responsible"]
     immediate_action.action_date = data["action_date"]
@@ -1018,7 +1112,6 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
 @transaction.atomic
 def save_observation_action_taken(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyImmediateAction:
     _ensure_anomaly_is_editable(anomaly)
-    _require_permission(user, PERMISSION_CLOSE_ANOMALY, "No tiene permisos para gestionar Observacion.")
 
     required_fields = {
         "action_completed_at": "Debe indicar la fecha de realizado.",
@@ -1035,6 +1128,7 @@ def save_observation_action_taken(*, anomaly: Anomaly, user, data: dict, request
     immediate_action = _get_related_or_none(locked, "immediate_action")
     if immediate_action is None:
         raise ValidationError({"observation": "Primero debe confirmar la carga de Observacion."})
+    _require_observation_manager(locked, user, immediate_action)
 
     before = snapshot_anomaly(locked)
     previous_status = locked.current_status
@@ -1094,7 +1188,6 @@ def save_observation_action_taken(*, anomaly: Anomaly, user, data: dict, request
 @transaction.atomic
 def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyImmediateAction:
     _ensure_anomaly_is_editable(anomaly)
-    _require_permission(user, PERMISSION_CLOSE_ANOMALY, "No tiene permisos para gestionar Observacion.")
 
     if data.get("effectiveness_is_effective") is None:
         raise ValidationError({"effectiveness_is_effective": "Debe indicar si fue eficaz."})
@@ -1106,6 +1199,7 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
     immediate_action = _get_related_or_none(locked, "immediate_action")
     if immediate_action is None or not (immediate_action.actions_taken or "").strip():
         raise ValidationError({"actions_taken": "Primero debe confirmar una accion tomada."})
+    _require_observation_manager(locked, user, immediate_action)
 
     before = snapshot_anomaly(locked)
     previous_status = locked.current_status

@@ -716,6 +716,13 @@ class AnomalyCreateSerializer(serializers.ModelSerializer):
 class AnomalyUpdateSerializer(serializers.ModelSerializer):
     detected_at = serializers.DateTimeField(required=False, style=DATETIME_INPUT_STYLE)
     due_at = serializers.DateTimeField(required=False, allow_null=True, style=DATETIME_INPUT_STYLE)
+    classification_responsible = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
+    classification_reason = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     class Meta:
         model = Anomaly
@@ -740,6 +747,8 @@ class AnomalyUpdateSerializer(serializers.ModelSerializer):
             "containment_summary",
             "resolution_summary",
             "result_summary",
+            "classification_responsible",
+            "classification_reason",
         )
         extra_kwargs = {
             "title": {"required": False},

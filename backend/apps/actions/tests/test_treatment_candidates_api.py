@@ -544,6 +544,25 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("effectiveness_evaluation_date", response.data)
 
+    def test_method_and_observations_can_be_saved_as_editable_analysis_draft(self):
+        response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/",
+            {
+                "method_used": "five_whys",
+                "observations": "Analisis editable antes de cargar evidencias y causas.",
+            },
+            format="json",
+        )
+        detail_response = self.client.get(f"/api/v1/actions/treatments/{self.treatment_one.pk}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.data["method_used"], "five_whys")
+        self.assertEqual(
+            detail_response.data["observations"],
+            "Analisis editable antes de cargar evidencias y causas.",
+        )
+
     def test_save_analysis_requires_effectiveness_responsible(self):
         response = self.client.patch(
             f"/api/v1/actions/treatments/{self.treatment_one.pk}/",

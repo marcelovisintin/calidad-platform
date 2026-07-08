@@ -1,6 +1,5 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchUsers } from "../../../api/accounts";
 import {
   fetchAnomalyDetail,
   fetchImmediateActionAnomalies,
@@ -9,8 +8,6 @@ import {
   uploadAnomalyAttachment,
   verifyObservationEffectiveness,
 } from "../../../api/anomalies";
-import type { UserDirectoryItem } from "../../../api/types";
-import { isAdminUser } from "../../../app/access";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { formatDateTime, toOffsetIso } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
@@ -35,15 +32,24 @@ function nowAsDate() {
   return nowAsLocalDateTime().slice(0, 10);
 }
 
-function buildUserLabel(user: UserDirectoryItem) {
-  const displayName = user.full_name || user.username;
-  return `${displayName} (${user.username})`;
+type ResponsibleSummary = {
+  id: string;
+  full_name?: string;
+  username?: string;
+  email?: string;
+};
+
+function buildResponsibleLabel(user?: ResponsibleSummary | null) {
+  if (!user) {
+    return "Sin responsable asignado";
+  }
+  const displayName = user.full_name || user.username || user.email || "Usuario";
+  return user.username && user.username !== displayName ? `${displayName} (${user.username})` : displayName;
 }
 
 export function ImmediateActionsPage() {
   usePageTitle("Observacion");
   const { user } = useAuth();
-  const adminUser = useMemo(() => isAdminUser(user), [user]);
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -72,20 +78,16 @@ export function ImmediateActionsPage() {
     error,
     reload,
   } = useAsyncTask(async () => {
-    if (!adminUser) {
-      throw new Error("Solo usuarios administradores pueden gestionar Observacion.");
+    if (!user) {
+      throw new Error("No hay usuario autenticado.");
     }
 
-    const [anomalies, users] = await Promise.all([
-      fetchImmediateActionAnomalies(search, page, includeClosed),
-      fetchUsers({ active: true, page: 1, pageSize: 200 }),
-    ]);
+    const anomalies = await fetchImmediateActionAnomalies(search, page, includeClosed);
 
     return {
       anomalies,
-      users: users.results,
     };
-  }, [adminUser, search, page, includeClosed]);
+  }, [user?.id, search, page, includeClosed]);
 
   useEffect(() => {
     if (!listData?.anomalies.results.length) {
@@ -265,12 +267,12 @@ export function ImmediateActionsPage() {
     }
   };
 
-  const users = listData?.users ?? [];
   const anomalies = listData?.anomalies.results ?? [];
   const totalCount = listData?.anomalies.count ?? 0;
   const hasLoadedAction = Boolean(selectedAnomaly?.immediate_action);
   const hasConfirmedActions = Boolean(selectedAnomaly?.immediate_action?.actions_taken);
   const notEffective = selectedAnomaly?.immediate_action?.effectiveness_is_effective === false || effectivenessResult === "not_effective";
+  const assignedResponsible = selectedAnomaly?.immediate_action?.responsible || selectedAnomaly?.owner || selectedAnomaly?.current_responsible || null;
 
   return (
     <section className="page-shell">
@@ -371,14 +373,7 @@ export function ImmediateActionsPage() {
                     <div className="form-grid">
                       <label className="field">
                         <span>Responsable</span>
-                        <select onChange={(event) => setResponsibleId(event.target.value)} required value={responsibleId}>
-                          <option value="">Seleccionar responsable...</option>
-                          {users.map((candidate) => (
-                            <option key={candidate.id} value={candidate.id}>
-                              {buildUserLabel(candidate)}
-                            </option>
-                          ))}
-                        </select>
+                        <input readOnly value={buildResponsibleLabel(assignedResponsible)} />
                       </label>
 
                       <label className="field">

@@ -18,6 +18,8 @@ type FormState = {
   display_order: string;
   is_active: boolean;
   parent_id: string;
+  requires_classification_responsible: boolean;
+  closes_anomaly_as_invalid: boolean;
 };
 
 type EntityMeta = {
@@ -84,6 +86,8 @@ const EMPTY_FORM: FormState = {
   display_order: "0",
   is_active: true,
   parent_id: "",
+  requires_classification_responsible: true,
+  closes_anomaly_as_invalid: false,
 };
 
 function resolveEntity(raw: string | null): CatalogEntity {
@@ -189,6 +193,8 @@ export function CatalogManagementPage() {
       display_order: String(item.display_order ?? 0),
       is_active: item.is_active,
       parent_id: parentId,
+      requires_classification_responsible: item.requires_classification_responsible ?? true,
+      closes_anomaly_as_invalid: item.closes_anomaly_as_invalid ?? false,
     });
   };
 
@@ -219,6 +225,11 @@ export function CatalogManagementPage() {
           throw new Error(`Selecciona ${meta.parentLabel?.toLowerCase() ?? "el padre"}.`);
         }
         payload[meta.parentKey] = form.parent_id;
+      }
+
+      if (entity === "severities") {
+        payload.requires_classification_responsible = form.closes_anomaly_as_invalid ? false : form.requires_classification_responsible;
+        payload.closes_anomaly_as_invalid = form.closes_anomaly_as_invalid;
       }
 
       if (editingId) {
@@ -361,6 +372,37 @@ export function CatalogManagementPage() {
                 </label>
               </div>
 
+              {entity === "severities" ? (
+                <div className="field-span-2 user-checkbox-group">
+                  <label className="checkbox-inline">
+                    <input
+                      checked={form.requires_classification_responsible}
+                      disabled={form.closes_anomaly_as_invalid}
+                      name="requires_classification_responsible"
+                      onChange={handleInputChange}
+                      type="checkbox"
+                    />
+                    Requiere responsable al confirmar
+                  </label>
+                  <label className="checkbox-inline">
+                    <input
+                      checked={form.closes_anomaly_as_invalid}
+                      name="closes_anomaly_as_invalid"
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setForm((current) => ({
+                          ...current,
+                          closes_anomaly_as_invalid: checked,
+                          requires_classification_responsible: checked ? false : current.requires_classification_responsible,
+                        }));
+                      }}
+                      type="checkbox"
+                    />
+                    Cierra como Invalida
+                  </label>
+                </div>
+              ) : null}
+
               <div className="field-span-2 form-actions">
                 <button className="button button-primary" disabled={submitting} type="submit">
                   {submitting ? "Guardando..." : editingId ? "Guardar cambios" : "Crear registro"}
@@ -394,6 +436,15 @@ export function CatalogManagementPage() {
                         <span className="status-badge info compact">Orden {item.display_order}</span>
                       </div>
                       {itemParentLabel(item) ? <p>{itemParentLabel(item)}</p> : null}
+                      {entity === "severities" ? (
+                        <p>
+                          {item.closes_anomaly_as_invalid
+                            ? "Cierra como Invalida"
+                            : (item.requires_classification_responsible ?? true)
+                              ? "Requiere responsable"
+                              : "No requiere responsable"}
+                        </p>
+                      ) : null}
                       <small>Actualizado: {formatDateTime(item.updated_at)}</small>
                     </div>
                     <div className="badge-stack align-end">

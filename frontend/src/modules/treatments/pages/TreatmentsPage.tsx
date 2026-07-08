@@ -621,6 +621,26 @@ export function TreatmentsPage() {
     }
   };
 
+  const saveAnalysisDraftIfChanged = async () => {
+    if (!selectedTreatment) {
+      return;
+    }
+
+    const nextMethodUsed = methodUsed;
+    const nextObservations = observations.trim();
+    const savedMethodUsed = selectedTreatment.method_used || "";
+    const savedObservations = selectedTreatment.observations || "";
+
+    if (nextMethodUsed === savedMethodUsed && nextObservations === savedObservations) {
+      return;
+    }
+
+    await updateTreatment(selectedTreatment.id, {
+      method_used: nextMethodUsed,
+      observations: nextObservations,
+    });
+  };
+
   const handleSaveAgenda = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedTreatment) {
@@ -728,6 +748,7 @@ export function TreatmentsPage() {
     }
 
     await runMutation(async () => {
+      await saveAnalysisDraftIfChanged();
       await addTreatmentRootCause(selectedTreatment.id, rootCauseDescription.trim());
       setRootCauseDescription("");
     }, "Causa raiz registrada.");
@@ -881,12 +902,8 @@ export function TreatmentsPage() {
       return;
     }
 
-    const currentMethodUsed = methodUsed;
-    const currentObservations = observations;
-    const currentEffectivenessEvaluationDate = effectivenessEvaluationDate;
-    const currentEffectivenessResponsibleId = effectivenessResponsibleId;
-
     await runMutation(async () => {
+      await saveAnalysisDraftIfChanged();
       await addTreatmentEvidence(selectedTreatment.id, {
         file: treatmentEvidenceFile,
         note: treatmentEvidenceNote,
@@ -895,11 +912,6 @@ export function TreatmentsPage() {
       setTreatmentEvidenceNote("");
       setTreatmentEvidenceInputKey((current) => current + 1);
     }, "Evidencia cargada en el tratamiento.");
-
-    setMethodUsed(currentMethodUsed);
-    setObservations(currentObservations);
-    setEffectivenessEvaluationDate(currentEffectivenessEvaluationDate);
-    setEffectivenessResponsibleId(currentEffectivenessResponsibleId);
   };
 
   const handleAddTaskEvidence = async () => {
