@@ -12,6 +12,7 @@ from apps.actions.models import (
 )
 from apps.anomalies.models import Anomaly
 from apps.catalog.models import ActionType, Priority
+from common.upload_validation import validate_evidence_file
 
 DATETIME_INPUT_STYLE = {
     "input_type": "text",
@@ -327,6 +328,9 @@ class ActionEvidenceWriteSerializer(serializers.Serializer):
     evidence_type = serializers.CharField(required=False, allow_blank=True)
     file = serializers.FileField(required=False, allow_null=True)
     note = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_file(self, value):
+        return validate_evidence_file(value)
 
 
 class ActionsApiRootSerializer(serializers.Serializer):

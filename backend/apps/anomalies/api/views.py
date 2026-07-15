@@ -28,7 +28,6 @@ from apps.anomalies.api.serializers import (
     AnomalyDetailSerializer,
     AnomalyEffectivenessCheckSerializer,
     AnomalyEffectivenessCheckWriteSerializer,
-    AnomalyImmediateActionSerializer,
     AnomalyImmediateActionWriteSerializer,
     AnomalyInitialVerificationSerializer,
     AnomalyInitialVerificationWriteSerializer,

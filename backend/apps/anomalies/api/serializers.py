@@ -1,5 +1,3 @@
-﻿from pathlib import Path
-
 from django.db.models import Q
 from django.urls import reverse
 from rest_framework import serializers
@@ -14,7 +12,6 @@ from apps.actions.models import (
     TreatmentTask,
 )
 from apps.anomalies.models import (
-    AnalysisMethod,
     Anomaly,
     AnomalyAttachment,
     AnomalyCauseAnalysis,
@@ -35,6 +32,7 @@ from apps.anomalies.models import (
 )
 from apps.catalog.models import Area, Line, Site
 from apps.anomalies.services.classification_rules import can_modify_classification, can_unlock_classification_change
+from common.upload_validation import validate_evidence_file
 
 DATETIME_INPUT_STYLE = {
     "input_type": "text",
@@ -42,66 +40,6 @@ DATETIME_INPUT_STYLE = {
 }
 
 OPEN_ACTION_ITEM_STATUSES = {ActionItemStatus.PENDING, ActionItemStatus.IN_PROGRESS}
-
-ALLOWED_EVIDENCE_CONTENT_TYPES = {
-    "application/pdf",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "text/plain",
-    "text/csv",
-    "application/rtf",
-    "application/vnd.oasis.opendocument.text",
-    "application/vnd.oasis.opendocument.spreadsheet",
-    "application/zip",
-    "application/x-zip-compressed",
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/gif",
-    "image/bmp",
-    "image/tiff",
-    "image/heic",
-    "image/heif",
-}
-
-ALLOWED_EVIDENCE_EXTENSIONS = {
-    ".pdf",
-    ".doc",
-    ".docx",
-    ".xls",
-    ".xlsx",
-    ".txt",
-    ".csv",
-    ".rtf",
-    ".odt",
-    ".ods",
-    ".zip",
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".webp",
-    ".gif",
-    ".bmp",
-    ".tif",
-    ".tiff",
-    ".heic",
-    ".heif",
-}
-
-def _validate_objective_file(file_obj):
-    content_type = (getattr(file_obj, "content_type", "") or "").lower()
-    file_name = (getattr(file_obj, "name", "") or "").lower()
-    extension = Path(file_name).suffix
-
-    if content_type in ALLOWED_EVIDENCE_CONTENT_TYPES:
-        return file_obj
-    if extension in ALLOWED_EVIDENCE_EXTENSIONS:
-        return file_obj
-
-    raise serializers.ValidationError("Solo se permiten evidencias en formato imagen, PDF, Word, Excel, texto o ZIP.")
-
 
 class UserSummarySerializer(serializers.Serializer):
     id = serializers.UUIDField(read_only=True)
@@ -922,10 +860,9 @@ class AnomalyObservationVerificationWriteSerializer(serializers.Serializer):
 class AnomalyAttachmentWriteSerializer(serializers.Serializer):
     file = serializers.FileField()
     original_name = serializers.CharField(required=False, allow_blank=True)
-    content_type = serializers.CharField(required=False, allow_blank=True)
 
     def validate_file(self, value):
-        return _validate_objective_file(value)
+        return validate_evidence_file(value)
 
 
 class WorkflowMetadataSerializer(serializers.Serializer):

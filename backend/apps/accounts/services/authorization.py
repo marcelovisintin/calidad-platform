@@ -3,6 +3,17 @@ from django.db.models import Q
 from apps.accounts.constants import ROLE_ADMINISTRADOR
 
 
+GLOBAL_ACCESS_LEVELS = {"administrador", "desarrollador"}
+
+
+def has_global_access(user) -> bool:
+    return bool(
+        user
+        and user.is_authenticated
+        and (user.is_superuser or getattr(user, "access_level", "") in GLOBAL_ACCESS_LEVELS)
+    )
+
+
 def get_user_role_codes(user) -> list[str]:
     if not user or not user.is_authenticated:
         return []
@@ -43,9 +54,7 @@ def get_user_accessible_area_ids(user) -> set:
 def can_access_area(user, area_id=None, site_id=None) -> bool:
     if not user or not user.is_authenticated:
         return False
-    if user.is_superuser:
-        return True
-    if getattr(user, "access_level", "") in {"administrador", "desarrollador"}:
+    if has_global_access(user):
         return True
 
     accessible_area_ids = get_user_accessible_area_ids(user)
@@ -63,7 +72,7 @@ def can_access_area(user, area_id=None, site_id=None) -> bool:
 def filter_queryset_by_sector_scope(queryset, user, area_field="area_id", site_field="site_id"):
     if not user or not user.is_authenticated:
         return queryset.none()
-    if user.is_superuser:
+    if has_global_access(user):
         return queryset
 
     accessible_site_ids = get_user_accessible_site_ids(user)
@@ -85,7 +94,7 @@ def filter_queryset_by_sector_scope(queryset, user, area_field="area_id", site_f
 def filter_user_directory_queryset(queryset, user):
     if not user or not user.is_authenticated:
         return queryset.none()
-    if user.is_superuser:
+    if has_global_access(user):
         return queryset
 
     accessible_site_ids = get_user_accessible_site_ids(user)

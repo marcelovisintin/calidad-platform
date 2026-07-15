@@ -14,9 +14,9 @@ from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from apps.accounts.constants import USER_SCOPE_OPTIONS
 from apps.accounts.models import Role, User, UserRoleScope
 from apps.accounts.services.authorization import get_effective_permissions, get_user_role_codes
+from apps.accounts.services.temporary_passwords import generate_temporary_password
 from apps.catalog.models import Area, Site
-
-DEFAULT_INITIAL_PASSWORD = "12345678"
+from common.upload_validation import validate_user_photo
 
 
 class SiteSummarySerializer(serializers.ModelSerializer):
@@ -284,6 +284,7 @@ class UserWriteSerializer(serializers.ModelSerializer):
         required=False,
     )
     password = serializers.CharField(write_only=True, required=False, allow_blank=True, min_length=8, trim_whitespace=False)
+    initial_password = serializers.SerializerMethodField()
     access_level = serializers.ChoiceField(
         choices=User.AccessLevel.choices,
         required=False,
@@ -303,7 +304,11 @@ class UserWriteSerializer(serializers.ModelSerializer):
             "primary_sector",
             "is_active",
             "password",
+            "initial_password",
         )
+
+    def get_initial_password(self, obj):
+        return getattr(obj, "_initial_password", None)
 
     def validate(self, attrs):
         request = self.context.get("request")
@@ -314,6 +319,20 @@ class UserWriteSerializer(serializers.ModelSerializer):
             )
 
         return attrs
+
+    def validate_photo(self, value):
+        if value is None:
+            return value
+        return validate_user_photo(value)
+
+    def validate_password(self, value):
+        if not value:
+            return value
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages)) from exc
+        return value
 
     def _apply_access_level_flags(self, validated_data):
         level = validated_data.get("access_level")
@@ -327,13 +346,17 @@ class UserWriteSerializer(serializers.ModelSerializer):
         validated_data["is_superuser"] = level == User.AccessLevel.DESARROLLADOR
 
     def create(self, validated_data):
-        password = (validated_data.pop("password", "") or "").strip() or DEFAULT_INITIAL_PASSWORD
+        supplied_password = (validated_data.pop("password", "") or "").strip()
+        password = supplied_password or generate_temporary_password()
         validated_data.setdefault("is_active", True)
         validated_data.setdefault("access_level", User.AccessLevel.USUARIO_ACTIVO)
         validated_data["must_change_password"] = True
         validated_data["password_changed_at"] = None
         self._apply_access_level_flags(validated_data)
-        return User.objects.create_user(password=password, **validated_data)
+        user = User.objects.create_user(password=password, **validated_data)
+        if not supplied_password:
+            user._initial_password = password
+        return user
 
     def update(self, instance, validated_data):
         raw_password = validated_data.pop("password", None)

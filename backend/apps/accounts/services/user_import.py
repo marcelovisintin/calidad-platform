@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
 
-from apps.accounts.api.serializers import DEFAULT_INITIAL_PASSWORD
+from apps.accounts.services.temporary_passwords import generate_temporary_password
 from apps.accounts.models import User
 from apps.audit.services.events import record_audit_event
 
@@ -235,6 +235,7 @@ def confirm_user_import(*, uploaded_file, mode: str, actor: User, request_id: st
             username_counts=username_counts,
         )
         existing = data["existing"]
+        initial_password = None
 
         if item_errors:
             skipped += 1
@@ -268,7 +269,8 @@ def confirm_user_import(*, uploaded_file, mode: str, actor: User, request_id: st
                 user.is_active = True
                 user.must_change_password = True
                 user.password_changed_at = None
-                user.set_password(DEFAULT_INITIAL_PASSWORD)
+                initial_password = generate_temporary_password()
+                user.set_password(initial_password)
 
             if data["usuario"] and user.username.lower() != data["usuario"].lower():
                 user.username = data["usuario"]
@@ -315,6 +317,7 @@ def confirm_user_import(*, uploaded_file, mode: str, actor: User, request_id: st
                 "status": status,
                 "errors": item_errors,
                 "warnings": [],
+                "initial_password": initial_password,
             }
         )
 

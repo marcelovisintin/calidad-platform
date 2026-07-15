@@ -276,6 +276,14 @@ cd D:\SCHNEIDER\2026\CALIDAD
 powershell -ExecutionPolicy Bypass -File deploy/scripts/start_local_stack.ps1
 ```
 
+Si un antivirus o proxy corporativo inspecciona TLS, exporta su CA publica en formato PEM y ejecuta:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy/scripts/start_local_stack.ps1 -PackageCaCertificate C:\ruta\ca-corporativa.pem
+```
+
+El certificado se inyecta como secreto temporal de BuildKit para `pip` y `npm`; no se copia a las imagenes.
+
 Que hace este script:
 
 - carga `deploy/docker/.env.server` (o `.env.server.local` si existe)

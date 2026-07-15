@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unicodedata
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 
 
@@ -38,7 +39,7 @@ def is_immediate_action_anomaly(anomaly) -> bool:
     classification = None
     try:
         classification = getattr(anomaly, "classification")
-    except Exception:
+    except ObjectDoesNotExist:
         classification = None
 
     if classification and is_immediate_action_value(getattr(classification, "summary", "")):

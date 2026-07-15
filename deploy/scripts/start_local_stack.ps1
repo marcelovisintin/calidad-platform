@@ -1,6 +1,7 @@
 ﻿param(
     [string]$EnvFile,
     [string]$ComposeFile = "deploy/docker/docker-compose.local.yml",
+    [string]$PackageCaCertificate,
     [switch]$SkipFirewall
 )
 
@@ -9,6 +10,17 @@ $ErrorActionPreference = "Stop"
 function Get-AbsolutePath {
     param([string]$PathValue)
     return [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $PathValue))
+}
+
+function Assert-NativeCommandSucceeded {
+    param(
+        [int]$ExitCode,
+        [string]$Operation
+    )
+
+    if ($ExitCode -ne 0) {
+        throw "$Operation fallo con codigo de salida $ExitCode."
+    }
 }
 
 function Import-DotEnv {
@@ -106,7 +118,22 @@ if (-not $SkipFirewall) {
 }
 
 Write-Host "Levantando stack Docker..." -ForegroundColor Cyan
-docker compose --env-file $envPath -f $composePath up -d --build
+if ($PackageCaCertificate) {
+    $packageCaPath = Get-AbsolutePath -PathValue $PackageCaCertificate
+    if (-not (Test-Path -LiteralPath $packageCaPath)) {
+        throw "No se encontro el certificado CA para dependencias: $packageCaPath"
+    }
+
+    docker build --secret "id=pip_ca,src=$packageCaPath" -f deploy/docker/backend.Dockerfile -t docker-backend .
+    Assert-NativeCommandSucceeded -ExitCode $LASTEXITCODE -Operation "La construccion del backend"
+    docker build --secret "id=npm_ca,src=$packageCaPath" -f deploy/docker/frontend.Dockerfile -t docker-frontend .
+    Assert-NativeCommandSucceeded -ExitCode $LASTEXITCODE -Operation "La construccion del frontend"
+    docker compose --env-file $envPath -f $composePath up -d --no-build
+    Assert-NativeCommandSucceeded -ExitCode $LASTEXITCODE -Operation "El inicio del stack"
+} else {
+    docker compose --env-file $envPath -f $composePath up -d --build
+    Assert-NativeCommandSucceeded -ExitCode $LASTEXITCODE -Operation "La construccion e inicio del stack"
+}
 
 $hostname = $env:COMPUTERNAME
 $ip = Get-PreferredIPv4

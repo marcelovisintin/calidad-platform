@@ -4,7 +4,7 @@ from django.http import FileResponse, Http404
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -27,6 +27,7 @@ from apps.accounts.permissions import CanCreateUsers, CanDeleteUsers, CanEditUse
 from apps.accounts.services.authorization import filter_user_directory_queryset
 from apps.accounts.services.user_import import analyze_user_import, confirm_user_import
 from apps.accounts.throttling import LoginRateThrottle
+from common.permissions import IsAuthenticatedAndActive
 
 
 def build_user_queryset(for_user):
@@ -71,7 +72,8 @@ class RefreshTokenAPIView(TokenRefreshView):
 
 
 class LogoutAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedAndActive]
+    allow_password_change_required = True
 
     def post(self, request):
         serializer = LogoutSerializer(data=request.data)
@@ -81,7 +83,8 @@ class LogoutAPIView(APIView):
 
 
 class ChangePasswordAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedAndActive]
+    allow_password_change_required = True
 
     def post(self, request):
         serializer = ChangePasswordSerializer(data=request.data, context={"request": request})
@@ -91,7 +94,8 @@ class ChangePasswordAPIView(APIView):
 
 
 class CurrentUserAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedAndActive]
+    allow_password_change_required = True
 
     def get(self, request):
         user = (
@@ -164,7 +168,7 @@ class UserDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class UserPhotoAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedAndActive]
 
     def get(self, request, user_id):
         if request.user.pk == user_id:

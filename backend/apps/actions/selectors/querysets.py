@@ -1,4 +1,3 @@
-from datetime import date
 from uuid import UUID
 
 from django.db.models import Prefetch, Q
@@ -22,6 +21,7 @@ from apps.actions.models import (
     Treatment,
     TreatmentAnomaly,
 )
+from common.query_params import parse_iso_date_parameter
 
 VISIBLE_ACTION_PERMISSIONS = {
     PERMISSION_VIEW_ACTION_PLAN,
@@ -197,11 +197,8 @@ def apply_action_item_filters(queryset, params):
         )
 
     if completed_on_value := (params.get("completed_on") or "").strip():
-        try:
-            completed_on = date.fromisoformat(completed_on_value)
-            queryset = queryset.filter(completed_at__date=completed_on)
-        except ValueError:
-            pass
+        completed_on = parse_iso_date_parameter(completed_on_value, field_name="completed_on")
+        queryset = queryset.filter(completed_at__date=completed_on)
 
     if query_text := (params.get("q") or "").strip():
         queryset = queryset.filter(

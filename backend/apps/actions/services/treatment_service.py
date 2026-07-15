@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from django.db import models, transaction
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -32,6 +30,7 @@ from apps.anomalies.models import (
     ObservationResolutionPath,
 )
 from apps.anomalies.services.classification_rules import is_immediate_action_anomaly
+from common.upload_validation import normalized_upload_content_type, validate_evidence_file
 
 
 ALLOWED_TREATMENT_TRANSITIONS = {
@@ -42,53 +41,6 @@ ALLOWED_TREATMENT_TRANSITIONS = {
     TreatmentStatus.CANCELLED: set(),
 }
 OPEN_TREATMENT_STATUSES = {TreatmentStatus.PENDING, TreatmentStatus.SCHEDULED, TreatmentStatus.IN_PROGRESS}
-
-ALLOWED_EVIDENCE_CONTENT_TYPES = {
-    "application/pdf",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "text/plain",
-    "text/csv",
-    "application/rtf",
-    "application/vnd.oasis.opendocument.text",
-    "application/vnd.oasis.opendocument.spreadsheet",
-    "application/zip",
-    "application/x-zip-compressed",
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/gif",
-    "image/bmp",
-    "image/tiff",
-    "image/heic",
-    "image/heif",
-}
-
-ALLOWED_EVIDENCE_EXTENSIONS = {
-    ".pdf",
-    ".doc",
-    ".docx",
-    ".xls",
-    ".xlsx",
-    ".txt",
-    ".csv",
-    ".rtf",
-    ".odt",
-    ".ods",
-    ".zip",
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".webp",
-    ".gif",
-    ".bmp",
-    ".tif",
-    ".tiff",
-    ".heic",
-    ".heif",
-}
 
 def _request_id(value: str | None) -> str:
     return (value or "").strip()
@@ -158,19 +110,6 @@ def _next_task_code(treatment: Treatment) -> str:
     seq = treatment.tasks.count() + 1
     return f"{treatment.code}-T{seq:02d}"
 
-
-
-def _validate_objective_file(file_obj) -> None:
-    content_type = (getattr(file_obj, "content_type", "") or "").lower()
-    file_name = (getattr(file_obj, "name", "") or "").lower()
-    extension = Path(file_name).suffix
-
-    if content_type in ALLOWED_EVIDENCE_CONTENT_TYPES:
-        return
-    if extension in ALLOWED_EVIDENCE_EXTENSIONS:
-        return
-
-    raise ValidationError({"file": "Solo se permiten evidencias en formato imagen, PDF, Word, Excel, texto o ZIP."})
 
 
 
@@ -355,12 +294,12 @@ def save_treatment_learned_lesson(*, treatment: Treatment, user, data: dict, fil
     lesson.save()
 
     for file_obj in files or []:
-        _validate_objective_file(file_obj)
+        validate_evidence_file(file_obj)
         TreatmentLearnedLessonEvidence.objects.create(
             learned_lesson=lesson,
             file=file_obj,
             original_name=getattr(file_obj, "name", "") or "evidencia",
-            content_type=getattr(file_obj, "content_type", "") or "",
+            content_type=normalized_upload_content_type(file_obj),
             uploaded_by=user,
             created_by=user,
             updated_by=user,
@@ -1122,13 +1061,13 @@ def add_treatment_evidence(*, treatment: Treatment, user, data: dict, request_id
     file_obj = data.get("file")
     if not file_obj:
         raise ValidationError({"file": "Debe adjuntar un archivo de evidencia."})
-    _validate_objective_file(file_obj)
+    validate_evidence_file(file_obj)
 
     evidence = TreatmentEvidence(
         treatment=treatment,
         file=file_obj,
         original_name=data.get("original_name") or getattr(file_obj, "name", "evidencia"),
-        content_type=data.get("content_type") or getattr(file_obj, "content_type", ""),
+        content_type=normalized_upload_content_type(file_obj),
         note=(data.get("note") or "").strip(),
         uploaded_by=user,
         created_by=user,
@@ -1161,13 +1100,13 @@ def add_treatment_task_evidence(*, treatment_task: TreatmentTask, user, data: di
     file_obj = data.get("file")
     if not file_obj:
         raise ValidationError({"file": "Debe adjuntar un archivo de evidencia."})
-    _validate_objective_file(file_obj)
+    validate_evidence_file(file_obj)
 
     evidence = TreatmentTaskEvidence(
         treatment_task=treatment_task,
         file=file_obj,
         original_name=data.get("original_name") or getattr(file_obj, "name", "evidencia"),
-        content_type=data.get("content_type") or getattr(file_obj, "content_type", ""),
+        content_type=normalized_upload_content_type(file_obj),
         note=(data.get("note") or "").strip(),
         uploaded_by=user,
         created_by=user,

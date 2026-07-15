@@ -163,8 +163,12 @@ export function UserManagementPage() {
         await updateUser(editingId, payload);
         setFeedback("Usuario actualizado correctamente.");
       } else {
-        await createUser(payload);
-        setFeedback("Usuario creado correctamente (contrasena inicial 12345678 si no se ingreso una). ");
+        const createdUser = await createUser(payload);
+        setFeedback(
+          createdUser.initial_password
+            ? `Usuario creado. Contrasena temporal: ${createdUser.initial_password}`
+            : "Usuario creado correctamente con la contrasena temporal ingresada.",
+        );
       }
 
       await reload();
@@ -322,14 +326,14 @@ export function UserManagementPage() {
                   minLength={8}
                   name="password"
                   onChange={handleInputChange}
-                  placeholder={editingId ? "Dejar vacia para no cambiar" : "Dejar vacia para usar 12345678"}
+                  placeholder={editingId ? "Dejar vacia para no cambiar" : "Dejar vacia para generar una segura"}
                   type="password"
                   value={form.password}
                 />
                 <small>
                   {editingId
                     ? "Si cargas una nueva contrasena, el usuario debera cambiarla en su proximo inicio de sesion."
-                    : "Si queda vacia, se asigna 12345678 y se obliga cambio al primer ingreso."}
+                    : "Si queda vacia, se genera una clave temporal segura y se muestra una sola vez."}
                 </small>
               </label>
               <div className="field user-checkbox-group">

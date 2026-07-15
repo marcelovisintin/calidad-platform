@@ -1,4 +1,17 @@
+import { appConfig } from "../app/config";
 import { readStoredSession } from "./http";
+
+function isLoopbackHost(hostname: string) {
+  return ["localhost", "127.0.0.1", "::1"].includes(hostname.toLowerCase());
+}
+
+function configuredApiOrigin() {
+  try {
+    return new URL(appConfig.apiBaseUrl, window.location.origin).origin;
+  } catch {
+    return window.location.origin;
+  }
+}
 
 export function normalizeProtectedFileUrl(fileUrl: string) {
   if (!fileUrl) {
@@ -17,13 +30,21 @@ export function normalizeProtectedFileUrl(fileUrl: string) {
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     try {
       const parsed = new URL(trimmed);
-      const hostname = parsed.hostname.toLowerCase();
-      if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      if (parsed.origin === window.location.origin) {
         return `${parsed.pathname}${parsed.search}${parsed.hash}`;
       }
-      return parsed.toString();
+
+      if (parsed.origin === configuredApiOrigin()) {
+        return parsed.toString();
+      }
+
+      if (isLoopbackHost(parsed.hostname) && isLoopbackHost(window.location.hostname)) {
+        return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+      }
+
+      return "#";
     } catch {
-      return trimmed;
+      return "#";
     }
   }
 
@@ -74,7 +95,7 @@ export async function openAuthenticatedFile(rawFileUrl: string, fallbackName = "
   const blob = await response.blob();
   const blobUrl = URL.createObjectURL(blob);
   const contentType = (response.headers.get("content-type") || blob.type || "").toLowerCase();
-  const canPreview = contentType.startsWith("image/") || contentType.includes("pdf") || contentType.startsWith("text/");
+  const canPreview = contentType.startsWith("image/") || contentType.includes("pdf");
 
   if (canPreview) {
     window.open(blobUrl, "_blank", "noopener,noreferrer");

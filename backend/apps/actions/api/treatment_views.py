@@ -1,4 +1,3 @@
-from datetime import date
 from uuid import UUID
 
 from django.db.models import Exists, OuterRef, Prefetch, Q
@@ -40,7 +39,6 @@ from apps.actions.models import (
     TreatmentAnomaly,
     TreatmentEffectivenessValidationResult,
     TreatmentEvidence,
-    TreatmentLearnedLesson,
     TreatmentLearnedLessonEvidence,
     TreatmentParticipant,
     TreatmentRootCause,
@@ -67,6 +65,7 @@ from apps.actions.services import (
 from apps.anomalies.models import AnomalyAttachment, AnomalyStatus
 from apps.anomalies.selectors import build_anomaly_queryset, filter_anomaly_queryset_for_user
 from apps.anomalies.services.classification_rules import immediate_action_q
+from common.query_params import parse_iso_date_parameter
 
 
 
@@ -466,10 +465,8 @@ class TreatmentViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(responsible_id=performed_by)
 
         if completed_on_value := (request.query_params.get("completed_on") or "").strip():
-            try:
-                queryset = queryset.filter(execution_date=date.fromisoformat(completed_on_value))
-            except ValueError:
-                pass
+            completed_on = parse_iso_date_parameter(completed_on_value, field_name="completed_on")
+            queryset = queryset.filter(execution_date=completed_on)
 
         status_value = (request.query_params.get("status") or "").strip()
         if status_value == "overdue":
@@ -545,16 +542,12 @@ class TreatmentViewSet(viewsets.ModelViewSet):
                 )
 
         if date_from_value := (request.query_params.get("date_from") or "").strip():
-            try:
-                candidate_qs = candidate_qs.filter(detected_at__date__gte=date.fromisoformat(date_from_value))
-            except ValueError:
-                pass
+            date_from = parse_iso_date_parameter(date_from_value, field_name="date_from")
+            candidate_qs = candidate_qs.filter(detected_at__date__gte=date_from)
 
         if date_to_value := (request.query_params.get("date_to") or "").strip():
-            try:
-                candidate_qs = candidate_qs.filter(detected_at__date__lte=date.fromisoformat(date_to_value))
-            except ValueError:
-                pass
+            date_to = parse_iso_date_parameter(date_to_value, field_name="date_to")
+            candidate_qs = candidate_qs.filter(detected_at__date__lte=date_to)
 
         candidate_qs = candidate_qs.select_related("reporter", "area", "imputed_area", "anomaly_origin").distinct().order_by("-detected_at", "code")
 

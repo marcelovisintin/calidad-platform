@@ -65,6 +65,7 @@ export interface CurrentUser extends UserSummary {
   last_login?: string | null;
   last_activity_at?: string | null;
   role_codes: string[];
+  initial_password?: string | null;
   role_scopes: Array<{
     id: UUID;
     role: CatalogSummary;
@@ -153,8 +154,8 @@ export interface UserWritePayload {
   access_level?: "usuario_activo" | "mando_medio_activo" | "administrador" | "desarrollador";
   primary_sector?: UUID | null;
   is_active?: boolean;
-    password?: string;
-  }
+  password?: string;
+}
 
 export type UserImportMode = "create_only" | "update_existing" | "upsert";
 
@@ -170,6 +171,7 @@ export interface UserImportItem {
   status: "create" | "update" | "skip" | "error";
   errors: string[];
   warnings: string[];
+  initial_password?: string | null;
 }
 
 export interface UserImportPreview {

@@ -194,6 +194,18 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["id"], str(self.anomaly_two.pk))
 
+    def test_candidates_reject_invalid_date_filters(self):
+        response = self.client.get("/api/v1/actions/treatments/candidates/?date_from=not-a-date")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("date_from", response.data)
+
+    def test_action_items_reject_invalid_completed_on_filter(self):
+        response = self.client.get("/api/v1/actions/items/?completed_on=not-a-date")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("completed_on", response.data)
+
     def test_open_options_return_open_treatments_available_for_candidate(self):
         response = self.client.get(f"/api/v1/actions/treatments/open-options/?anomaly={self.anomaly_three.pk}")
 
@@ -377,6 +389,14 @@ class TreatmentCandidatesApiTests(APITestCase):
         task_ids = {item["id"] for item in response.data["results"]}
         self.assertIn(str(own_task.pk), task_ids)
         self.assertIn(str(other_task.pk), task_ids)
+
+    def test_tasks_history_rejects_invalid_completed_on_filter(self):
+        response = self.client.get(
+            "/api/v1/actions/treatments/tasks-history/?completed_on=not-a-date"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("completed_on", response.data)
 
     def test_task_status_change_requires_evidence_note(self):
         task = TreatmentTask.objects.create(

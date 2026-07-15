@@ -15,7 +15,6 @@ from apps.accounts.constants import (
     PERMISSION_CLOSE_ANOMALY,
     PERMISSION_CREATE_ANOMALY,
     PERMISSION_EDIT_ANOMALY,
-    PERMISSION_EXECUTE_ACTION,
     PERMISSION_VERIFY_EFFECTIVENESS_ANOMALY,
 )
 from apps.accounts.services.authorization import can_access_area
@@ -53,6 +52,7 @@ from apps.anomalies.services.workflow import (
     validate_transition,
 )
 from apps.catalog.models import Priority
+from common.upload_validation import normalized_upload_content_type, validate_evidence_file
 
 
 
@@ -505,7 +505,6 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     for field, value in data.items():
         setattr(locked, field, value)
 
-    transition_applied = False
     transition_from_status = locked.current_status
     transition_from_stage = locked.current_stage
     transition_comment = ""
@@ -538,7 +537,6 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
         locked.classification_summary = f"Criterio de Revisión de hallazgos aplicado: {severity_name}."
 
         if closes_as_invalid:
-            transition_applied = True
             transition_from_status = locked.current_status
             transition_from_stage = locked.current_stage
             locked.current_stage = AnomalyStage.CLOSURE
@@ -556,7 +554,6 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
             AnomalyStage.CONTAINMENT,
             AnomalyStage.INITIAL_VERIFICATION,
         }:
-            transition_applied = True
             transition_from_status = locked.current_status
             transition_from_stage = locked.current_stage
             locked.current_stage = AnomalyStage.CLASSIFICATION
@@ -713,11 +710,12 @@ def add_attachment(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
         else:
             raise PermissionDenied("No tiene permisos para adjuntar evidencia.")
     file_obj = data["file"]
+    validate_evidence_file(file_obj)
     attachment = AnomalyAttachment(
         anomaly=anomaly,
         file=file_obj,
         original_name=data.get("original_name") or getattr(file_obj, "name", "archivo"),
-        content_type=data.get("content_type") or getattr(file_obj, "content_type", ""),
+        content_type=normalized_upload_content_type(file_obj),
         uploaded_by=user,
         created_by=user,
         updated_by=user,

@@ -1,9 +1,15 @@
 ﻿FROM node:24-alpine AS build
 
+ENV NODE_OPTIONS=--use-system-ca
+
 WORKDIR /app/frontend
 
 COPY frontend/package*.json ./
-RUN npm ci
+RUN --mount=type=secret,id=npm_ca,required=false \
+    if [ -s /run/secrets/npm_ca ]; then \
+        export NODE_EXTRA_CA_CERTS=/run/secrets/npm_ca; \
+    fi; \
+    npm ci
 
 COPY frontend ./
 

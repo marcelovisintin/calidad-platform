@@ -1,4 +1,3 @@
-from django.apps import apps as django_apps
 from django.contrib.auth.backends import ModelBackend
 from django.contrib.auth.models import Permission
 

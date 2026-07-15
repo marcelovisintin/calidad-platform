@@ -3,6 +3,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import User
+from apps.accounts.api.serializers import UserWriteSerializer
 from apps.accounts.services.role_setup import ensure_required_permissions
 
 
@@ -17,7 +18,9 @@ class UserImportApiTests(APITestCase):
         self.client.force_authenticate(user=self.admin)
 
     def _csv_file(self, content: str):
-        return SimpleUploadedFile("usuarios.csv", content.encode("utf-8"), content_type="text/csv")
+        return SimpleUploadedFile(
+            "usuarios.csv", content.encode("utf-8"), content_type="text/csv"
+        )
 
     def test_preview_accepts_optional_legajo_and_phone(self):
         csv_content = (
@@ -74,3 +77,58 @@ class UserImportApiTests(APITestCase):
         self.assertEqual(user.first_name, "Bruno")
         self.assertEqual(user.last_name, "Gomez")
         self.assertEqual(user.phone, "+54 9 11 1234-5678")
+        initial_password = response.data["items"][0]["initial_password"]
+        self.assertGreaterEqual(len(initial_password), 16)
+        self.assertNotEqual(initial_password, "12345678")
+        self.assertTrue(user.check_password(initial_password))
+
+    def test_manual_user_creation_returns_generated_temporary_password_once(self):
+        response = self.client.post(
+            "/api/v1/accounts/users/",
+            {
+                "username": "new.operator",
+                "email": "new.operator@example.com",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        initial_password = response.data["initial_password"]
+        self.assertGreaterEqual(len(initial_password), 16)
+        self.assertNotEqual(initial_password, "12345678")
+        user = User.objects.get(username="new.operator")
+        self.assertTrue(user.check_password(initial_password))
+        self.assertTrue(user.must_change_password)
+        detail_response = self.client.get(f"/api/v1/accounts/users/{user.pk}/")
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("initial_password", detail_response.data)
+
+    def test_manual_user_creation_rejects_common_temporary_password(self):
+        response = self.client.post(
+            "/api/v1/accounts/users/",
+            {
+                "username": "unsafe.operator",
+                "email": "unsafe.operator@example.com",
+                "password": "12345678",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("password", response.data)
+
+    def test_user_photo_rejects_unsupported_format(self):
+        serializer = UserWriteSerializer(
+            data={
+                "username": "unsafe.photo",
+                "email": "unsafe.photo@example.com",
+                "photo": SimpleUploadedFile(
+                    "profile.svg",
+                    b"<svg></svg>",
+                    content_type="image/svg+xml",
+                ),
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("photo", serializer.errors)

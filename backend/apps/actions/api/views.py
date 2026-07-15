@@ -7,7 +7,6 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
 
 from apps.accounts.permissions import CanAssignAction
 from apps.actions.api.serializers import (
@@ -45,6 +44,7 @@ from apps.actions.services import (
     update_action_plan,
 )
 from apps.actions.services.dashboard_summary import dashboard_summary_for_user
+from common.permissions import IsAuthenticatedAndActive
 
 
 class ActionsApiRootView(APIView):
@@ -61,7 +61,7 @@ class ActionsApiRootView(APIView):
 
 
 class DashboardSummaryAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedAndActive]
 
     def get(self, request):
         return Response(dashboard_summary_for_user(request.user))

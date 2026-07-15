@@ -13,7 +13,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements /tmp/requirements
-RUN pip install --upgrade pip \
-    && pip install -r /tmp/requirements/production.txt
+RUN --mount=type=secret,id=pip_ca,required=false \
+    if [ -s /run/secrets/pip_ca ]; then \
+        cat /etc/ssl/certs/ca-certificates.crt /run/secrets/pip_ca > /tmp/pip-ca-bundle.pem; \
+        export PIP_CERT=/tmp/pip-ca-bundle.pem; \
+    fi; \
+    pip install --upgrade pip \
+    && pip install -r /tmp/requirements/production.txt \
+    && rm -f /tmp/pip-ca-bundle.pem
 
 COPY backend /srv/calidad/backend

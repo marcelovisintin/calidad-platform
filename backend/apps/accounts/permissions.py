@@ -21,6 +21,7 @@ from apps.accounts.constants import (
     PERMISSION_VIEW_USER,
 )
 from apps.accounts.services.authorization import can_access_area
+from common.permissions import has_active_api_session
 
 
 class HasBusinessPermission(BasePermission):
@@ -30,9 +31,7 @@ class HasBusinessPermission(BasePermission):
     def has_permission(self, request, view) -> bool:
         user = request.user
         return bool(
-            user
-            and user.is_authenticated
-            and user.is_active
+            has_active_api_session(user)
             and self.required_permission
             and user.has_perm(self.required_permission)
         )
@@ -68,7 +67,7 @@ class CanCreateAnomaly(HasBusinessPermission):
 
     def has_permission(self, request, view) -> bool:
         user = request.user
-        if not (user and user.is_authenticated and user.is_active):
+        if not has_active_api_session(user):
             return False
         if user.is_superuser:
             return True

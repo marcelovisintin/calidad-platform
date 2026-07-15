@@ -28,7 +28,19 @@ function csvEscape(value: unknown) {
 
 function downloadReport(result: UserImportResult | UserImportPreview) {
   const rows = [
-    ["fila", "legajo", "usuario", "nombre", "apellido", "email", "celular", "estado", "errores", "advertencias"],
+    [
+      "fila",
+      "legajo",
+      "usuario",
+      "nombre",
+      "apellido",
+      "email",
+      "celular",
+      "contrasena_temporal",
+      "estado",
+      "errores",
+      "advertencias",
+    ],
     ...result.items.map((item) => [
       item.row_number,
       item.legajo,
@@ -37,6 +49,7 @@ function downloadReport(result: UserImportResult | UserImportPreview) {
       item.apellido || "",
       item.email,
       item.celular || "",
+      item.initial_password || "",
       statusLabel(item.status),
       item.errors.join(" | "),
       item.warnings.join(" | "),

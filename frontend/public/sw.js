@@ -1,10 +1,11 @@
-const CACHE_NAME = "calidad-platform-shell-v2";
+const CACHE_NAME = "calidad-platform-shell-v3";
 const APP_SHELL = [
   "/",
   "/manifest.webmanifest",
   "/icons/icon.svg",
   "/icons/icon-maskable.svg"
 ];
+const APP_SHELL_PATHS = new Set(APP_SHELL);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -26,19 +27,43 @@ self.addEventListener("fetch", (event) => {
   }
 
   const requestUrl = new URL(event.request.url);
-  const isAppAsset = requestUrl.origin === self.location.origin;
+  if (requestUrl.origin !== self.location.origin) {
+    return;
+  }
+
+  if (requestUrl.pathname.startsWith("/api/") || requestUrl.pathname.startsWith("/media/")) {
+    return;
+  }
+
   const isHtmlNavigation = event.request.mode === "navigate";
-  const isBuildAsset = requestUrl.pathname.startsWith("/assets/");
+  const isPublicAsset =
+    APP_SHELL_PATHS.has(requestUrl.pathname) ||
+    requestUrl.pathname.startsWith("/assets/") ||
+    requestUrl.pathname.startsWith("/icons/");
+
+  if (!isHtmlNavigation && !isPublicAsset) {
+    return;
+  }
 
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        if (isAppAsset && response.ok && !isHtmlNavigation && !isBuildAsset) {
+        if (response.ok && isPublicAsset) {
           const cloned = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
         }
         return response;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/")))
+      .catch(() =>
+        caches.match(event.request).then(async (cached) => {
+          if (cached) {
+            return cached;
+          }
+          if (isHtmlNavigation) {
+            return (await caches.match("/")) || Response.error();
+          }
+          return Response.error();
+        })
+      )
   );
 });

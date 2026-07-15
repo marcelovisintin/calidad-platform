@@ -53,6 +53,8 @@
       LOG_DIR: ${LOG_DIR}
       FILE_UPLOAD_MAX_MEMORY_SIZE: ${FILE_UPLOAD_MAX_MEMORY_SIZE}
       DATA_UPLOAD_MAX_MEMORY_SIZE: ${DATA_UPLOAD_MAX_MEMORY_SIZE}
+      EVIDENCE_FILE_MAX_SIZE: ${EVIDENCE_FILE_MAX_SIZE:-20971520}
+      USER_PHOTO_MAX_SIZE: ${USER_PHOTO_MAX_SIZE:-5242880}
       LAST_ACTIVITY_UPDATE_WINDOW_SECONDS: ${LAST_ACTIVITY_UPDATE_WINDOW_SECONDS}
       ANOMALY_CODE_RESERVATION_MINUTES: ${ANOMALY_CODE_RESERVATION_MINUTES}
       JWT_ACCESS_TOKEN_MINUTES: ${JWT_ACCESS_TOKEN_MINUTES}
@@ -116,6 +118,12 @@
       - ${HOST_MEDIA_ROOT}:/var/www/calidad/media:ro
       - ${HOST_STATIC_ROOT}:/var/www/calidad/static:ro
       - ${HOST_TLS_CERTS}:/etc/nginx/certs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - calidad-internal
 

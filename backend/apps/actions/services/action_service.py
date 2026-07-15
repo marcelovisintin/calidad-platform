@@ -25,6 +25,7 @@ from apps.notifications.services import (
     notify_action_item_assigned,
     sync_action_assignment_task_status,
 )
+from common.upload_validation import validate_evidence_file
 
 ALLOWED_ACTION_ITEM_TRANSITIONS = {
     ActionItemStatus.PENDING: {ActionItemStatus.IN_PROGRESS, ActionItemStatus.COMPLETED, ActionItemStatus.CANCELLED},
@@ -467,6 +468,9 @@ def add_action_evidence(*, action_item: ActionItem, user, data: dict, request_id
 
     if not data.get("file") and not (data.get("note") or "").strip():
         raise ValidationError({"note": "Debe adjuntar un archivo o informar una nota de evidencia."})
+
+    if data.get("file"):
+        validate_evidence_file(data["file"])
 
     evidence = ActionEvidence(
         action_item=locked,

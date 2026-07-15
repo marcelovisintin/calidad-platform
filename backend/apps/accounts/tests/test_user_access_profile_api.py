@@ -4,6 +4,7 @@ from rest_framework.test import APITestCase
 from apps.accounts.constants import (
     PERMISSION_CREATE_ANOMALY,
     PERMISSION_VIEW_ACTION_ITEM,
+    PERMISSION_VIEW_USER,
     USER_SCOPE_OPTIONS,
 )
 from apps.accounts.models import Role, User
@@ -63,3 +64,20 @@ class UserAccessProfileApiTests(APITestCase):
         expected_keys = {option["key"] for option in USER_SCOPE_OPTIONS}
         response_keys = {option["key"] for option in response.data["scope_options"]}
         self.assertTrue(expected_keys.issubset(response_keys))
+
+    def test_administrator_access_level_can_list_users_without_sector_scope(self):
+        permissions = ensure_required_permissions()
+        administrator = User.objects.create_user(
+            username="administrator_without_scope",
+            email="administrator_without_scope@example.com",
+            password="secret123",
+            access_level=User.AccessLevel.ADMINISTRADOR,
+        )
+        administrator.user_permissions.add(permissions[PERMISSION_VIEW_USER])
+        self.client.force_authenticate(user=administrator)
+
+        response = self.client.get("/api/v1/accounts/users/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_ids = {item["id"] for item in response.data["results"]}
+        self.assertIn(str(self.target_user.pk), returned_ids)
