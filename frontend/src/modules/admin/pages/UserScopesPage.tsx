@@ -68,10 +68,17 @@ export function UserScopesPage() {
   );
 
   useEffect(() => {
-    if (!selectedUserId && users.length) {
+    if (loading) {
+      return;
+    }
+    if (!users.length) {
+      setSelectedUserId("");
+      return;
+    }
+    if (!users.some((item) => item.id === selectedUserId)) {
       setSelectedUserId(users[0].id);
     }
-  }, [selectedUserId, users]);
+  }, [loading, selectedUserId, users]);
 
   useEffect(() => {
     if (!selectedUserId) {
@@ -186,6 +193,17 @@ export function UserScopesPage() {
       {feedback ? <div className="panel info">{feedback}</div> : null}
       {profileError ? <div className="panel danger">{profileError}</div> : null}
 
+      <div className="toolbar-card compact-toolbar user-scope-search">
+        <input
+          autoComplete="off"
+          onChange={handleSearchChange}
+          placeholder="Buscar usuario, nombre o email"
+          type="search"
+          value={search}
+        />
+        {loading ? <span className="search-loading-indicator">Actualizando...</span> : null}
+      </div>
+
       <DataState loading={loading} error={error} onRetry={reload}>
         <div className="user-management-grid">
           <section className="panel">
@@ -194,9 +212,6 @@ export function UserScopesPage() {
                 <p className="eyebrow">Usuarios</p>
                 <h2>Seleccionar usuario</h2>
               </div>
-            </div>
-            <div className="toolbar-card compact-toolbar">
-              <input onChange={handleSearchChange} placeholder="Buscar usuario, nombre o email" type="search" value={search} />
             </div>
             <div className="stack-list user-list-scroll">
               {users.map((item) => (

@@ -1,0 +1,13 @@
+[Unit]
+Description=Backup diario de Calidad (PostgreSQL y media)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=sgc
+Group=sgc
+WorkingDirectory=/opt/calidad/app
+Environment=ENV_FILE=/srv/calidad-platform/config/.env.server.local
+Environment=COMPOSE_FILE=/opt/calidad/app/deploy/docker/docker-compose.local.yml
+ExecStart=/opt/calidad/app/deploy/backups/backup_local.sh
