@@ -228,5 +228,22 @@ async function authorizedFetch<T>(path: string, options: RequestOptions, retryOn
 }
 
 export function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  return authorizedFetch<T>(path, options);
+  const method = (options.method ?? "GET").toUpperCase();
+  const isMutation = !["GET", "HEAD", "OPTIONS"].includes(method);
+
+  if (!isMutation) {
+    return authorizedFetch<T>(path, options);
+  }
+
+  window.dispatchEvent(new CustomEvent("calidad:mutation-start"));
+  return authorizedFetch<T>(path, options).then(
+    (result) => {
+      window.dispatchEvent(new CustomEvent("calidad:mutation-end", { detail: { succeeded: true } }));
+      return result;
+    },
+    (error: unknown) => {
+      window.dispatchEvent(new CustomEvent("calidad:mutation-end", { detail: { succeeded: false } }));
+      throw error;
+    },
+  );
 }

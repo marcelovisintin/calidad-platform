@@ -118,6 +118,7 @@
       - ${HOST_MEDIA_ROOT}:/var/www/calidad/media:ro
       - ${HOST_STATIC_ROOT}:/var/www/calidad/static:ro
       - ${HOST_TLS_CERTS}:/etc/nginx/certs
+      - ${HOST_UPDATE_STATUS_ROOT:-/srv/calidad-platform/runtime/update}:/var/www/calidad/update:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz"]
       interval: 30s

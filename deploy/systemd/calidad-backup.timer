@@ -1,0 +1,11 @@
+[Unit]
+Description=Programacion del backup diario de Calidad
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+RandomizedDelaySec=10m
+Unit=calidad-backup.service
+
+[Install]
+WantedBy=timers.target

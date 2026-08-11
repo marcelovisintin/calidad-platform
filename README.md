@@ -256,6 +256,8 @@ Objetivo de esta estrategia:
 - `docs/data-model/erd-initial.md`
 - `docs/workflows/anomalies-workflow.md`
 - `docs/deployment/local-cloud-ready.md`
+- `docs/deployment/operational-data-and-backups.md`
+- `docs/deployment/notebook-ubuntu.md`
 - `docs/audit/audit-readiness.md`
 
 ## Proximos pasos sugeridos

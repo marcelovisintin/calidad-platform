@@ -25,6 +25,8 @@
 # Runtime and generated data
 /storage/
 /runtime/
+/backups/
+/.deploy/
 *.log
 
 # OS / IDE
