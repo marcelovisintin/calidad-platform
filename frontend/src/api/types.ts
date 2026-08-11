@@ -57,6 +57,7 @@ export interface CurrentUser extends UserSummary {
   employee_code?: string;
   access_level: "usuario_activo" | "mando_medio_activo" | "administrador" | "desarrollador";
   must_change_password: boolean;
+  email_notifications_enabled: boolean;
   password_changed_at?: string | null;
   photo_url?: string;
   sector?: AreaSummary | null;
@@ -88,6 +89,7 @@ export interface UserDirectoryItem {
   photo_url?: string;
   access_level: "usuario_activo" | "mando_medio_activo" | "administrador" | "desarrollador";
   must_change_password: boolean;
+  email_notifications_enabled: boolean;
   password_changed_at?: string | null;
   sector?: AreaSummary | null;
   primary_sector_id?: UUID | null;
@@ -154,6 +156,7 @@ export interface UserWritePayload {
   access_level?: "usuario_activo" | "mando_medio_activo" | "administrador" | "desarrollador";
   primary_sector?: UUID | null;
   is_active?: boolean;
+  email_notifications_enabled?: boolean;
   password?: string;
 }
 

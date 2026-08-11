@@ -1,7 +1,7 @@
 ﻿from django.db.models import Q
 from django.utils import timezone
 
-from apps.notifications.models import NotificationRecipient, RecipientTaskStatus
+from apps.notifications.models import NotificationChannel, NotificationRecipient, RecipientTaskStatus
 
 OPEN_TASK_STATUSES = {
     RecipientTaskStatus.PENDING,
@@ -10,7 +10,7 @@ OPEN_TASK_STATUSES = {
 
 
 def build_notification_recipient_queryset():
-    return NotificationRecipient.objects.select_related(
+    return NotificationRecipient.objects.filter(channel=NotificationChannel.IN_APP).select_related(
         "notification",
         "user",
         "notification__created_by",

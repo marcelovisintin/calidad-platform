@@ -17,9 +17,11 @@ class NotificationStatus(models.TextChoices):
 
 class DeliveryStatus(models.TextChoices):
     PENDING = "pending", "Pendiente"
+    PROCESSING = "processing", "Procesando"
     DELIVERED = "delivered", "Entregada"
     READ = "read", "Leida"
     FAILED = "failed", "Fallida"
+    SKIPPED = "skipped", "Omitida"
 
 
 class NotificationCategory(models.TextChoices):
@@ -102,6 +104,11 @@ class NotificationRecipient(AuditBaseModel):
         choices=DeliveryStatus.choices,
         default=DeliveryStatus.PENDING,
     )
+    destination = models.CharField(max_length=254, blank=True, default="")
+    delivery_attempts = models.PositiveSmallIntegerField(default=0)
+    last_delivery_attempt_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    delivery_error = models.TextField(blank=True, default="")
     read_at = models.DateTimeField(null=True, blank=True)
     task_status = models.CharField(
         max_length=20,
@@ -124,6 +131,10 @@ class NotificationRecipient(AuditBaseModel):
         indexes = [
             models.Index(fields=["user", "delivery_status", "read_at"], name="notifications_user_status_idx"),
             models.Index(fields=["user", "task_status", "resolved_at"], name="notifications_user_task_idx"),
+            models.Index(
+                fields=["channel", "delivery_status", "last_delivery_attempt_at"],
+                name="noti_email_outbox_idx",
+            ),
         ]
 
     def clean(self):

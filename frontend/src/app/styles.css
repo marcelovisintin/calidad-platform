@@ -1715,8 +1715,10 @@ small {
 }
 
 .user-checkbox-group {
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .compact-toolbar {

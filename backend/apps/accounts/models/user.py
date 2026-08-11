@@ -58,6 +58,10 @@ class User(AbstractUser):
         default=AccessLevel.USUARIO_ACTIVO,
     )
     must_change_password = models.BooleanField(default=False)
+    email_notifications_enabled = models.BooleanField(
+        default=False,
+        verbose_name="Notificación por correo",
+    )
     password_changed_at = models.DateTimeField(null=True, blank=True)
     primary_sector = models.ForeignKey(
         "catalog.Area",

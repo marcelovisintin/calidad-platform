@@ -9,7 +9,12 @@ class NotificationRecipientInline(admin.TabularInline):
     fields = (
         "user",
         "channel",
+        "destination",
         "delivery_status",
+        "delivery_attempts",
+        "last_delivery_attempt_at",
+        "delivered_at",
+        "delivery_error",
         "task_status",
         "assigned_at",
         "read_at",
@@ -35,7 +40,17 @@ class NotificationAdmin(admin.ModelAdmin):
 
 @admin.register(NotificationRecipient)
 class NotificationRecipientAdmin(admin.ModelAdmin):
-    list_display = ("notification", "user", "delivery_status", "task_status", "assigned_at", "resolved_at")
+    list_display = (
+        "notification",
+        "user",
+        "channel",
+        "destination",
+        "delivery_status",
+        "delivery_attempts",
+        "last_delivery_attempt_at",
+        "delivered_at",
+        "task_status",
+    )
     list_filter = ("channel", "delivery_status", "task_status")
     list_select_related = ("notification", "user")
     search_fields = ("user__username", "notification__title", "notification__template_code")

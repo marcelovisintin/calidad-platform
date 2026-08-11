@@ -1,0 +1,11 @@
+[Unit]
+Description=Procesamiento periodico de correos de Calidad
+
+[Timer]
+OnBootSec=2m
+OnUnitActiveSec=1m
+Persistent=true
+Unit=calidad-email-dispatch.service
+
+[Install]
+WantedBy=timers.target

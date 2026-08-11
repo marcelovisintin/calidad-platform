@@ -32,6 +32,8 @@ const toneMap: Record<string, string> = {
   mando_medio_activo: "accent",
   administrador: "info",
   desarrollador: "warning",
+  email_notifications_enabled: "success",
+  email_notifications_disabled: "neutral",
   draft: "neutral",
   containment: "warning",
   treatment_created: "info",
@@ -47,6 +49,8 @@ const labelMap: Record<string, string> = {
   classification: "Revisión de hallazgos",
   validated_effective: "Validado eficaz",
   not_effective: "No eficaz",
+  email_notifications_enabled: "Correo activado",
+  email_notifications_disabled: "Correo desactivado",
 };
 
 export function StatusBadge({ value, compact = false }: StatusBadgeProps) {

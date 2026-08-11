@@ -79,6 +79,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             "photo_url",
             "access_level",
             "must_change_password",
+            "email_notifications_enabled",
             "password_changed_at",
             "sector",
             "is_active",
@@ -125,6 +126,7 @@ class UserListSerializer(serializers.ModelSerializer):
             "photo_url",
             "access_level",
             "must_change_password",
+            "email_notifications_enabled",
             "sector",
             "primary_sector_id",
             "is_active",
@@ -303,6 +305,7 @@ class UserWriteSerializer(serializers.ModelSerializer):
             "access_level",
             "primary_sector",
             "is_active",
+            "email_notifications_enabled",
             "password",
             "initial_password",
         )
@@ -316,6 +319,16 @@ class UserWriteSerializer(serializers.ModelSerializer):
         if target_level == User.AccessLevel.DESARROLLADOR and request and not request.user.is_superuser:
             raise serializers.ValidationError(
                 {"access_level": "Solo un superusuario puede asignar el nivel desarrollador."}
+            )
+
+        notifications_enabled = attrs.get(
+            "email_notifications_enabled",
+            getattr(self.instance, "email_notifications_enabled", False),
+        )
+        email = attrs.get("email", getattr(self.instance, "email", ""))
+        if notifications_enabled and not email:
+            raise serializers.ValidationError(
+                {"email": "Debe indicar un correo válido para activar las notificaciones."}
             )
 
         return attrs

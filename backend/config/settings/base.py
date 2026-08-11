@@ -24,6 +24,7 @@ CORS_ALLOW_CREDENTIALS = env_bool("CORS_ALLOW_CREDENTIALS", default=True)
 
 APP_SLUG = env("APP_SLUG", default="calidad-platform")
 API_VERSION = env("API_VERSION", default="v1")
+APP_PUBLIC_URL = env("APP_PUBLIC_URL", default="http://127.0.0.1:8088")
 LANGUAGE_CODE = env("LANGUAGE_CODE", default="es-ar")
 TIME_ZONE = env("TIME_ZONE", default="America/Argentina/Buenos_Aires")
 USE_I18N = True
@@ -114,6 +115,20 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LAST_ACTIVITY_UPDATE_WINDOW_SECONDS = env_int("LAST_ACTIVITY_UPDATE_WINDOW_SECONDS", default=300)
 ANOMALY_CODE_RESERVATION_MINUTES = env_int("ANOMALY_CODE_RESERVATION_MINUTES", default=30)
+
+EMAIL_NOTIFICATIONS_ENABLED = env_bool("EMAIL_NOTIFICATIONS_ENABLED", default=False)
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", default="localhost")
+EMAIL_PORT = env_int("EMAIL_PORT", default=587)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", default=True)
+EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", default=False)
+EMAIL_TIMEOUT = env_int("EMAIL_TIMEOUT", default=10)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="calidad@localhost")
+EMAIL_MAX_RETRIES = env_int("EMAIL_MAX_RETRIES", default=3)
+EMAIL_RETRY_DELAY_MINUTES = env_int("EMAIL_RETRY_DELAY_MINUTES", default=5)
+EMAIL_PROCESSING_TIMEOUT_MINUTES = env_int("EMAIL_PROCESSING_TIMEOUT_MINUTES", default=10)
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [

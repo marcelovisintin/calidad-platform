@@ -1,0 +1,11 @@
+[Unit]
+Description=Envio de notificaciones por correo de Calidad
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=sgc
+Group=sgc
+WorkingDirectory=/opt/calidad/app
+ExecStart=/usr/bin/docker compose --env-file /srv/calidad-platform/config/.env.server.local -f /opt/calidad/app/deploy/docker/docker-compose.local.yml exec -T backend python manage.py send_pending_email_notifications --limit 100

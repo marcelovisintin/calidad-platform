@@ -81,6 +81,7 @@ class UserImportApiTests(APITestCase):
         self.assertGreaterEqual(len(initial_password), 16)
         self.assertNotEqual(initial_password, "12345678")
         self.assertTrue(user.check_password(initial_password))
+        self.assertFalse(user.email_notifications_enabled)
 
     def test_manual_user_creation_returns_generated_temporary_password_once(self):
         response = self.client.post(
@@ -99,9 +100,30 @@ class UserImportApiTests(APITestCase):
         user = User.objects.get(username="new.operator")
         self.assertTrue(user.check_password(initial_password))
         self.assertTrue(user.must_change_password)
+        self.assertFalse(user.email_notifications_enabled)
         detail_response = self.client.get(f"/api/v1/accounts/users/{user.pk}/")
         self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertFalse(detail_response.data["email_notifications_enabled"])
         self.assertNotIn("initial_password", detail_response.data)
+
+    def test_admin_can_enable_email_notifications_for_user(self):
+        user = User.objects.create_user(
+            username="notified.operator",
+            email="notified.operator@example.com",
+            password="SafePassword1!",
+        )
+
+        response = self.client.patch(
+            f"/api/v1/accounts/users/{user.pk}/",
+            {"email_notifications_enabled": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertTrue(user.email_notifications_enabled)
+        detail_response = self.client.get(f"/api/v1/accounts/users/{user.pk}/")
+        self.assertTrue(detail_response.data["email_notifications_enabled"])
 
     def test_manual_user_creation_rejects_common_temporary_password(self):
         response = self.client.post(

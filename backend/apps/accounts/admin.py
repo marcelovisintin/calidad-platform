@@ -12,6 +12,7 @@ class UserAdmin(DjangoUserAdmin):
         "first_name",
         "last_name",
         "access_level",
+        "email_notifications_enabled",
         "must_change_password",
         "primary_sector",
         "is_active",
@@ -20,6 +21,7 @@ class UserAdmin(DjangoUserAdmin):
     )
     list_filter = (
         "access_level",
+        "email_notifications_enabled",
         "must_change_password",
         "is_active",
         "is_staff",
@@ -44,6 +46,7 @@ class UserAdmin(DjangoUserAdmin):
                     "employee_code",
                     "photo",
                     "access_level",
+                    "email_notifications_enabled",
                     "must_change_password",
                     "password_changed_at",
                     "primary_sector",

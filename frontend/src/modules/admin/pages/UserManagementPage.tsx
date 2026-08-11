@@ -26,6 +26,7 @@ type UserFormState = {
   access_level: AccessLevel;
   primary_sector: string;
   is_active: boolean;
+  email_notifications_enabled: boolean;
   password: string;
 };
 
@@ -47,6 +48,7 @@ const emptyForm: UserFormState = {
   access_level: "usuario_activo",
   primary_sector: "",
   is_active: true,
+  email_notifications_enabled: false,
   password: "",
 };
 
@@ -134,6 +136,7 @@ export function UserManagementPage() {
       access_level: resolveAccessLevel(item),
       primary_sector: item.primary_sector_id || item.sector?.id || "",
       is_active: item.is_active,
+      email_notifications_enabled: item.email_notifications_enabled,
       password: "",
     });
   };
@@ -156,6 +159,7 @@ export function UserManagementPage() {
         access_level: form.access_level,
         primary_sector: form.primary_sector || null,
         is_active: form.is_active,
+        email_notifications_enabled: form.email_notifications_enabled,
         password: form.password.trim() || undefined,
       };
 
@@ -341,6 +345,16 @@ export function UserManagementPage() {
                   <input checked={form.is_active} name="is_active" onChange={handleInputChange} type="checkbox" />
                   Cuenta habilitada
                 </label>
+                <label className="checkbox-inline">
+                  <input
+                    checked={form.email_notifications_enabled}
+                    name="email_notifications_enabled"
+                    onChange={handleInputChange}
+                    type="checkbox"
+                  />
+                  Notificación por correo
+                </label>
+                <small>Desactivada por defecto. Solo habilitarla para usuarios que deban recibir correos.</small>
               </div>
 
               <div className="field-span-2 form-actions">
@@ -383,6 +397,10 @@ export function UserManagementPage() {
                     <div className="badge-stack align-end">
                       <StatusBadge value={item.is_active ? "active" : "inactive"} compact />
                       <StatusBadge value={resolveAccessLevel(item)} compact />
+                      <StatusBadge
+                        value={item.email_notifications_enabled ? "email_notifications_enabled" : "email_notifications_disabled"}
+                        compact
+                      />
                       {item.must_change_password ? <StatusBadge value="pending" compact /> : null}
                       <div className="user-row-actions">
                         <button className="button button-secondary" onClick={() => handleEdit(item)} type="button">

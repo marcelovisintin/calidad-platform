@@ -2,6 +2,7 @@
 
 from datetime import datetime, time
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -67,22 +68,6 @@ def _action_due_at(action_item):
 
 
 
-def _create_recipient(*, notification: Notification, user, actor, channel: str, task_status: str, assigned_at):
-    recipient = NotificationRecipient(
-        notification=notification,
-        user=user,
-        channel=channel,
-        delivery_status=DeliveryStatus.DELIVERED if channel == NotificationChannel.IN_APP else DeliveryStatus.PENDING,
-        task_status=task_status,
-        assigned_at=assigned_at,
-        created_by=actor,
-        updated_by=actor,
-    )
-    recipient.full_clean()
-    recipient.save()
-    return recipient
-
-
 @transaction.atomic
 def create_internal_notification(
     *,
@@ -100,10 +85,20 @@ def create_internal_notification(
     due_at=None,
     context_data: dict | None = None,
     request_id: str = "",
+    email_enabled: bool = False,
 ):
     users = _unique_active_users(recipients)
     if not users:
         return None
+
+    email_users = [
+        user
+        for user in users
+        if email_enabled
+        and settings.EMAIL_NOTIFICATIONS_ENABLED
+        and getattr(user, "email_notifications_enabled", False)
+        and bool((getattr(user, "email", "") or "").strip())
+    ]
 
     notification = Notification(
         source_type=source_type,
@@ -116,7 +111,7 @@ def create_internal_notification(
         task_type=task_type if is_task else NotificationTaskType.NONE,
         action_url=action_url,
         due_at=due_at,
-        status=NotificationStatus.SENT,
+        status=NotificationStatus.PENDING if email_users else NotificationStatus.SENT,
         context_data=context_data or {},
         created_by=actor,
         updated_by=actor,
@@ -139,6 +134,20 @@ def create_internal_notification(
         )
         for user in users
     ]
+    recipient_objects.extend(
+        NotificationRecipient(
+            notification=notification,
+            user=user,
+            channel=NotificationChannel.EMAIL,
+            destination=user.email.strip(),
+            delivery_status=DeliveryStatus.PENDING,
+            task_status=task_status,
+            assigned_at=assigned_at,
+            created_by=actor,
+            updated_by=actor,
+        )
+        for user in email_users
+    )
     created_recipients = NotificationRecipient.objects.bulk_create(recipient_objects)
 
     record_audit_event(
@@ -148,6 +157,11 @@ def create_internal_notification(
         after_data={
             "notification_id": str(notification.pk),
             "recipient_ids": [str(recipient.user_id) for recipient in created_recipients],
+            "email_recipient_ids": [
+                str(recipient.user_id)
+                for recipient in created_recipients
+                if recipient.channel == NotificationChannel.EMAIL
+            ],
             "task_type": notification.task_type,
         },
         request_id=_request_id(request_id),
@@ -294,19 +308,25 @@ def sync_action_assignment_task_status(*, action_item, actor=None, request_id: s
 def notify_anomaly_created(*, anomaly, actor=None, request_id: str = ""):
     current_responsible = anomaly.owner
     responsible_label = current_responsible.full_name if current_responsible else "Sin responsable asignado"
+    detected_at = timezone.localtime(anomaly.detected_at).strftime("%d/%m/%Y %H:%M")
     return create_internal_notification(
         recipients=[anomaly.reporter],
-        title=f"Anomalia {anomaly.code} registrada",
+        title=f"Anomalía {anomaly.code} registrada correctamente",
         body=(
-            f"Estado inicial: {anomaly.current_status}. "
-            f"Fecha/hora: {anomaly.detected_at.isoformat()}. "
+            f"Hola {anomaly.reporter.full_name},\n\n"
+            f"La anomalía {anomaly.code} fue generada correctamente.\n"
+            f"Título: {anomaly.title}\n"
+            f"Sector: {anomaly.area.name}\n"
+            f"Fecha y hora: {detected_at}\n"
+            f"Estado inicial: {anomaly.get_current_status_display()}\n"
             f"Responsable actual: {responsible_label}."
         ),
         source_type="anomalies.anomaly",
         source_id=anomaly.pk,
         actor=actor,
         category=NotificationCategory.ANOMALY,
-        action_url=f"/api/v1/anomalies/{anomaly.pk}/",
+        template_code="anomaly_created",
+        action_url=f"/anomalies/{anomaly.pk}",
         context_data={
             "anomaly_id": str(anomaly.pk),
             "anomaly_code": anomaly.code,
@@ -315,6 +335,7 @@ def notify_anomaly_created(*, anomaly, actor=None, request_id: str = ""):
             "current_responsible_id": str(current_responsible.pk) if current_responsible else "",
         },
         request_id=request_id,
+        email_enabled=True,
     )
 
 
