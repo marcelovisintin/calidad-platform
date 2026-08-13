@@ -8,6 +8,7 @@ import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
 import { StatusBadge } from "../../../components/StatusBadge";
+import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
@@ -160,6 +161,13 @@ export function TreatmentTrackingPage() {
     setPage(1);
   };
 
+  const clearFilters = () => {
+    setCodeFilter("");
+    setUserFilter("");
+    setProcessFilter("");
+    setPage(1);
+  };
+
   return (
     <section className="page-shell">
       <PageHeader
@@ -167,41 +175,52 @@ export function TreatmentTrackingPage() {
         description="Consulta y auditoria solo lectura de tratamientos, procedimientos, tareas y validaciones."
       />
 
-      <section className="toolbar-card filter-toolbar">
-        <div className="form-grid filter-grid">
-          <label className="field">
-            <span>Codigo de procedimiento</span>
-            <input
-              onChange={handleFilterChange(setCodeFilter)}
-              placeholder="Ej. TRT-2026-0001"
-              type="search"
-              value={codeFilter}
-            />
-          </label>
-          <label className="field">
-            <span>Usuario</span>
-            <select onChange={handleFilterChange(setUserFilter)} value={userFilter}>
-              <option value="">Todos</option>
-              {(usersData?.results ?? []).map((user) => (
-                <option key={user.id} value={user.id}>
-                  {userLabel(user)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>Area</span>
-            <select onChange={handleFilterChange(setProcessFilter)} value={processFilter}>
-              <option value="">Todos</option>
-              {(catalogData?.areas ?? []).map((area) => (
-                <option key={area.id} value={area.id}>
-                  {area.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </section>
+      <TabbedFilters
+        ariaLabel="Filtros de seguimiento de tratamientos"
+        onClear={clearFilters}
+        items={[
+          {
+            id: "code",
+            label: "Codigo de procedimiento",
+            active: Boolean(codeFilter),
+            content: (
+              <input
+                aria-label="Codigo de procedimiento"
+                onChange={handleFilterChange(setCodeFilter)}
+                placeholder="Ej. TRT-2026-0001"
+                type="search"
+                value={codeFilter}
+              />
+            ),
+          },
+          {
+            id: "user",
+            label: "Usuario",
+            active: Boolean(userFilter),
+            content: (
+              <select aria-label="Usuario" onChange={handleFilterChange(setUserFilter)} value={userFilter}>
+                <option value="">Todos los usuarios</option>
+                {(usersData?.results ?? []).map((user) => (
+                  <option key={user.id} value={user.id}>{userLabel(user)}</option>
+                ))}
+              </select>
+            ),
+          },
+          {
+            id: "area",
+            label: "Area",
+            active: Boolean(processFilter),
+            content: (
+              <select aria-label="Area" onChange={handleFilterChange(setProcessFilter)} value={processFilter}>
+                <option value="">Todas las areas</option>
+                {(catalogData?.areas ?? []).map((area) => (
+                  <option key={area.id} value={area.id}>{area.name}</option>
+                ))}
+              </select>
+            ),
+          },
+        ]}
+      />
 
       <DataState
         loading={loading}

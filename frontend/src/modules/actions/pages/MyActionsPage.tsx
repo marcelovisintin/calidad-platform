@@ -7,6 +7,7 @@ import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
 import { StatusBadge } from "../../../components/StatusBadge";
+import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
@@ -365,6 +366,16 @@ export function MyActionsPage() {
 
   const totalCount = data?.count ?? 0;
 
+  const clearFilters = () => {
+    setQuery("");
+    setAnomalyFilter("");
+    setTreatmentFilter("");
+    setStatusFilter("");
+    setCompletedOn("");
+    setPerformedBy("");
+    setPage(1);
+  };
+
   return (
     <section className="page-shell">
       <PageHeader
@@ -372,105 +383,132 @@ export function MyActionsPage() {
         description="Listado historico de tareas con filtros por anomalia, tratamiento, estado, fecha terminada y usuario que la realizo."
       />
 
-      <section className="toolbar-card filter-toolbar">
-        <div className="form-grid filter-grid actions-filters-grid">
-          <label className="field">
-            <span>Buscar</span>
-            <input
-              onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                setQuery(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Codigo, titulo, descripcion, anomalia o usuario"
-              type="search"
-              value={query}
-            />
-          </label>
+      <TabbedFilters
+        ariaLabel="Filtros de acciones y pendientes"
+        onClear={clearFilters}
+        items={[
+          {
+            id: "search",
+            label: "Buscar",
+            active: Boolean(query),
+            content: (
+              <input
+                aria-label="Buscar"
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  setQuery(event.target.value);
+                  setPage(1);
+                }}
+                placeholder="Codigo, titulo, descripcion, anomalia o usuario"
+                type="search"
+                value={query}
+              />
+            ),
+          },
+          {
+            id: "anomaly",
+            label: "Anomalia",
+            active: Boolean(anomalyFilter),
+            content: (
+              <input
+                aria-label="Anomalia"
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  setAnomalyFilter(event.target.value);
+                  setPage(1);
+                }}
+                placeholder="Codigo o titulo de anomalia"
+                type="text"
+                value={anomalyFilter}
+              />
+            ),
+          },
+          {
+            id: "treatment",
+            label: "Tratamiento",
+            active: Boolean(treatmentFilter),
+            content: (
+              <input
+                aria-label="Tratamiento"
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  setTreatmentFilter(event.target.value);
+                  setPage(1);
+                }}
+                placeholder="Codigo de tratamiento (ej. TRT-2026-0001)"
+                type="text"
+                value={treatmentFilter}
+              />
+            ),
+          },
+          {
+            id: "status",
+            label: "Estado",
+            active: Boolean(statusFilter),
+            content: (
+              <select
+                aria-label="Estado"
+                onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+                  setStatusFilter(event.target.value);
+                  setPage(1);
+                }}
+                value={statusFilter}
+              >
+                <option value="">Todos</option>
+                <option value="pending">Pendiente</option>
+                <option value="in_progress">En curso</option>
+                <option value="completed">Terminada</option>
+                <option value="cancelled">Cancelada</option>
+                <option value="overdue">Vencida</option>
+              </select>
+            ),
+          },
+          {
+            id: "completed",
+            label: "Fecha terminada",
+            active: Boolean(completedOn),
+            content: (
+              <input
+                aria-label="Fecha terminada"
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  setCompletedOn(event.target.value);
+                  setPage(1);
+                }}
+                type="date"
+                value={completedOn}
+              />
+            ),
+          },
+          {
+            id: "performed-by",
+            label: "Usuario que la realizo",
+            active: Boolean(performedBy),
+            content: (
+              <select
+                aria-label="Usuario que la realizo"
+                onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+                  setPerformedBy(event.target.value);
+                  setPage(1);
+                }}
+                value={performedBy}
+              >
+                <option value="">Todos</option>
+                {(usersData?.results ?? []).map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {getUserLabel(item)}
+                  </option>
+                ))}
+              </select>
+            ),
+          },
+        ]}
+      />
 
-          <label className="field">
-            <span>Anomalia</span>
-            <input
-              onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                setAnomalyFilter(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Codigo o titulo de anomalia"
-              type="text"
-              value={anomalyFilter}
-            />
-          </label>
-
-          <label className="field">
-            <span>Tratamiento</span>
-            <input
-              onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                setTreatmentFilter(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Codigo de tratamiento (ej. TRT-2026-0001)"
-              type="text"
-              value={treatmentFilter}
-            />
-          </label>
-
-          <label className="field">
-            <span>Estado</span>
-            <select
-              onChange={(event: ChangeEvent<HTMLSelectElement>) => {
-                setStatusFilter(event.target.value);
-                setPage(1);
-              }}
-              value={statusFilter}
-            >
-              <option value="">Todos</option>
-              <option value="pending">Pendiente</option>
-              <option value="in_progress">En curso</option>
-              <option value="completed">Terminada</option>
-              <option value="cancelled">Cancelada</option>
-              <option value="overdue">Vencida</option>
-            </select>
-          </label>
-
-          <label className="field">
-            <span>Fecha terminada</span>
-            <input
-              onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                setCompletedOn(event.target.value);
-                setPage(1);
-              }}
-              type="date"
-              value={completedOn}
-            />
-          </label>
-
-          <label className="field">
-            <span>Usuario que la realizo</span>
-            <select
-              onChange={(event: ChangeEvent<HTMLSelectElement>) => {
-                setPerformedBy(event.target.value);
-                setPage(1);
-              }}
-              value={performedBy}
-            >
-              <option value="">Todos</option>
-              {(usersData?.results ?? []).map((item) => (
-                <option key={item.id} value={item.id}>
-                  {getUserLabel(item)}
-                </option>
-              ))}
-            </select>
-          </label>
+      {usersError ? (
+        <div className="panel warning compact-inline-panel">
+          <p>No se pudo cargar el listado de usuarios para filtrar.</p>
+          <button className="button button-secondary" onClick={() => void reloadUsers()} type="button">
+            Reintentar
+          </button>
         </div>
-
-        {usersError ? (
-          <div className="panel warning compact-inline-panel">
-            <p>No se pudo cargar el listado de usuarios para filtrar.</p>
-            <button className="button button-secondary" onClick={() => void reloadUsers()} type="button">
-              Reintentar
-            </button>
-          </div>
-        ) : null}
-      </section>
+      ) : null}
 
       {message ? <div className="panel">{message}</div> : null}
       {formError ? <div className="panel danger">{formError}</div> : null}

@@ -2202,35 +2202,11 @@ small {
 
 /* Search and filter controls are intentionally denser than data-entry forms. */
 .filter-toolbar {
-  position: relative;
-  isolation: isolate;
-  margin-bottom: 0.35rem;
   padding: 0.7rem 0.8rem;
   border-width: 1px;
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(226, 241, 237, 0.98), var(--panel));
   box-shadow: 0 8px 22px rgba(8, 33, 40, 0.08);
-}
-
-.filter-toolbar::before,
-.filter-toolbar::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-  border: 1px solid rgba(21, 132, 111, 0.15);
-  border-radius: 0 0 16px 16px;
-}
-
-.filter-toolbar::before {
-  z-index: -1;
-  inset: 5px 12px -6px;
-  background: rgba(21, 132, 111, 0.1);
-}
-
-.filter-toolbar::after {
-  z-index: -2;
-  inset: 9px 24px -10px;
-  background: rgba(15, 44, 53, 0.06);
 }
 
 .filter-toolbar .field,
@@ -2278,6 +2254,107 @@ small {
   max-width: 680px;
 }
 
+.tabbed-filters {
+  min-width: 0;
+  padding-top: 0.4rem;
+}
+
+.tabbed-filters-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.45rem 0.55rem 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(21, 132, 111, 0.35) transparent;
+}
+
+.tabbed-filter-tab {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  min-height: 42px;
+  max-width: 240px;
+  padding: 0.6rem 1rem;
+  border: 1px solid rgba(15, 44, 53, 0.18);
+  border-bottom: 0;
+  border-radius: 13px 13px 0 0;
+  color: var(--text);
+  background: rgba(178, 218, 207, 0.9);
+  font-weight: 700;
+  line-height: 1.15;
+  cursor: pointer;
+  transition: min-height 0.18s ease, background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.tabbed-filter-tab:nth-child(even) {
+  background: rgba(157, 205, 191, 0.92);
+}
+
+.tabbed-filter-tab:hover {
+  background: rgba(195, 227, 218, 0.98);
+}
+
+.tabbed-filter-tab[aria-selected="true"] {
+  z-index: 3;
+  min-height: 49px;
+  margin-bottom: -1px;
+  color: var(--primary-dark);
+  background: rgba(226, 241, 237, 1);
+  border-color: rgba(21, 132, 111, 0.38);
+  transform: translateY(-3px);
+}
+
+.tabbed-filter-tab:focus-visible {
+  outline: 3px solid rgba(21, 132, 111, 0.24);
+  outline-offset: 2px;
+}
+
+.tabbed-filter-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 0.5rem;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 3px rgba(21, 132, 111, 0.12);
+}
+
+.tabbed-filters-panel {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 70px;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(21, 132, 111, 0.38);
+  border-radius: 0 18px 18px 18px;
+  background: linear-gradient(180deg, rgba(226, 241, 237, 1), rgba(218, 238, 232, 0.98));
+  box-shadow: 0 9px 22px rgba(8, 33, 40, 0.08);
+}
+
+.tabbed-filter-control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tabbed-filter-control input,
+.tabbed-filter-control select {
+  min-height: 43px;
+  padding: 0.62rem 0.8rem;
+  border-radius: 12px;
+  font-size: 0.92rem;
+}
+
+.tabbed-filter-clear {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0.55rem 0.9rem;
+  white-space: nowrap;
+}
+
 @media (max-width: 1180px) {
   .actions-filters-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2300,6 +2377,28 @@ small {
   .filter-toolbar-inline {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .tabbed-filters-tabs {
+    padding-left: 0.3rem;
+    padding-right: 0.3rem;
+  }
+
+  .tabbed-filter-tab {
+    max-width: 190px;
+    padding-left: 0.8rem;
+    padding-right: 0.8rem;
+    font-size: 0.84rem;
+  }
+
+  .tabbed-filters-panel {
+    align-items: stretch;
+    flex-direction: column;
+    border-radius: 0 14px 14px 14px;
+  }
+
+  .tabbed-filter-clear {
+    width: 100%;
   }
 }
 
