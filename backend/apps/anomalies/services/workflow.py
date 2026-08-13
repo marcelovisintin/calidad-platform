@@ -2,19 +2,9 @@ from __future__ import annotations
 
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from apps.accounts.constants import (
-    PERMISSION_ANALYZE_ANOMALY,
-    PERMISSION_ASSIGN_ACTION,
-    PERMISSION_CANCEL_ANOMALY,
-    PERMISSION_CLASSIFY_ANOMALY,
-    PERMISSION_CLOSE_ANOMALY,
-    PERMISSION_EDIT_ANOMALY,
-    PERMISSION_EXECUTE_ACTION,
-    PERMISSION_REOPEN_ANOMALY,
-    PERMISSION_VERIFY_EFFECTIVENESS_ANOMALY,
-)
+from apps.accounts.services.access_policy import can_manage_assigned_process, has_global_access
 from apps.actions.models import ActionItem, ActionItemStatus
-from apps.anomalies.models import AnomalyStage, AnomalyStatus, STAGE_STATUS_MAP
+from apps.anomalies.models import AnomalyImmediateAction, AnomalyStage, AnomalyStatus, STAGE_STATUS_MAP
 
 
 ALLOWED_STAGE_TRANSITIONS = {
@@ -81,15 +71,6 @@ REOPENABLE_STAGES = {
 
 
 
-def _require_any_permission(user, permissions: set[str], message: str) -> None:
-    if user.is_superuser:
-        return
-    if any(user.has_perm(permission) for permission in permissions):
-        return
-    raise PermissionDenied(message)
-
-
-
 def resolve_status_for_stage(stage: str, *, reopened: bool = False) -> str:
     if reopened:
         return AnomalyStatus.REOPENED
@@ -97,48 +78,33 @@ def resolve_status_for_stage(stage: str, *, reopened: bool = False) -> str:
 
 
 
-def ensure_transition_permission(*, user, target_status: str, target_stage: str) -> None:
-    if target_status == AnomalyStatus.CANCELLED:
-        _require_any_permission(user, {PERMISSION_CANCEL_ANOMALY}, "No tiene permisos para anular la anomalia.")
-        return
-
-    if target_status == AnomalyStatus.REOPENED:
-        _require_any_permission(user, {PERMISSION_REOPEN_ANOMALY}, "No tiene permisos para reabrir la anomalia.")
+def ensure_transition_permission(*, anomaly, user, target_status: str, target_stage: str) -> None:
+    if target_status in {AnomalyStatus.CANCELLED, AnomalyStatus.REOPENED}:
+        if not has_global_access(user):
+            raise PermissionDenied("Solo usuarios ADMIN pueden anular o reabrir anomalias.")
         return
 
     if target_stage in {AnomalyStage.INITIAL_VERIFICATION, AnomalyStage.CLASSIFICATION}:
-        _require_any_permission(user, {PERMISSION_CLASSIFY_ANOMALY}, "No tiene permisos para realizar Revisión de hallazgos de la anomalia.")
-        return
-
-    if target_stage in {AnomalyStage.TREATMENT_CREATED, AnomalyStage.CAUSE_ANALYSIS, AnomalyStage.PROPOSALS}:
-        _require_any_permission(user, {PERMISSION_ANALYZE_ANOMALY}, "No tiene permisos para analizar la anomalia.")
-        return
-
-    if target_stage == AnomalyStage.ACTION_PLAN:
-        _require_any_permission(user, {PERMISSION_ASSIGN_ACTION}, "No tiene permisos para definir el plan de accion.")
-        return
-
-    if target_stage in {AnomalyStage.EXECUTION_AND_FOLLOW_UP, AnomalyStage.RESULTS}:
-        _require_any_permission(
-            user,
-            {PERMISSION_EXECUTE_ACTION, PERMISSION_ASSIGN_ACTION, PERMISSION_EDIT_ANOMALY},
-            "No tiene permisos para mover la anomalia a tratamiento o seguimiento.",
-        )
+        if not has_global_access(user):
+            raise PermissionDenied("Solo usuarios ADMIN pueden realizar Revision de hallazgos.")
         return
 
     if target_stage == AnomalyStage.EFFECTIVENESS_VERIFICATION:
-        _require_any_permission(
-            user,
-            {PERMISSION_VERIFY_EFFECTIVENESS_ANOMALY},
-            "No tiene permisos para verificar eficacia.",
+        user_id = getattr(user, "id", None)
+        is_assigned = bool(
+            user_id
+            and (
+                anomaly.primary_treatments.filter(effectiveness_responsible_id=user_id).exists()
+                or anomaly.treatment_links.filter(treatment__effectiveness_responsible_id=user_id).exists()
+                or AnomalyImmediateAction.objects.filter(anomaly=anomaly, responsible_id=user_id).exists()
+            )
         )
+        if not is_assigned:
+            raise PermissionDenied("Solo el usuario asignado puede avanzar la verificacion de eficacia.")
         return
 
-    if target_stage in {AnomalyStage.CLOSURE, AnomalyStage.STANDARDIZATION_AND_LEARNING} or target_status == AnomalyStatus.CLOSED:
-        _require_any_permission(user, {PERMISSION_CLOSE_ANOMALY}, "No tiene permisos para cerrar la anomalia.")
-        return
-
-    _require_any_permission(user, {PERMISSION_EDIT_ANOMALY}, "No tiene permisos para mover la anomalia.")
+    if not can_manage_assigned_process(user, anomaly.owner_id):
+        raise PermissionDenied("Solo el responsable asignado o usuarios ADMIN pueden avanzar esta anomalia.")
 
 
 

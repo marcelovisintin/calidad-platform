@@ -20,7 +20,7 @@ from apps.accounts.constants import (
     PERMISSION_VIEW_SECTOR_ANOMALY,
     PERMISSION_VIEW_USER,
 )
-from apps.accounts.services.authorization import can_access_area
+from apps.accounts.services.access_policy import has_global_access, is_active_user, is_management_user
 from common.permissions import has_active_api_session
 
 
@@ -41,25 +41,40 @@ class CanListUsers(HasBusinessPermission):
     required_permission = PERMISSION_VIEW_USER
     message = "No tiene permisos para consultar usuarios."
 
+    def has_permission(self, request, view) -> bool:
+        return is_management_user(request.user)
+
 
 class CanCreateUsers(HasBusinessPermission):
     required_permission = PERMISSION_ADD_USER
     message = "No tiene permisos para crear usuarios."
+
+    def has_permission(self, request, view) -> bool:
+        return has_global_access(request.user)
 
 
 class CanEditUsers(HasBusinessPermission):
     required_permission = PERMISSION_CHANGE_USER
     message = "No tiene permisos para editar usuarios."
 
+    def has_permission(self, request, view) -> bool:
+        return has_global_access(request.user)
+
 
 class CanDeleteUsers(HasBusinessPermission):
     required_permission = PERMISSION_DELETE_USER
     message = "No tiene permisos para eliminar usuarios."
 
+    def has_permission(self, request, view) -> bool:
+        return has_global_access(request.user)
+
 
 class CanViewAuditTrail(HasBusinessPermission):
     required_permission = PERMISSION_VIEW_AUDIT
     message = "No tiene permisos para consultar la auditoria transversal."
+
+    def has_permission(self, request, view) -> bool:
+        return has_global_access(request.user)
 
 
 class CanCreateAnomaly(HasBusinessPermission):
@@ -69,15 +84,15 @@ class CanCreateAnomaly(HasBusinessPermission):
         user = request.user
         if not has_active_api_session(user):
             return False
-        if user.is_superuser:
-            return True
-        if getattr(user, "access_level", "") in {"usuario_activo", "administrador", "desarrollador"}:
-            return True
-        return bool(self.required_permission and user.has_perm(self.required_permission))
+        return is_active_user(user)
 
 
 class CanEditAnomaly(HasBusinessPermission):
     required_permission = PERMISSION_EDIT_ANOMALY
+
+    def has_permission(self, request, view) -> bool:
+        # La relación con la anomalía se valida en anomaly_service.
+        return is_active_user(request.user)
 
 
 class CanClassifyAnomaly(HasBusinessPermission):
@@ -122,14 +137,3 @@ class CanViewAllAnomalies(HasBusinessPermission):
 
 class CanViewSectorAnomalies(HasBusinessPermission):
     required_permission = PERMISSION_VIEW_SECTOR_ANOMALY
-
-
-class HasSectorScope(BasePermission):
-    message = "No tiene alcance sobre el sector solicitado."
-
-    def has_object_permission(self, request, view, obj) -> bool:
-        return can_access_area(
-            request.user,
-            area_id=getattr(obj, "area_id", None),
-            site_id=getattr(obj, "site_id", None),
-        )

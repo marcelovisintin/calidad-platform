@@ -1,17 +1,8 @@
 ﻿from django.db.models import Prefetch
 
-from apps.accounts.constants import (
-    PERMISSION_ANALYZE_ANOMALY,
-    PERMISSION_CLASSIFY_ANOMALY,
-    PERMISSION_CLOSE_ANOMALY,
-    PERMISSION_CREATE_ANOMALY,
-    PERMISSION_EDIT_ANOMALY,
-    PERMISSION_REOPEN_ANOMALY,
-    PERMISSION_VERIFY_EFFECTIVENESS_ANOMALY,
-    PERMISSION_VIEW_ALL_ANOMALY,
-    PERMISSION_VIEW_SECTOR_ANOMALY,
-)
-from apps.accounts.services.authorization import filter_queryset_by_sector_scope
+from django.db import models
+
+from apps.accounts.services.access_policy import has_global_access
 from apps.actions.models import ActionItem, ActionPlan
 from apps.anomalies.models import (
     Anomaly,
@@ -22,20 +13,6 @@ from apps.anomalies.models import (
     AnomalyProposal,
     AnomalyStatusHistory,
 )
-
-VISIBLE_ANOMALY_PERMISSIONS = {
-    PERMISSION_VIEW_ALL_ANOMALY,
-    PERMISSION_VIEW_SECTOR_ANOMALY,
-    PERMISSION_CREATE_ANOMALY,
-    PERMISSION_EDIT_ANOMALY,
-    PERMISSION_CLASSIFY_ANOMALY,
-    PERMISSION_ANALYZE_ANOMALY,
-    PERMISSION_VERIFY_EFFECTIVENESS_ANOMALY,
-    PERMISSION_CLOSE_ANOMALY,
-    PERMISSION_REOPEN_ANOMALY,
-}
-
-
 
 def build_anomaly_queryset(*, detailed: bool = False):
     queryset = Anomaly.objects.select_related(
@@ -101,15 +78,22 @@ def filter_anomaly_queryset_for_user(queryset, user):
     if not user or not user.is_authenticated:
         return queryset.none()
 
-    access_level = getattr(user, "access_level", "")
-    if user.is_superuser or access_level in {"administrador", "desarrollador"}:
+    if has_global_access(user):
         return queryset
 
-    direct_queryset = queryset.filter(reporter=user) | queryset.filter(owner=user) | queryset.filter(immediate_action__responsible=user)
-
-    if not any(user.has_perm(permission) for permission in VISIBLE_ANOMALY_PERMISSIONS):
-        return direct_queryset.distinct()
-
-    scoped_queryset = filter_queryset_by_sector_scope(queryset, user)
-    return (scoped_queryset | direct_queryset).distinct()
+    return queryset.filter(
+        models.Q(reporter=user)
+        | models.Q(owner=user)
+        | models.Q(created_by=user)
+        | models.Q(immediate_action__responsible=user)
+        | models.Q(participants__user=user)
+        | models.Q(action_plans__owner=user)
+        | models.Q(action_plans__items__assigned_to=user)
+        | models.Q(primary_treatments__participants__user=user)
+        | models.Q(primary_treatments__tasks__responsible=user)
+        | models.Q(primary_treatments__effectiveness_responsible=user)
+        | models.Q(treatment_links__treatment__participants__user=user)
+        | models.Q(treatment_links__treatment__tasks__responsible=user)
+        | models.Q(treatment_links__treatment__effectiveness_responsible=user)
+    ).distinct()
 

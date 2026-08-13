@@ -306,6 +306,7 @@ class AnomalyCreateApiTests(APITestCase):
             email="responsable_observacion@example.com",
             password="secret123",
             primary_sector=self.area,
+            access_level=User.AccessLevel.MANDO_MEDIO_ACTIVO,
         )
         other_user = User.objects.create_user(
             username="otro_observacion",
@@ -882,6 +883,7 @@ class AnomalyCreateApiTests(APITestCase):
         create_response = self.client.post("/api/v1/anomalies/", payload, format="json")
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
         anomaly_id = create_response.data["id"]
+        Anomaly.objects.filter(pk=anomaly_id).update(reporter=non_admin)
 
         self.client.force_authenticate(user=non_admin)
         patch_response = self.client.patch(

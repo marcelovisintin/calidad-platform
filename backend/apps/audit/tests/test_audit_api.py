@@ -20,18 +20,13 @@ class AuditApiTests(APITestCase):
             username="quality",
             email="quality@example.com",
             password="secret123",
+            access_level=User.AccessLevel.ADMINISTRADOR,
         )
         self.regular_user = User.objects.create_user(
             username="operario",
             email="operario@example.com",
             password="secret123",
         )
-        audit_permission = Permission.objects.get(
-            content_type__app_label="audit",
-            codename="view_auditevent",
-        )
-        self.viewer.user_permissions.add(audit_permission)
-
         self.site = Site.objects.create(code="S01", name="Sitio 1")
         self.area = Area.objects.create(site=self.site, code="A01", name="Area 1")
         self.anomaly_type = AnomalyType.objects.create(code="TIPO", name="Tipo")

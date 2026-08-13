@@ -253,7 +253,7 @@ export function LearnedLessonsPage() {
     <section className="page-shell">
       <PageHeader title="Lecciones aprendidas" description="Registro de aprendizajes de tratamientos validados como eficaces." />
 
-      <section className="toolbar-card">
+      <section className="toolbar-card filter-toolbar filter-toolbar-single">
         <label className="field">
           <span>Buscar tratamiento</span>
           <input onChange={handleSearch} placeholder="Codigo, anomalia o area" type="search" value={search} />

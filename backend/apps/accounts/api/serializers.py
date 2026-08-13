@@ -12,8 +12,8 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 
 from apps.accounts.constants import USER_SCOPE_OPTIONS
-from apps.accounts.models import Role, User, UserRoleScope
-from apps.accounts.services.authorization import get_effective_permissions, get_user_role_codes
+from apps.accounts.models import User
+from apps.accounts.services.authorization import get_effective_permissions
 from apps.accounts.services.temporary_passwords import generate_temporary_password
 from apps.catalog.models import Area, Site
 from common.upload_validation import validate_user_photo
@@ -33,36 +33,10 @@ class AreaSummarySerializer(serializers.ModelSerializer):
         fields = ("id", "code", "name", "site")
 
 
-class RoleSummarySerializer(serializers.ModelSerializer):
-    permissions = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Role
-        fields = ("id", "code", "name", "permissions")
-
-    def get_permissions(self, obj):
-        return sorted(
-            f"{app_label}.{codename}"
-            for app_label, codename in obj.permissions.values_list("content_type__app_label", "codename").distinct()
-        )
-
-
-class UserRoleScopeSerializer(serializers.ModelSerializer):
-    role = RoleSummarySerializer(read_only=True)
-    site = SiteSummarySerializer(read_only=True)
-    area = AreaSummarySerializer(read_only=True)
-
-    class Meta:
-        model = UserRoleScope
-        fields = ("id", "role", "site", "area")
-
-
 class CurrentUserSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
     sector = AreaSummarySerializer(source="primary_sector", read_only=True)
     photo_url = serializers.SerializerMethodField()
-    role_codes = serializers.SerializerMethodField()
-    role_scopes = UserRoleScopeSerializer(many=True, read_only=True)
     permissions = serializers.SerializerMethodField()
 
     class Meta:
@@ -86,8 +60,6 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             "date_joined",
             "last_login",
             "last_activity_at",
-            "role_codes",
-            "role_scopes",
             "permissions",
         )
 
@@ -98,9 +70,6 @@ class CurrentUserSerializer(serializers.ModelSerializer):
         url = reverse("api:accounts:user-photo", kwargs={"user_id": obj.pk})
         return request.build_absolute_uri(url) if request else url
 
-    def get_role_codes(self, obj):
-        return get_user_role_codes(obj)
-
     def get_permissions(self, obj):
         return get_effective_permissions(obj)
 
@@ -109,7 +78,6 @@ class UserListSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
     sector = AreaSummarySerializer(source="primary_sector", read_only=True)
     photo_url = serializers.SerializerMethodField()
-    role_codes = serializers.SerializerMethodField()
     primary_sector_id = serializers.SerializerMethodField()
 
     class Meta:
@@ -133,7 +101,6 @@ class UserListSerializer(serializers.ModelSerializer):
             "is_staff",
             "date_joined",
             "last_activity_at",
-            "role_codes",
         )
 
     def get_photo_url(self, obj):
@@ -143,22 +110,16 @@ class UserListSerializer(serializers.ModelSerializer):
         url = reverse("api:accounts:user-photo", kwargs={"user_id": obj.pk})
         return request.build_absolute_uri(url) if request else url
 
-    def get_role_codes(self, obj):
-        return get_user_role_codes(obj)
-
     def get_primary_sector_id(self, obj):
         return obj.primary_sector_id
 
 
 class UserDetailSerializer(UserListSerializer):
-    role_scopes = UserRoleScopeSerializer(many=True, read_only=True)
-
     class Meta(UserListSerializer.Meta):
         fields = UserListSerializer.Meta.fields + (
             "last_login",
             "created_at",
             "updated_at",
-            "role_scopes",
         )
 
 
@@ -194,16 +155,8 @@ class UserAccessProfileSerializer(serializers.Serializer):
     email = serializers.EmailField(read_only=True)
     access_level = serializers.ChoiceField(choices=User.AccessLevel.choices)
     primary_sector = AreaSummarySerializer(read_only=True)
-    role = RoleSummarySerializer(read_only=True)
     manual_scope_keys = serializers.SerializerMethodField()
     effective_permissions = serializers.SerializerMethodField()
-    role_permissions = serializers.SerializerMethodField()
-
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        scope = instance.role_scopes.select_related("role").order_by("created_at").first()
-        data["role"] = RoleSummarySerializer(scope.role).data if scope else None
-        return data
 
     def get_manual_scope_keys(self, obj):
         return _manual_scope_keys_for_user(obj)
@@ -211,17 +164,8 @@ class UserAccessProfileSerializer(serializers.Serializer):
     def get_effective_permissions(self, obj):
         return get_effective_permissions(obj)
 
-    def get_role_permissions(self, obj):
-        permissions = Permission.objects.filter(
-            business_roles__is_active=True,
-            business_roles__user_scopes__user=obj,
-        ).values_list("content_type__app_label", "codename").distinct()
-        return sorted(f"{app_label}.{codename}" for app_label, codename in permissions)
-
-
 class UserAccessProfileWriteSerializer(serializers.Serializer):
     access_level = serializers.ChoiceField(choices=User.AccessLevel.choices, required=True)
-    role = serializers.PrimaryKeyRelatedField(queryset=Role.objects.filter(is_active=True), allow_null=True, required=False)
     manual_scope_keys = serializers.ListField(
         child=serializers.ChoiceField(choices=[(option["key"], option["label"]) for option in USER_SCOPE_OPTIONS]),
         allow_empty=True,
@@ -230,47 +174,22 @@ class UserAccessProfileWriteSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         request = self.context.get("request")
-        user: User = self.context["user"]
         target_level = attrs.get("access_level")
         if target_level == User.AccessLevel.DESARROLLADOR and request and not request.user.is_superuser:
             raise serializers.ValidationError(
                 {"access_level": "Solo un superusuario puede asignar el nivel desarrollador."}
-            )
-        if attrs.get("role") is not None and not user.role_scopes.exists() and not user.primary_sector_id:
-            raise serializers.ValidationError(
-                {"role": "Para asignar un rol desde esta pantalla, el usuario debe tener sector principal."}
             )
         return attrs
 
     def save(self, **kwargs):
         user: User = self.context["user"]
         access_level = self.validated_data["access_level"]
-        role = self.validated_data.get("role")
         manual_scope_keys = self.validated_data["manual_scope_keys"]
 
         user.access_level = access_level
         user.is_staff = access_level in {User.AccessLevel.ADMINISTRADOR, User.AccessLevel.DESARROLLADOR}
         user.is_superuser = access_level == User.AccessLevel.DESARROLLADOR
         user.save(update_fields=["access_level", "is_staff", "is_superuser", "updated_at"])
-
-        if "role" in self.validated_data:
-            scopes = user.role_scopes.select_related("site", "area").order_by("created_at")
-            current_scope = scopes.first()
-            if role is None:
-                scopes.delete()
-            elif current_scope:
-                current_scope.role = role
-                current_scope.full_clean()
-                current_scope.save(update_fields=["role", "updated_at"])
-            else:
-                UserRoleScope.objects.create(
-                    user=user,
-                    role=role,
-                    site=user.primary_sector.site,
-                    area=user.primary_sector,
-                    created_by=self.context["request"].user,
-                    updated_by=self.context["request"].user,
-                )
 
         user.user_permissions.set(_permission_objects_for_scope_keys(manual_scope_keys))
         for cache_name in ("_perm_cache", "_user_perm_cache", "_group_perm_cache", "_role_permissions_cache"):

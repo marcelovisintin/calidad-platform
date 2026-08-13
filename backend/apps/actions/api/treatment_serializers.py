@@ -38,6 +38,15 @@ class AnomalySectorSerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)
 
 
+class TreatmentParticipantOptionSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(read_only=True)
+    sector = AnomalySectorSerializer(source="primary_sector", read_only=True)
+
+    class Meta:
+        model = User
+        fields = ("id", "username", "email", "first_name", "last_name", "full_name", "sector")
+
+
 class AnomalyAttachmentSummarySerializer(serializers.ModelSerializer):
     uploaded_by = UserSummarySerializer(read_only=True)
     file_url = serializers.SerializerMethodField()
@@ -166,6 +175,9 @@ class TreatmentTaskSerializer(serializers.ModelSerializer):
     is_overdue = serializers.BooleanField(read_only=True)
     evidences = TreatmentTaskEvidenceSerializer(many=True, read_only=True)
     root_causes = TreatmentTaskHistoryRootCauseSerializer(many=True, read_only=True)
+    can_manage = serializers.SerializerMethodField()
+    can_update_status = serializers.SerializerMethodField()
+    can_add_evidence = serializers.SerializerMethodField()
 
     class Meta:
         model = TreatmentTask
@@ -182,9 +194,29 @@ class TreatmentTaskSerializer(serializers.ModelSerializer):
             "is_overdue",
             "anomaly_links",
             "evidences",
+            "can_manage",
+            "can_update_status",
+            "can_add_evidence",
             "created_at",
             "updated_at",
         )
+
+    def _user(self):
+        request = self.context.get("request")
+        return getattr(request, "user", None)
+
+    def get_can_manage(self, obj):
+        from apps.actions.services.treatment_service import can_manage_treatment
+
+        return can_manage_treatment(self._user(), obj.treatment)
+
+    def get_can_update_status(self, obj):
+        from apps.accounts.services.access_policy import can_execute_assignment
+
+        return can_execute_assignment(self._user(), obj.responsible_id)
+
+    def get_can_add_evidence(self, obj):
+        return self.get_can_update_status(obj)
 
 
 class TreatmentTaskHistoryTreatmentSerializer(serializers.Serializer):
@@ -202,6 +234,9 @@ class TreatmentTaskHistorySerializer(serializers.ModelSerializer):
     root_causes = TreatmentTaskHistoryRootCauseSerializer(many=True, read_only=True)
     evidences = TreatmentTaskEvidenceSerializer(many=True, read_only=True)
     is_overdue = serializers.BooleanField(read_only=True)
+    can_manage = serializers.SerializerMethodField()
+    can_update_status = serializers.SerializerMethodField()
+    can_add_evidence = serializers.SerializerMethodField()
 
     class Meta:
         model = TreatmentTask
@@ -219,6 +254,9 @@ class TreatmentTaskHistorySerializer(serializers.ModelSerializer):
             "root_cause",
             "root_causes",
             "evidences",
+            "can_manage",
+            "can_update_status",
+            "can_add_evidence",
             "created_at",
             "updated_at",
         )
@@ -228,6 +266,23 @@ class TreatmentTaskHistorySerializer(serializers.ModelSerializer):
         if not anomalies and getattr(obj.treatment, "primary_anomaly", None):
             anomalies = [obj.treatment.primary_anomaly]
         return TreatmentAnomalySummarySerializer(anomalies, many=True, context=self.context).data
+
+    def _user(self):
+        request = self.context.get("request")
+        return getattr(request, "user", None)
+
+    def get_can_manage(self, obj):
+        from apps.actions.services.treatment_service import can_manage_treatment
+
+        return can_manage_treatment(self._user(), obj.treatment)
+
+    def get_can_update_status(self, obj):
+        from apps.accounts.services.access_policy import can_execute_assignment
+
+        return can_execute_assignment(self._user(), obj.responsible_id)
+
+    def get_can_add_evidence(self, obj):
+        return self.get_can_update_status(obj)
 
 
 class TreatmentAuditEventSerializer(serializers.ModelSerializer):
@@ -269,6 +324,8 @@ class TreatmentListSerializer(serializers.ModelSerializer):
     validation_state = serializers.SerializerMethodField()
     is_locked = serializers.SerializerMethodField()
     learned_lesson = TreatmentLearnedLessonSerializer(read_only=True)
+    can_manage = serializers.SerializerMethodField()
+    can_validate_effectiveness = serializers.SerializerMethodField()
 
     class Meta:
         model = Treatment
@@ -289,6 +346,8 @@ class TreatmentListSerializer(serializers.ModelSerializer):
             "validation_state",
             "is_locked",
             "learned_lesson",
+            "can_manage",
+            "can_validate_effectiveness",
             "primary_anomaly",
             "created_at",
             "updated_at",
@@ -304,6 +363,18 @@ class TreatmentListSerializer(serializers.ModelSerializer):
 
         return is_treatment_closed_by_effective_validation(obj)
 
+    def get_can_manage(self, obj):
+        from apps.actions.services.treatment_service import can_manage_treatment
+
+        request = self.context.get("request")
+        return can_manage_treatment(getattr(request, "user", None), obj)
+
+    def get_can_validate_effectiveness(self, obj):
+        from apps.actions.services.treatment_service import can_validate_treatment_effectiveness
+
+        request = self.context.get("request")
+        return can_validate_treatment_effectiveness(getattr(request, "user", None), obj)
+
 
 class TreatmentDetailSerializer(serializers.ModelSerializer):
     primary_anomaly = TreatmentAnomalySummarySerializer(read_only=True)
@@ -318,6 +389,8 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
     evidences = TreatmentEvidenceSerializer(many=True, read_only=True)
     audit_events = serializers.SerializerMethodField()
     learned_lesson = TreatmentLearnedLessonSerializer(read_only=True)
+    can_manage = serializers.SerializerMethodField()
+    can_validate_effectiveness = serializers.SerializerMethodField()
 
     class Meta:
         model = Treatment
@@ -345,6 +418,8 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
             "evidences",
             "audit_events",
             "learned_lesson",
+            "can_manage",
+            "can_validate_effectiveness",
             "created_at",
             "updated_at",
             "row_version",
@@ -359,6 +434,18 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
         from apps.actions.services.treatment_service import is_treatment_closed_by_effective_validation
 
         return is_treatment_closed_by_effective_validation(obj)
+
+    def get_can_manage(self, obj):
+        from apps.actions.services.treatment_service import can_manage_treatment
+
+        request = self.context.get("request")
+        return can_manage_treatment(getattr(request, "user", None), obj)
+
+    def get_can_validate_effectiveness(self, obj):
+        from apps.actions.services.treatment_service import can_validate_treatment_effectiveness
+
+        request = self.context.get("request")
+        return can_validate_treatment_effectiveness(getattr(request, "user", None), obj)
 
     def get_audit_events(self, obj):
         queryset = AuditEvent.objects.select_related("actor").filter(
@@ -398,7 +485,11 @@ class TreatmentAddAnomalySerializer(serializers.Serializer):
 
 class TreatmentAddParticipantSerializer(serializers.Serializer):
     user = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True))
-    role = serializers.ChoiceField(choices=TreatmentParticipantRole.choices, required=False, default=TreatmentParticipantRole.CONVOKED)
+    role = serializers.ChoiceField(
+        choices=[(TreatmentParticipantRole.CONVOKED, "Convocado")],
+        required=False,
+        default=TreatmentParticipantRole.CONVOKED,
+    )
     note = serializers.CharField(required=False, allow_blank=True)
 
 

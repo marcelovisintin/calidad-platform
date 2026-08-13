@@ -1,10 +1,12 @@
 from datetime import timedelta
 
+from django.contrib.auth.models import Permission
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.accounts.models import Role, User, UserRoleScope
+from apps.accounts.models import User
 from apps.actions.models import Treatment, TreatmentAnomaly, TreatmentParticipant, TreatmentRootCause, TreatmentTask
 from apps.anomalies.models import (
     Anomaly,
@@ -41,6 +43,7 @@ class TreatmentCandidatesApiTests(APITestCase):
             username="mechi",
             email="mechi@example.com",
             password="secret123",
+            access_level=User.AccessLevel.MANDO_MEDIO_ACTIVO,
         )
         self.other_task_user = User.objects.create_user(
             username="other_task_user",
@@ -247,6 +250,190 @@ class TreatmentCandidatesApiTests(APITestCase):
             ).exists()
         )
 
+    def test_classification_responsible_can_create_and_manage_treatment(self):
+        self.anomaly_three.owner = self.task_user
+        self.anomaly_three.updated_by = self.admin
+        self.anomaly_three.save(update_fields=["owner", "updated_by", "updated_at"])
+        self.client.force_authenticate(user=self.task_user)
+
+        create_response = self.client.post(
+            "/api/v1/actions/treatments/",
+            {
+                "primary_anomaly": str(self.anomaly_three.pk),
+                "status": "pending",
+            },
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        treatment = Treatment.objects.get(pk=create_response.data["id"])
+        participant = TreatmentParticipant.objects.get(treatment=treatment, user=self.task_user)
+        self.assertEqual(participant.role, "owner")
+
+        detail_response = self.client.get(f"/api/v1/actions/treatments/{treatment.pk}/")
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(detail_response.data["can_manage"])
+
+    def test_treatment_responsible_can_list_and_invite_all_active_users(self):
+        inactive_user = User.objects.create_user(
+            username="inactive_candidate",
+            email="inactive_candidate@example.com",
+            password="secret123",
+            is_active=False,
+        )
+        self.anomaly_three.owner = self.task_user
+        self.anomaly_three.updated_by = self.admin
+        self.anomaly_three.save(update_fields=["owner", "updated_by", "updated_at"])
+        self.client.force_authenticate(user=self.task_user)
+        create_response = self.client.post(
+            "/api/v1/actions/treatments/",
+            {"primary_anomaly": str(self.anomaly_three.pk), "status": "pending"},
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        treatment_id = create_response.data["id"]
+
+        options_response = self.client.get(
+            f"/api/v1/actions/treatments/{treatment_id}/participant-options/"
+        )
+
+        self.assertEqual(options_response.status_code, status.HTTP_200_OK)
+        option_ids = {item["id"] for item in options_response.data}
+        self.assertIn(str(self.reporter_one.pk), option_ids)
+        self.assertIn(str(self.reporter_two.pk), option_ids)
+        self.assertIn(str(self.other_task_user.pk), option_ids)
+        self.assertNotIn(str(inactive_user.pk), option_ids)
+
+        invite_response = self.client.post(
+            f"/api/v1/actions/treatments/{treatment_id}/participants/",
+            {
+                "user": str(self.reporter_two.pk),
+                "role": "convoked",
+                "note": "Convocado desde la lista completa.",
+            },
+            format="json",
+        )
+        self.assertEqual(invite_response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(
+            TreatmentParticipant.objects.filter(
+                treatment_id=treatment_id,
+                user=self.reporter_two,
+            ).exists()
+        )
+
+    def test_convoked_or_facilitator_with_assign_permission_cannot_manage_treatment(self):
+        assign_permission = Permission.objects.get(
+            content_type__app_label="actions",
+            codename="assign_action",
+        )
+        self.task_user.user_permissions.add(assign_permission)
+        participant = TreatmentParticipant.objects.create(
+            treatment=self.treatment_one,
+            user=self.task_user,
+            role="convoked",
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+        self.client.force_authenticate(user=self.task_user)
+
+        for participant_role in ("convoked", "facilitator"):
+            with self.subTest(participant_role=participant_role):
+                participant.role = participant_role
+                participant.save(update_fields=["role", "updated_at"])
+                detail_response = self.client.get(f"/api/v1/actions/treatments/{self.treatment_one.pk}/")
+                update_response = self.client.patch(
+                    f"/api/v1/actions/treatments/{self.treatment_one.pk}/",
+                    {"observations": "Cambio no autorizado."},
+                    format="json",
+                )
+
+                self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+                self.assertFalse(detail_response.data["can_manage"])
+                self.assertEqual(update_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_reporter_with_assign_permission_has_read_only_treatment_access(self):
+        assign_permission = Permission.objects.get(
+            content_type__app_label="actions",
+            codename="assign_action",
+        )
+        self.reporter_one.user_permissions.add(assign_permission)
+        self.client.force_authenticate(user=self.reporter_one)
+
+        detail_response = self.client.get(f"/api/v1/actions/treatments/{self.treatment_one.pk}/")
+        update_response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/",
+            {"treatment_location": "Cambio no autorizado"},
+            format="json",
+        )
+
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertFalse(detail_response.data["can_manage"])
+        self.assertEqual(update_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_task_responsible_only_updates_status_and_adds_own_evidence(self):
+        TreatmentParticipant.objects.create(
+            treatment=self.treatment_one,
+            user=self.task_user,
+            role="convoked",
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+        task = TreatmentTask.objects.create(
+            treatment=self.treatment_one,
+            code="TRT-TASK-PERM-001",
+            title="Tarea asignada",
+            responsible=self.task_user,
+            execution_date=timezone.localdate(),
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+        self.client.force_authenticate(user=self.task_user)
+
+        forbidden_response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/tasks/{task.pk}/",
+            {"title": "Titulo modificado"},
+            format="json",
+        )
+        status_response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/tasks/{task.pk}/",
+            {"status": "in_progress", "evidence_note": "Inicio de la tarea."},
+            format="json",
+        )
+        evidence_response = self.client.post(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/tasks/{task.pk}/evidences/",
+            {
+                "file": SimpleUploadedFile("evidencia.txt", b"evidencia", content_type="text/plain"),
+                "note": "Evidencia propia.",
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(forbidden_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(status_response.status_code, status.HTTP_200_OK)
+        self.assertFalse(status_response.data["can_manage"])
+        self.assertTrue(status_response.data["can_update_status"])
+        self.assertEqual(evidence_response.status_code, status.HTTP_201_CREATED)
+
+    def test_unassigned_middle_manager_cannot_manage_treatments(self):
+        quality_user = User.objects.create_user(
+            username="quality_manager",
+            email="quality_manager@example.com",
+            password="secret123",
+            access_level=User.AccessLevel.MANDO_MEDIO_ACTIVO,
+        )
+        self.client.force_authenticate(user=quality_user)
+
+        list_response = self.client.get("/api/v1/actions/treatments/")
+        update_response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment_two.pk}/",
+            {"treatment_location": "Sala Calidad"},
+            format="json",
+        )
+
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(list_response.data["count"], 0)
+        self.assertEqual(update_response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_observation_anomaly_is_available_for_treatment_until_path_is_selected(self):
         anomaly = self._create_observation_anomaly()
 
@@ -362,7 +549,7 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertIn(str(own_task.pk), task_ids)
         self.assertNotIn(str(other_task.pk), task_ids)
 
-    def test_admin_tasks_history_can_return_all_tasks(self):
+    def test_admin_tasks_history_only_returns_tasks_assigned_to_admin(self):
         own_task = TreatmentTask.objects.create(
             treatment=self.treatment_one,
             code="TRT-TASK-003",
@@ -387,8 +574,8 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         task_ids = {item["id"] for item in response.data["results"]}
-        self.assertIn(str(own_task.pk), task_ids)
-        self.assertIn(str(other_task.pk), task_ids)
+        self.assertNotIn(str(own_task.pk), task_ids)
+        self.assertNotIn(str(other_task.pk), task_ids)
 
     def test_tasks_history_rejects_invalid_completed_on_filter(self):
         response = self.client.get(
@@ -751,7 +938,7 @@ class TreatmentCandidatesApiTests(APITestCase):
         ids = {item["id"] for item in response.data["results"]}
         self.assertEqual(ids, {str(ready_treatment.pk)})
 
-    def test_validation_ready_list_admin_can_see_all_ready_treatments(self):
+    def test_validation_ready_list_admin_only_sees_own_assignments(self):
         treatment_one = self._prepare_treatment_for_validation(treatment=self.treatment_one, responsible=self.task_user)
         treatment_two = self._prepare_treatment_for_validation(treatment=self.treatment_two, responsible=self.other_task_user)
         self.client.force_authenticate(user=self.admin)
@@ -760,31 +947,7 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = {item["id"] for item in response.data["results"]}
-        self.assertEqual(ids, {str(treatment_one.pk), str(treatment_two.pk)})
-
-    def test_validation_ready_list_administrator_role_can_see_all_ready_treatments(self):
-        role_admin, _ = Role.objects.get_or_create(code="ADMINISTRADOR", defaults={"name": "Administrador"})
-        role_user = User.objects.create_user(
-            username="role_admin",
-            email="role_admin@example.com",
-            password="secret123",
-        )
-        UserRoleScope.objects.create(
-            user=role_user,
-            role=role_admin,
-            site=self.site,
-            created_by=self.admin,
-            updated_by=self.admin,
-        )
-        treatment_one = self._prepare_treatment_for_validation(treatment=self.treatment_one, responsible=self.task_user)
-        treatment_two = self._prepare_treatment_for_validation(treatment=self.treatment_two, responsible=self.other_task_user)
-        self.client.force_authenticate(user=role_user)
-
-        response = self.client.get("/api/v1/actions/treatments/?validation_ready=1")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        ids = {item["id"] for item in response.data["results"]}
-        self.assertEqual(ids, {str(treatment_one.pk), str(treatment_two.pk)})
+        self.assertEqual(ids, set())
 
     def test_treatment_not_available_for_validation_without_root_cause(self):
         TreatmentParticipant.objects.create(
@@ -930,6 +1093,13 @@ class TreatmentCandidatesApiTests(APITestCase):
         )
         self.assertEqual(validate_response.status_code, status.HTTP_200_OK)
 
+        revalidate_response = self.client.post(
+            f"/api/v1/actions/treatments/{treatment.pk}/validation/",
+            {"result": "not_effective", "comment": "Intento posterior."},
+            format="json",
+        )
+
+        self.client.force_authenticate(user=self.admin)
         update_response = self.client.patch(
             f"/api/v1/actions/treatments/{treatment.pk}/",
             {"observations": "Intento de cambio posterior."},
@@ -946,11 +1116,6 @@ class TreatmentCandidatesApiTests(APITestCase):
                 "status": "pending",
                 "anomaly_ids": [str(self.anomaly_one.pk)],
             },
-            format="json",
-        )
-        revalidate_response = self.client.post(
-            f"/api/v1/actions/treatments/{treatment.pk}/validation/",
-            {"result": "not_effective", "comment": "Intento posterior."},
             format="json",
         )
 

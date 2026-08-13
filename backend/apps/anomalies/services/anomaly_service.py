@@ -8,19 +8,19 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from apps.accounts.constants import (
-    PERMISSION_ANALYZE_ANOMALY,
-    PERMISSION_ASSIGN_ACTION,
-    PERMISSION_CLASSIFY_ANOMALY,
-    PERMISSION_CLOSE_ANOMALY,
-    PERMISSION_CREATE_ANOMALY,
-    PERMISSION_EDIT_ANOMALY,
-    PERMISSION_VERIFY_EFFECTIVENESS_ANOMALY,
+from apps.accounts.services.access_policy import (
+    can_create_anomaly,
+    can_manage_assigned_process,
+    has_global_access,
+    is_assignable_process_manager,
 )
-from apps.accounts.services.authorization import can_access_area
 from apps.actions.models import Treatment, TreatmentEffectivenessValidationResult, TreatmentStatus
 from apps.audit.services import record_audit_event
-from apps.notifications.services import notify_anomaly_created, notify_participation_request
+from apps.notifications.services import (
+    notify_anomaly_created,
+    notify_finding_management_assigned,
+    notify_participation_request,
+)
 from apps.anomalies.models import (
     Anomaly,
     AnomalyAttachment,
@@ -56,32 +56,14 @@ from common.upload_validation import normalized_upload_content_type, validate_ev
 
 
 
-def _require_permission(user, permission: str, message: str) -> None:
-    if user.is_superuser:
-        return
-    if not user.has_perm(permission):
-        raise PermissionDenied(message)
-
-
-
-def _require_any_permission(user, permissions: set[str], message: str) -> None:
-    if user.is_superuser:
-        return
-    if any(user.has_perm(permission) for permission in permissions):
-        return
-    raise PermissionDenied(message)
-
-
 def _require_admin_access_level(user, message: str) -> None:
-    if user.is_superuser:
-        return
-    if getattr(user, "access_level", "") in {"administrador", "desarrollador"}:
+    if has_global_access(user):
         return
     raise PermissionDenied(message)
 
 
 def _is_admin_access_level(user) -> bool:
-    return bool(user and (user.is_superuser or getattr(user, "access_level", "") in {"administrador", "desarrollador"}))
+    return has_global_access(user)
 
 
 def _observation_responsible_id(anomaly: Anomaly, immediate_action: AnomalyImmediateAction | None = None):
@@ -91,10 +73,8 @@ def _observation_responsible_id(anomaly: Anomaly, immediate_action: AnomalyImmed
 
 
 def _can_manage_observation(anomaly: Anomaly, user, immediate_action: AnomalyImmediateAction | None = None) -> bool:
-    if _is_admin_access_level(user):
-        return True
     responsible_id = _observation_responsible_id(anomaly, immediate_action)
-    return bool(responsible_id and user and user.is_authenticated and user.id == responsible_id)
+    return can_manage_assigned_process(user, responsible_id)
 
 
 def _require_observation_manager(anomaly: Anomaly, user, immediate_action: AnomalyImmediateAction | None = None) -> None:
@@ -104,19 +84,28 @@ def _require_observation_manager(anomaly: Anomaly, user, immediate_action: Anoma
 
 
 def _can_create_anomaly(user) -> bool:
-    if user.is_superuser:
-        return True
-    if getattr(user, "access_level", "") in {"usuario_activo", "administrador", "desarrollador"}:
-        return True
-    return user.has_perm(PERMISSION_CREATE_ANOMALY)
+    return can_create_anomaly(user)
 
 
 
 def _ensure_scope(site_id, area_id, user) -> None:
-    if user.is_superuser:
+    # Sitio y sector son metadatos descriptivos del hecho, no alcance de autorizacion.
+    return None
+
+
+def _require_anomaly_manager(anomaly: Anomaly, user, message: str = "Solo el responsable asignado o usuarios ADMIN pueden gestionar la anomalia.") -> None:
+    if not can_manage_assigned_process(user, anomaly.owner_id):
+        raise PermissionDenied(message)
+
+
+def _require_anomaly_editor(anomaly: Anomaly, user) -> None:
+    if has_global_access(user):
         return
-    if not can_access_area(user, area_id=area_id, site_id=site_id):
-        raise PermissionDenied("No tiene alcance sobre el sitio o sector de la anomalia.")
+    if anomaly.reporter_id == getattr(user, "id", None):
+        return
+    if can_manage_assigned_process(user, anomaly.owner_id):
+        return
+    raise PermissionDenied("Solo quien informo la anomalia, su responsable o usuarios ADMIN pueden editarla.")
 
 
 
@@ -485,8 +474,8 @@ def create_anomaly(*, user, data: dict, request_id: str = "") -> Anomaly:
 
 @transaction.atomic
 def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> Anomaly:
-    _require_permission(user, PERMISSION_EDIT_ANOMALY, "No tiene permisos para editar anomalias.")
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
+    _require_anomaly_editor(locked, user)
     _ensure_anomaly_is_editable(locked)
     before = snapshot_anomaly(locked)
     classification_responsible = data.pop("classification_responsible", None)
@@ -534,6 +523,10 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
                 raise ValidationError({"classification_reason": "Debe registrar una observacion o motivo para clasificar como Invalida."})
         elif requires_responsible and classification_responsible is None:
             raise ValidationError({"classification_responsible": "Debe seleccionar un responsable para continuar el flujo."})
+        elif classification_responsible is not None and not is_assignable_process_manager(classification_responsible):
+            raise ValidationError(
+                {"classification_responsible": "El responsable debe tener nivel Mando medio, Administrador o Desarrollador."}
+            )
         locked.classification_summary = f"Criterio de Revisión de hallazgos aplicado: {severity_name}."
 
         if closes_as_invalid:
@@ -669,6 +662,13 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
         after_data=snapshot_anomaly(locked),
         request_id=_request_id(request_id),
     )
+    if should_sync_classification:
+        notify_finding_management_assigned(
+            anomaly=locked,
+            responsible=None if closes_as_invalid else classification_responsible,
+            actor=user,
+            request_id=request_id,
+        )
     return locked
 
 
@@ -702,8 +702,11 @@ def add_comment(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> 
 @transaction.atomic
 def add_attachment(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyAttachment:
     _ensure_anomaly_is_editable(anomaly)
-    attachment_permissions = {PERMISSION_EDIT_ANOMALY, PERMISSION_CREATE_ANOMALY, PERMISSION_ANALYZE_ANOMALY}
-    can_attach = user.is_superuser or any(user.has_perm(permission) for permission in attachment_permissions)
+    can_attach = bool(
+        has_global_access(user)
+        or anomaly.reporter_id == getattr(user, "id", None)
+        or can_manage_assigned_process(user, anomaly.owner_id)
+    )
     if not can_attach:
         if is_immediate_action_anomaly(anomaly):
             _require_observation_manager(anomaly, user, _get_related_or_none(anomaly, "immediate_action"))
@@ -747,11 +750,7 @@ def add_attachment(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
 @transaction.atomic
 def add_participant(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyParticipant:
     _ensure_anomaly_is_editable(anomaly)
-    _require_any_permission(
-        user,
-        {PERMISSION_EDIT_ANOMALY, PERMISSION_ANALYZE_ANOMALY, PERMISSION_ASSIGN_ACTION},
-        "No tiene permisos para gestionar participantes.",
-    )
+    _require_anomaly_manager(anomaly, user, "Solo el responsable asignado o usuarios ADMIN pueden gestionar participantes.")
     participant, created = AnomalyParticipant.objects.get_or_create(
         anomaly=anomaly,
         user=data["user"],
@@ -779,7 +778,7 @@ def add_participant(*, anomaly: Anomaly, user, data: dict, request_id: str = "")
 @transaction.atomic
 def save_initial_verification(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyInitialVerification:
     _ensure_anomaly_is_editable(anomaly)
-    _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para registrar la verificacion inicial.")
+    _require_admin_access_level(user, "Solo usuarios ADMIN pueden registrar la verificacion inicial.")
     verification = _get_related_or_none(anomaly, "initial_verification") or AnomalyInitialVerification(anomaly=anomaly)
     verification, created = _upsert_single_related(
         verification,
@@ -808,7 +807,6 @@ def save_initial_verification(*, anomaly: Anomaly, user, data: dict, request_id:
 @transaction.atomic
 def save_classification(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyClassification:
     _ensure_anomaly_is_editable(anomaly)
-    _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para realizar Revisión de hallazgos de la anomalia.")
     _require_admin_access_level(user, "Solo usuarios ADMIN pueden realizar Revisión de hallazgos de anomalias.")
     classification = _get_related_or_none(anomaly, "classification") or AnomalyClassification(anomaly=anomaly)
     classification, created = _upsert_single_related(
@@ -836,7 +834,6 @@ def save_classification(*, anomaly: Anomaly, user, data: dict, request_id: str =
 @transaction.atomic
 def unlock_classification_change(*, anomaly: Anomaly, user, request_id: str = "") -> Anomaly:
     _ensure_anomaly_is_editable(anomaly)
-    _require_permission(user, PERMISSION_CLASSIFY_ANOMALY, "No tiene permisos para habilitar cambio de Revisión de hallazgos.")
     _require_admin_access_level(user, "Solo usuarios ADMIN pueden habilitar cambio de Revisión de hallazgos.")
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
 
@@ -883,7 +880,7 @@ def unlock_classification_change(*, anomaly: Anomaly, user, request_id: str = ""
 @transaction.atomic
 def save_cause_analysis(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyCauseAnalysis:
     _ensure_anomaly_is_editable(anomaly)
-    _require_permission(user, PERMISSION_ANALYZE_ANOMALY, "No tiene permisos para registrar el analisis de causa.")
+    _require_anomaly_manager(anomaly, user)
     analysis = _get_related_or_none(anomaly, "cause_analysis") or AnomalyCauseAnalysis(anomaly=anomaly)
     analysis, created = _upsert_single_related(
         analysis,
@@ -910,7 +907,7 @@ def save_cause_analysis(*, anomaly: Anomaly, user, data: dict, request_id: str =
 @transaction.atomic
 def add_proposal(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyProposal:
     _ensure_anomaly_is_editable(anomaly)
-    _require_permission(user, PERMISSION_ANALYZE_ANOMALY, "No tiene permisos para registrar propuestas.")
+    _require_anomaly_manager(anomaly, user)
     proposal = AnomalyProposal(
         anomaly=anomaly,
         title=data["title"],
@@ -938,11 +935,20 @@ def add_proposal(*, anomaly: Anomaly, user, data: dict, request_id: str = "") ->
 @transaction.atomic
 def record_effectiveness_check(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyEffectivenessCheck:
     _ensure_anomaly_is_editable(anomaly)
-    _require_permission(
-        user,
-        PERMISSION_VERIFY_EFFECTIVENESS_ANOMALY,
-        "No tiene permisos para registrar la verificacion de eficacia.",
+    user_id = getattr(user, "id", None)
+    is_assigned = bool(
+        user_id
+        and (
+            anomaly.primary_treatments.filter(effectiveness_responsible_id=user_id).exists()
+            or Treatment.objects.filter(
+                anomaly_links__anomaly=anomaly,
+                effectiveness_responsible_id=user_id,
+            ).exists()
+            or _observation_responsible_id(anomaly) == user_id
+        )
     )
+    if not is_assigned:
+        raise PermissionDenied("Solo el usuario asignado puede registrar la verificacion de eficacia.")
     check = AnomalyEffectivenessCheck(
         anomaly=anomaly,
         verified_by=user,
@@ -979,7 +985,7 @@ def record_effectiveness_check(*, anomaly: Anomaly, user, data: dict, request_id
 @transaction.atomic
 def save_learning(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyLearning:
     _ensure_anomaly_is_editable(anomaly)
-    _require_permission(user, PERMISSION_CLOSE_ANOMALY, "No tiene permisos para registrar aprendizaje.")
+    _require_anomaly_manager(anomaly, user)
     learning = _get_related_or_none(anomaly, "learning") or AnomalyLearning(anomaly=anomaly)
     learning, created = _upsert_single_related(
         learning,
@@ -1197,7 +1203,8 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
     immediate_action = _get_related_or_none(locked, "immediate_action")
     if immediate_action is None or not (immediate_action.actions_taken or "").strip():
         raise ValidationError({"actions_taken": "Primero debe confirmar una accion tomada."})
-    _require_observation_manager(locked, user, immediate_action)
+    if immediate_action.responsible_id != getattr(user, "id", None):
+        raise PermissionDenied("Solo el responsable asignado puede verificar la eficacia de la Observacion.")
 
     before = snapshot_anomaly(locked)
     previous_status = locked.current_status
@@ -1305,7 +1312,12 @@ def transition_anomaly(*, anomaly: Anomaly, user, target_stage: str | None = Non
     reopened = target_status == AnomalyStatus.REOPENED
     resolved_target_status = target_status or resolve_status_for_stage(target_stage, reopened=reopened)
 
-    ensure_transition_permission(user=user, target_status=resolved_target_status, target_stage=target_stage)
+    ensure_transition_permission(
+        anomaly=locked,
+        user=user,
+        target_status=resolved_target_status,
+        target_stage=target_stage,
+    )
     validate_transition(anomaly=locked, target_stage=target_stage, target_status=resolved_target_status, comment=comment)
 
     before = snapshot_anomaly(locked)

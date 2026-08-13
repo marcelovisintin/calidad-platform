@@ -6,6 +6,7 @@ import type {
   TreatmentEvidence,
   TreatmentLearnedLessonPayload,
   TreatmentParticipant,
+  TreatmentParticipantOption,
   TreatmentRootCause,
   TreatmentSummary,
   TreatmentTask,
@@ -129,6 +130,10 @@ export function updateTreatment(treatmentId: string, payload: TreatmentUpdatePay
     method: "PATCH",
     body: payload,
   });
+}
+
+export function fetchTreatmentParticipantOptions(treatmentId: string) {
+  return apiRequest<TreatmentParticipantOption[]>(`/actions/treatments/${treatmentId}/participant-options/`);
 }
 
 export function validateTreatmentEffectiveness(treatmentId: string, payload: TreatmentValidationPayload) {

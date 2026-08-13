@@ -1,6 +1,5 @@
 import { ChangeEvent, FormEvent, MouseEvent, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { fetchUsers } from "../../../api/accounts";
 import {
   addTreatmentAnomaly,
   addTreatmentParticipant,
@@ -11,12 +10,13 @@ import {
   createTreatment,
   fetchTreatmentCandidates,
   fetchTreatmentDetail,
+  fetchTreatmentParticipantOptions,
   fetchOpenTreatmentOptions,
   fetchTreatments,
   updateTreatment,
   updateTreatmentTask,
 } from "../../../api/treatments";
-import type { TreatmentTask, UserDirectoryItem } from "../../../api/types";
+import type { TreatmentParticipantOption, TreatmentTask } from "../../../api/types";
 import { readStoredSession } from "../../../api/http";
 import { formatDate, toDateTimeLocalValue, toOffsetIso } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
@@ -37,12 +37,6 @@ type TaskDraft = {
   status: "pending" | "in_progress" | "completed" | "cancelled";
   anomaly_ids: string[];
 };
-
-const PARTICIPANT_ROLES = [
-  { value: "convoked", label: "Convocado" },
-  { value: "facilitator", label: "Facilitador" },
-  { value: "owner", label: "Responsable" },
-] as const;
 
 const METHOD_OPTIONS = [
   { value: "", label: "Sin definir" },
@@ -73,7 +67,7 @@ const EMPTY_TASK_DRAFT: TaskDraft = {
   anomaly_ids: [],
 };
 
-function buildUsersLabel(user: UserDirectoryItem) {
+function buildUsersLabel(user: TreatmentParticipantOption) {
   const name = user.full_name || user.username;
   const sector = user.sector?.name ? ` - ${user.sector.name}` : "";
   return `${name} (${user.username})${sector}`;
@@ -174,11 +168,12 @@ export function TreatmentsPage() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTreatmentId = (searchParams.get("treatment") || "").trim();
+  const requestedAnomalyId = (searchParams.get("anomaly") || "").trim();
 
   const [selectedTreatmentId, setSelectedTreatmentId] = useState(() => requestedTreatmentId);
   const [selectedTab, setSelectedTab] = useState<TreatmentTab>("agenda");
 
-  const [selectedCandidateId, setSelectedCandidateId] = useState("");
+  const [selectedCandidateId, setSelectedCandidateId] = useState(() => requestedAnomalyId);
   const [selectedOpenTreatmentId, setSelectedOpenTreatmentId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -193,7 +188,6 @@ export function TreatmentsPage() {
 
   const [participantUserId, setParticipantUserId] = useState("");
   const [participantAreaId, setParticipantAreaId] = useState("");
-  const [participantRole, setParticipantRole] = useState("convoked");
   const [participantNote, setParticipantNote] = useState("");
 
   const [linkAnomalyIds, setLinkAnomalyIds] = useState<string[]>([]);
@@ -244,9 +238,13 @@ export function TreatmentsPage() {
 
     const [treatments, createCandidates, linkCandidates, users] = await Promise.all([
       fetchTreatments(page, deferredSearch),
-      fetchTreatmentCandidates({ page: 1, pageSize: 100 }),
+      fetchTreatmentCandidates({
+        page: 1,
+        pageSize: 100,
+        anomaly: requestedAnomalyId,
+      }),
       linkCandidatesPromise,
-      fetchUsers({ active: true }),
+      selectedTreatmentId ? fetchTreatmentParticipantOptions(selectedTreatmentId) : Promise.resolve([]),
     ]);
 
     return {
@@ -255,7 +253,7 @@ export function TreatmentsPage() {
       createCandidates: createCandidates.results,
       linkCandidates: linkCandidates.results,
       linkCandidatesTotal: linkCandidates.count,
-      users: users.results,
+      users,
     };
   }, [
     page,
@@ -268,7 +266,14 @@ export function TreatmentsPage() {
     deferredLinkCandidateUserFilter,
     linkCandidateDateFrom,
     linkCandidateDateTo,
+    requestedAnomalyId,
   ]);
+
+  useEffect(() => {
+    if (requestedAnomalyId) {
+      setSelectedCandidateId(requestedAnomalyId);
+    }
+  }, [requestedAnomalyId]);
 
   const {
     data: openTreatmentOptions,
@@ -469,7 +474,8 @@ export function TreatmentsPage() {
     () => selectedTreatment?.tasks.find((task) => task.id === selectedTaskId) ?? null,
     [selectedTaskId, selectedTreatment?.tasks],
   );
-  const treatmentLocked = Boolean(selectedTreatment?.is_locked);
+  const treatmentClosed = Boolean(selectedTreatment?.is_locked);
+  const treatmentLocked = treatmentClosed || !selectedTreatment?.can_manage;
 
   const handleApplyLinkCandidateFilters = () => {
     setLinkCandidateAnomalyFilter(linkCandidateAnomalyDraft.trim());
@@ -672,7 +678,7 @@ export function TreatmentsPage() {
     await runMutation(async () => {
       await addTreatmentParticipant(selectedTreatment.id, {
         user: participantUserId,
-        role: participantRole,
+        role: "convoked",
         note: participantNote.trim(),
       });
       setParticipantNote("");
@@ -948,7 +954,7 @@ return (
       description="Gestion de tratamientos por anomalia con Revisión de hallazgos: convocatoria, analisis de causa y tareas asociadas."
       />
 
-      <div className="toolbar-card treatment-toolbar">
+      <div className="toolbar-card filter-toolbar treatment-toolbar">
         <input
           onChange={(event: ChangeEvent<HTMLInputElement>) => { setSearch(event.target.value); setPage(1); }}
           placeholder="Buscar por tratamiento, anomalia, responsable o sector"
@@ -1051,9 +1057,13 @@ return (
                     </div>
                     <StatusBadge value={selectedTreatment.status} />
                   </div>
-                  {treatmentLocked ? (
+                  {treatmentClosed ? (
                     <div className="panel info compact-inline-panel">
                       <p>Tratamiento cerrado por validacion eficaz. Los datos quedan solo lectura y las anomalias asociadas fueron cerradas automaticamente.</p>
+                    </div>
+                  ) : !selectedTreatment.can_manage ? (
+                    <div className="panel info compact-inline-panel">
+                      <p>Acceso de solo lectura. Solo Calidad, administradores y el responsable del tratamiento pueden modificar sus datos.</p>
                     </div>
                   ) : null}
 
@@ -1136,16 +1146,10 @@ return (
                               ))}
                             </select>
                           </label>
-                          <label className="field">
-                            <span>Rol</span>
-                            <select disabled={treatmentLocked} onChange={(event) => setParticipantRole(event.target.value)} value={participantRole}>
-                              {PARTICIPANT_ROLES.map((role) => (
-                                <option key={role.value} value={role.value}>
-                                  {role.label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                          <div className="field">
+                            <span>Participacion</span>
+                            <strong>Convocado</strong>
+                          </div>
                         </div>
                         <label className="field">
                           <span>Nota</span>

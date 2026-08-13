@@ -5,22 +5,11 @@ from collections import OrderedDict
 from django.db.models import Q
 from django.utils import timezone
 
-from apps.accounts.constants import (
-    PERMISSION_ADD_USER,
-    PERMISSION_CHANGE_USER,
-    PERMISSION_VIEW_AUDIT,
-    ROLE_ADMINISTRADOR,
-)
+from apps.accounts.services.access_policy import has_global_access
 from apps.accounts.models import User
 from apps.actions.models import ActionItem, ActionItemStatus, Treatment, TreatmentStatus, TreatmentTask, TreatmentTaskStatus
 from apps.anomalies.models import Anomaly, AnomalyStatus
 
-
-ADMIN_DASHBOARD_PERMISSIONS = {
-    PERMISSION_ADD_USER,
-    PERMISSION_CHANGE_USER,
-    PERMISSION_VIEW_AUDIT,
-}
 
 ANOMALY_STATUS_LABELS = OrderedDict(
     [
@@ -56,18 +45,17 @@ TREATMENT_STATUS_LABELS = OrderedDict(
     ]
 )
 
+VALIDATION_STATUS_LABELS = OrderedDict(
+    [
+        ("overdue", "Vencidas"),
+        ("pending", "Pendientes"),
+        ("completed", "Realizadas"),
+    ]
+)
+
 
 def _is_dashboard_admin(user) -> bool:
-    if not user or not user.is_authenticated:
-        return False
-    if getattr(user, "is_superuser", False):
-        return True
-    access_level = (getattr(user, "access_level", "") or "").lower()
-    if access_level in {"administrador", "desarrollador"}:
-        return True
-    if user.role_scopes.filter(role__code__iexact=ROLE_ADMINISTRADOR).exists():
-        return True
-    return any(user.has_perm(permission) for permission in ADMIN_DASHBOARD_PERMISSIONS)
+    return has_global_access(user)
 
 
 def _user_label(user: User) -> str:
@@ -176,6 +164,22 @@ def _count_treatments(queryset):
     return {status: queryset.filter(status=status).count() for status in TreatmentStatus.values}
 
 
+def _validation_queryset_for_user(user):
+    return Treatment.objects.filter(effectiveness_responsible=user)
+
+
+def _count_validations(queryset):
+    today = timezone.localdate()
+    unfinished = queryset.filter(effectiveness_validation_result="")
+    return {
+        "overdue": unfinished.filter(effectiveness_evaluation_date__lt=today).count(),
+        "pending": unfinished.filter(
+            Q(effectiveness_evaluation_date__gte=today) | Q(effectiveness_evaluation_date__isnull=True)
+        ).count(),
+        "completed": queryset.exclude(effectiveness_validation_result="").count(),
+    }
+
+
 def _user_detail_rows(*, users, queryset_factory, counter, labels):
     rows = []
     for user in users:
@@ -255,6 +259,7 @@ def dashboard_summary_for_user(user) -> dict:
     anomaly_detail = None
     action_detail = None
     treatment_detail = None
+    validation_detail = None
     if is_admin:
         anomaly_detail = _user_detail_rows(
             users=users,
@@ -269,6 +274,14 @@ def dashboard_summary_for_user(user) -> dict:
             counter=_count_treatments,
             labels=TREATMENT_STATUS_LABELS,
         )
+        validation_detail = _user_detail_rows(
+            users=users,
+            queryset_factory=_validation_queryset_for_user,
+            counter=_count_validations,
+            labels=VALIDATION_STATUS_LABELS,
+        )
+
+    validation_queryset = Treatment.objects.exclude(effectiveness_responsible=None) if is_admin else _validation_queryset_for_user(user)
 
     return {
         "scope": "admin" if is_admin else "user",
@@ -296,6 +309,15 @@ def dashboard_summary_for_user(user) -> dict:
                 labels=TREATMENT_STATUS_LABELS,
                 counter=_count_treatments,
                 detail_rows=treatment_detail,
+            ),
+            _card(
+                key="validations",
+                title="Verificaciones de eficacia",
+                description="Control global por responsable" if is_admin else "Verificaciones asignadas a vos",
+                queryset=validation_queryset,
+                labels=VALIDATION_STATUS_LABELS,
+                counter=_count_validations,
+                detail_rows=validation_detail,
             ),
         ],
     }

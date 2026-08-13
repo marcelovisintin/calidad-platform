@@ -293,7 +293,7 @@ export function CatalogManagementPage() {
       <section className="user-sticky-shell">
         <PageHeader title={meta.title} description={meta.description} actionLabel="Volver a tarjetas" actionTo="/dashboard?view=admin" compact />
 
-        <section className="toolbar-card user-toolbar user-toolbar-compact">
+        <section className="toolbar-card filter-toolbar user-toolbar user-toolbar-compact">
           <select value={entity} onChange={(event) => changeEntity(event.target.value as CatalogEntity)}>
             {ENTITY_META.map((option) => (
               <option key={option.key} value={option.key}>

@@ -77,7 +77,7 @@ export function AnomalyRepetitionStudyPage() {
         <div className="panel danger">Esta consulta esta disponible solo para usuarios administradores.</div>
       ) : (
         <>
-      <form className="toolbar-card repetition-study-toolbar" data-update-ignore="true" onSubmit={handleSubmit}>
+      <form className="toolbar-card filter-toolbar repetition-study-toolbar" data-update-ignore="true" onSubmit={handleSubmit}>
         <label>
           <span>Desde fecha</span>
           <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />

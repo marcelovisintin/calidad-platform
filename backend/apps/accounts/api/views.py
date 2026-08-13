@@ -14,7 +14,6 @@ from apps.accounts.api.serializers import (
     CurrentUserSerializer,
     LoginSerializer,
     LogoutSerializer,
-    RoleSummarySerializer,
     UserAccessProfileSerializer,
     UserAccessProfileWriteSerializer,
     UserDetailSerializer,
@@ -22,7 +21,7 @@ from apps.accounts.api.serializers import (
     UserWriteSerializer,
 )
 from apps.accounts.constants import USER_SCOPE_OPTIONS
-from apps.accounts.models import Role, User
+from apps.accounts.models import User
 from apps.accounts.permissions import CanCreateUsers, CanDeleteUsers, CanEditUsers, CanListUsers
 from apps.accounts.services.authorization import filter_user_directory_queryset
 from apps.accounts.services.user_import import analyze_user_import, confirm_user_import
@@ -33,7 +32,6 @@ from common.permissions import IsAuthenticatedAndActive
 def build_user_queryset(for_user):
     queryset = (
         User.objects.select_related("primary_sector", "primary_sector__site")
-        .prefetch_related("role_scopes__role", "role_scopes__site", "role_scopes__area")
         .order_by("first_name", "last_name", "username")
     )
     return filter_user_directory_queryset(queryset, for_user)
@@ -100,7 +98,6 @@ class CurrentUserAPIView(APIView):
     def get(self, request):
         user = (
             User.objects.select_related("primary_sector", "primary_sector__site")
-            .prefetch_related("role_scopes__role", "role_scopes__site", "role_scopes__area")
             .get(pk=request.user.pk)
         )
         serializer = CurrentUserSerializer(user, context={"request": request})
@@ -238,7 +235,6 @@ class UserAccessOptionsAPIView(APIView):
                     {"value": value, "label": label}
                     for value, label in User.AccessLevel.choices
                 ],
-                "roles": RoleSummarySerializer(Role.objects.filter(is_active=True).order_by("name"), many=True).data,
                 "scope_options": USER_SCOPE_OPTIONS,
             }
         )
@@ -251,7 +247,7 @@ class UserAccessProfileAPIView(APIView):
         return [CanListUsers()]
 
     def get_user(self, pk):
-        queryset = build_user_queryset(self.request.user).prefetch_related("user_permissions__content_type", "role_scopes__role__permissions__content_type")
+        queryset = build_user_queryset(self.request.user).prefetch_related("user_permissions__content_type")
         try:
             return queryset.get(pk=pk)
         except User.DoesNotExist as exc:
@@ -271,7 +267,7 @@ class UserAccessProfileAPIView(APIView):
         updated_user = serializer.save()
         refreshed_user = (
             build_user_queryset(request.user)
-            .prefetch_related("user_permissions__content_type", "role_scopes__role__permissions__content_type")
+            .prefetch_related("user_permissions__content_type")
             .get(pk=updated_user.pk)
         )
         return Response(UserAccessProfileSerializer(refreshed_user).data)

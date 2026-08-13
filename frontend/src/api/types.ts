@@ -53,6 +53,10 @@ export interface UserSummary {
   full_name: string;
 }
 
+export interface TreatmentParticipantOption extends UserSummary {
+  sector?: AreaSummary | null;
+}
+
 export interface CurrentUser extends UserSummary {
   employee_code?: string;
   access_level: "usuario_activo" | "mando_medio_activo" | "administrador" | "desarrollador";
@@ -65,14 +69,7 @@ export interface CurrentUser extends UserSummary {
   date_joined: string;
   last_login?: string | null;
   last_activity_at?: string | null;
-  role_codes: string[];
   initial_password?: string | null;
-  role_scopes: Array<{
-    id: UUID;
-    role: CatalogSummary;
-    site?: SiteSummary | null;
-    area?: AreaSummary | null;
-  }>;
   permissions: string[];
 }
 
@@ -98,19 +95,11 @@ export interface UserDirectoryItem {
   date_joined: string;
   last_login?: string | null;
   last_activity_at?: string | null;
-  role_codes: string[];
 }
 
 export interface AccessLevelOption {
   value: "usuario_activo" | "mando_medio_activo" | "administrador" | "desarrollador";
   label: string;
-}
-
-export interface RoleOption {
-  id: UUID;
-  code: string;
-  name: string;
-  permissions: string[];
 }
 
 export interface UserScopeOption {
@@ -122,7 +111,6 @@ export interface UserScopeOption {
 
 export interface UserAccessOptions {
   access_levels: AccessLevelOption[];
-  roles: RoleOption[];
   scope_options: UserScopeOption[];
 }
 
@@ -133,15 +121,12 @@ export interface UserAccessProfile {
   email: string;
   access_level: AccessLevelOption["value"];
   primary_sector?: AreaSummary | null;
-  role?: RoleOption | null;
   manual_scope_keys: string[];
-  role_permissions: string[];
   effective_permissions: string[];
 }
 
 export interface UserAccessProfilePayload {
   access_level: AccessLevelOption["value"];
-  role?: UUID | null;
   manual_scope_keys: string[];
 }
 
@@ -454,6 +439,9 @@ export interface TreatmentTask {
   is_overdue?: boolean;
   anomaly_links: TreatmentTaskAnomalyLink[];
   evidences: TreatmentTaskEvidence[];
+  can_manage: boolean;
+  can_update_status: boolean;
+  can_add_evidence: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -486,6 +474,9 @@ export interface TreatmentTaskHistory {
   root_cause?: TreatmentTaskHistoryRootCause | null;
   root_causes: TreatmentTaskHistoryRootCause[];
   evidences: TreatmentTaskEvidence[];
+  can_manage: boolean;
+  can_update_status: boolean;
+  can_add_evidence: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -518,6 +509,8 @@ export interface TreatmentSummary {
     blockers: string[];
   };
   is_locked?: boolean;
+  can_manage: boolean;
+  can_validate_effectiveness: boolean;
   learned_lesson?: TreatmentLearnedLesson | null;
   primary_anomaly: TreatmentAnomalySummary;
   created_at: string;

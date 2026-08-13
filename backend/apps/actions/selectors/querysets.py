@@ -3,15 +3,7 @@ from uuid import UUID
 from django.db.models import Prefetch, Q
 from django.utils import timezone
 
-from apps.accounts.constants import (
-    PERMISSION_ASSIGN_ACTION,
-    PERMISSION_EXECUTE_ACTION,
-    PERMISSION_VERIFY_ACTION_EFFECTIVENESS,
-    PERMISSION_VIEW_ACTION_ITEM,
-    PERMISSION_VIEW_ACTION_PLAN,
-    ROLE_ADMINISTRADOR,
-)
-from apps.accounts.services.authorization import filter_queryset_by_sector_scope
+from apps.accounts.services.access_policy import has_global_access, is_management_user
 from apps.actions.models import (
     ActionEvidence,
     ActionItem,
@@ -23,14 +15,6 @@ from apps.actions.models import (
 )
 from common.query_params import parse_iso_date_parameter
 
-VISIBLE_ACTION_PERMISSIONS = {
-    PERMISSION_VIEW_ACTION_PLAN,
-    PERMISSION_VIEW_ACTION_ITEM,
-    PERMISSION_ASSIGN_ACTION,
-    PERMISSION_EXECUTE_ACTION,
-    PERMISSION_VERIFY_ACTION_EFFECTIVENESS,
-}
-
 OPEN_ACTION_ITEM_STATUSES = {ActionItemStatus.PENDING, ActionItemStatus.IN_PROGRESS}
 
 
@@ -41,16 +25,7 @@ def _overdue_filter() -> Q:
 
 
 def _has_unrestricted_action_visibility(user) -> bool:
-    if not user or not user.is_authenticated:
-        return False
-    if user.is_superuser:
-        return True
-
-    access_level = (getattr(user, "access_level", "") or "").lower()
-    if access_level in {"administrador", "desarrollador"}:
-        return True
-
-    return user.role_scopes.filter(role__code=ROLE_ADMINISTRADOR).exists()
+    return has_global_access(user)
 
 
 
@@ -131,14 +106,10 @@ def filter_action_plan_queryset_for_user(queryset, user):
         return queryset.none()
     if _has_unrestricted_action_visibility(user):
         return queryset
-    if not any(user.has_perm(permission) for permission in VISIBLE_ACTION_PERMISSIONS):
-        return queryset.none()
-    return filter_queryset_by_sector_scope(
-        queryset,
-        user,
-        area_field="anomaly__area_id",
-        site_field="anomaly__site_id",
-    )
+    relation_filter = Q(items__assigned_to=user)
+    if is_management_user(user):
+        relation_filter |= Q(owner=user) | Q(anomaly__owner=user)
+    return queryset.filter(relation_filter).distinct()
 
 
 
@@ -148,17 +119,10 @@ def filter_action_item_queryset_for_user(queryset, user):
     if _has_unrestricted_action_visibility(user):
         return queryset
 
-    assigned_queryset = queryset.filter(assigned_to=user)
-    if not any(user.has_perm(permission) for permission in VISIBLE_ACTION_PERMISSIONS):
-        return assigned_queryset
-
-    scoped_queryset = filter_queryset_by_sector_scope(
-        queryset,
-        user,
-        area_field="action_plan__anomaly__area_id",
-        site_field="action_plan__anomaly__site_id",
-    )
-    return (scoped_queryset | assigned_queryset).distinct()
+    relation_filter = Q(assigned_to=user)
+    if is_management_user(user):
+        relation_filter |= Q(action_plan__owner=user) | Q(action_plan__anomaly__owner=user)
+    return queryset.filter(relation_filter).distinct()
 
 
 

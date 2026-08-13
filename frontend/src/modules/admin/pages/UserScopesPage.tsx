@@ -17,13 +17,11 @@ import { usePageTitle } from "../../../hooks/usePageTitle";
 
 type ScopeDraft = {
   access_level: AccessLevelOption["value"];
-  role: string;
   manual_scope_keys: string[];
 };
 
 const emptyDraft: ScopeDraft = {
   access_level: "usuario_activo",
-  role: "",
   manual_scope_keys: [],
 };
 
@@ -34,7 +32,6 @@ function userLabel(user: UserDirectoryItem) {
 function buildDraft(profile: UserAccessProfile): ScopeDraft {
   return {
     access_level: profile.access_level,
-    role: profile.role?.id || "",
     manual_scope_keys: profile.manual_scope_keys,
   };
 }
@@ -116,8 +113,6 @@ export function UserScopesPage() {
     };
   }, [selectedUserId]);
 
-  const rolePermissionSet = useMemo(() => new Set(profile?.role_permissions ?? []), [profile?.role_permissions]);
-
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
     setSearch(event.target.value);
   };
@@ -147,7 +142,6 @@ export function UserScopesPage() {
     try {
       const updated = await updateUserAccessProfile(selectedUserId, {
         access_level: draft.access_level,
-        role: draft.role || null,
         manual_scope_keys: draft.manual_scope_keys,
       });
       setProfile(updated);
@@ -185,7 +179,7 @@ export function UserScopesPage() {
     <section className="page-shell">
       <PageHeader
         title="Alcances de usuario"
-        description="Nivel de acceso, rol y permisos especificos por usuario."
+        description="Nivel de acceso y permisos especificos por usuario. Sitio y sector son datos descriptivos."
         actionLabel="Volver a tarjetas"
         actionTo="/dashboard?view=admin"
       />
@@ -193,7 +187,7 @@ export function UserScopesPage() {
       {feedback ? <div className="panel info">{feedback}</div> : null}
       {profileError ? <div className="panel danger">{profileError}</div> : null}
 
-      <div className="toolbar-card compact-toolbar user-scope-search">
+      <div className="toolbar-card filter-toolbar compact-toolbar user-scope-search">
         <input
           autoComplete="off"
           onChange={handleSearchChange}
@@ -252,11 +246,7 @@ export function UserScopesPage() {
                     <dd>{options.access_levels.find((item) => item.value === profile.access_level)?.label || profile.access_level}</dd>
                   </div>
                   <div>
-                    <dt>Rol actual</dt>
-                    <dd>{profile.role ? profile.role.name : "Sin rol asignado"}</dd>
-                  </div>
-                  <div>
-                    <dt>Sector principal</dt>
+                    <dt>Sector principal (informativo)</dt>
                     <dd>{profile.primary_sector?.name || "Sin sector principal"}</dd>
                   </div>
                   <div>
@@ -279,17 +269,6 @@ export function UserScopesPage() {
                       ))}
                     </select>
                   </label>
-                  <label className="field">
-                    <span>Rol asignado</span>
-                    <select onChange={(event) => setDraft((current) => ({ ...current, role: event.target.value }))} value={draft.role}>
-                      <option value="">Sin rol</option>
-                      {options.roles.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
                 </div>
 
                 <section className="form-section nested-form">
@@ -302,7 +281,6 @@ export function UserScopesPage() {
                   <div className="scope-checklist">
                     {options.scope_options.map((scope) => {
                       const checked = draft.manual_scope_keys.includes(scope.key);
-                      const inherited = scope.permission_keys.some((permission) => rolePermissionSet.has(permission));
                       return (
                         <label className="scope-check-item" key={scope.key}>
                           <input
@@ -313,7 +291,6 @@ export function UserScopesPage() {
                           <span>
                             <strong>{scope.label}</strong>
                             <small>{scope.description}</small>
-                            {inherited ? <em>Incluido por rol</em> : null}
                           </span>
                         </label>
                       );

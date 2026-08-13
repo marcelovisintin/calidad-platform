@@ -1301,4 +1301,102 @@ ____2/7_________________________________________________________________________
 
 en la busqueda poder anidar filtros ej primero por estado de hallazgo y luego por codigo y luego por titulo.
 uaR EL MIMSO ESTILO DE BARRA QUE YA TIENE Y PÓNERLE UN BOTON QUE DIGA " & "
-.....................................................................................................................
+____11/8__________________________________________________________________________________________________________________
+El sistema está bien preparado para incorporar correos: ya existe un módulo de notificaciones internas y el modelo contempla el canal email. Lo ampliaremos sin afectar los datos ni el flujo actual.
+Roadmap
+Fase 1 — Preferencia por usuario
+En “Configuración y maestros → Usuarios”:
+Agregar casilla “Notificación por correo”.
+Valor predeterminado: desactivado para usuarios actuales y nuevos.
+No permitir activarla si el usuario no tiene un correo válido.
+Mostrar en la tarjeta si las notificaciones están activadas.
+Crear la migración y pruebas correspondientes.
+Esta fase no enviará ningún correo, por lo que puede desplegarse sin riesgo.
+Fase 2 — Motor de envío
+Aprovechar el módulo existente:
+Actividad confirmada
+        ↓
+Notificación interna
+        ↓
+¿Usuario habilitado para correo?
+        ↓ Sí
+Correo pendiente → Envío SMTP → Enviado / Fallido / Reintento
+Características:
+El correo se genera únicamente después de guardar correctamente la operación.
+Una falla del correo nunca impide crear una anomalía, tratamiento o tarea.
+Registro del resultado del envío.
+Reintentos controlados.
+Sin agregar Celery ni infraestructura innecesaria.
+Credenciales SMTP guardadas fuera de Git.
+En pruebas se utilizará una cuenta controlada.
+Fase 3 — Confirmación de anomalía
+Correo al usuario que registró la anomalía:
+Código y título.
+Fecha y sector.
+Confirmación de creación correcta.
+Enlace para abrirla en el sistema.
+Nunca se adjuntarán evidencias ni información sensible.
+Fase 4 — Invitación a tratamiento
+Correo cuando se agrega un participante:
+Tratamiento y anomalía relacionados.
+Rol asignado.
+Fecha prevista, si existe.
+Enlace al tratamiento.
+No se enviará nuevamente por modificaciones que no cambien la participación.
+Fase 5 — Asignación de tareas
+Correo al responsable cuando:
+Se crea una tarea y se le asigna.
+La tarea se reasigna a otra persona.
+Incluirá descripción, fecha prevista, tratamiento relacionado y enlace.
+Fase 6 — Verificación de eficacia
+Correo al responsable cuando se le asignen:
+La verificación de eficacia.
+La fecha de evaluación.
+Más adelante podremos agregar recordatorios por vencimiento.
+Fase 7 — Prueba controlada
+Activar la casilla únicamente en uno o dos usuarios de prueba.
+Probar los cuatro eventos.
+Verificar ausencia de correos duplicados.
+Simular una falla del servidor SMTP.
+Confirmar que las operaciones se guardan aunque el correo falle.
+Después habilitar individualmente a los usuarios reales.
+
+-----------------------------------------------------------------------------------------------------------------
+La lógica actual tiene una brecha:
+No Conformidad, Observación y Oportunidad de mejora exigen seleccionar responsable.
+Ese usuario queda como responsable de la anomalía.
+Actualmente no recibe correo por esta asignación.
+No Conformidad y Oportunidad de mejora quedan disponibles para tratamiento.
+Observación permite hoy dos caminos: gestión directa sin tratamiento o derivación a tratamiento.
+Además, un usuario común podría ser responsable pero no tener permisos suficientes para crear el tratamiento.
+La lógica propuesta sería:
+Al confirmar la Revisión de hallazgos, guardar al usuario como responsable.
+Crear una tarea interna y enviarle correo si tiene habilitada la casilla “Notificación”.
+Informarle que debe ingresar al sistema, crear/gestionar el tratamiento y convocar participantes.
+Darle automáticamente visibilidad y permisos sobre esa anomalía y su tratamiento.
+Si cambia el responsable, cerrar la tarea anterior y notificar solamente al nuevo.
+No notificar cuando la clasificación sea “Inválida”.
+----------------------------------------------------------------------------------------
+
+____12/8 - SIMPLIFICACION DE ACCESOS_________________________________________________________________________________
+
+Se reemplaza la autorización por roles y alcances de sector por una política central basada en:
+- nivel de acceso del usuario;
+- relación concreta con el registro (responsable, convocado o asignado).
+
+Reglas vigentes:
+- Desarrollador: acceso completo al sistema.
+- Administrador: acceso completo a secciones, configuración y control global de pendientes; no ejecuta tareas ni
+  verificaciones asignadas a otros usuarios.
+- Mando medio activo: gestiona tratamientos, observaciones y planes cuando fue designado responsable; puede convocar
+  usuarios y delegar tareas y verificaciones.
+- Usuario activo: registra anomalías y trabaja solamente sobre invitaciones, acciones, tareas y verificaciones propias.
+- Los permisos específicos permanecen configurables, pero no pueden superar el límite del nivel de acceso.
+- Sitio y sector quedan como datos informativos del lugar/proceso y no intervienen en la autorización.
+- En Revisión de hallazgos solo se puede designar como responsable a Mando medio, Administrador o Desarrollador.
+- Los participantes de tratamiento se incorporan como Convocados; ser convocado o facilitador no concede gestión.
+- Las pantallas Acciones y Validación son personales para todos los niveles. El Administrador controla el conjunto desde
+  el resumen global, incluyendo verificaciones de eficacia por usuario y vencimiento.
+
+Los modelos de roles dejaron de usarse en aplicación y API. Sus tablas anteriores se conservan archivadas en base de datos
+para permitir recuperación histórica; no otorgan permisos ni se muestran en la interfaz.

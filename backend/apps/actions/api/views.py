@@ -8,7 +8,6 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.permissions import CanAssignAction
 from apps.actions.api.serializers import (
     ActionEvidenceSerializer,
     ActionEvidenceWriteSerializer,
@@ -88,11 +87,6 @@ class ActionEvidenceDownloadAPIView(APIView):
 
 class ActionPlanViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "put", "patch", "head", "options"]
-
-    def get_permissions(self):
-        if self.action in {"create", "update", "partial_update", "transition", "add_item"}:
-            return [CanAssignAction()]
-        return super().get_permissions()
 
     def _with_counts(self, queryset):
         open_filter = Q(items__status__in=OPEN_ACTION_ITEM_STATUSES)
@@ -200,11 +194,6 @@ class ActionPlanViewSet(viewsets.ModelViewSet):
 
 class ActionItemViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "put", "patch", "head", "options"]
-
-    def get_permissions(self):
-        if self.action in {"update", "partial_update"}:
-            return [CanAssignAction()]
-        return super().get_permissions()
 
     def get_queryset(self):
         detailed_actions = {"retrieve", "add_evidence", "transition", "my_actions", "pending"}

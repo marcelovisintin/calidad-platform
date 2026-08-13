@@ -1,9 +1,7 @@
 ﻿from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
-from django.db import transaction
-
-from apps.accounts.constants import PERMISSION_DEFINITIONS, ROLE_DEFINITIONS, ROLE_PERMISSION_MATRIX
-from apps.accounts.models import Role, User
+from apps.accounts.constants import PERMISSION_DEFINITIONS
+from apps.accounts.models import User
 from apps.actions.models import ActionItem, ActionPlan
 from apps.anomalies.models import Anomaly
 from apps.audit.models import AuditEvent
@@ -39,31 +37,5 @@ def ensure_required_permissions() -> dict[str, Permission]:
     return {key: ensure_permission(key) for key in PERMISSION_DEFINITIONS}
 
 
-@transaction.atomic
 def sync_roles_and_permissions() -> None:
-    resolved_permissions = ensure_required_permissions()
-
-    for role_code, role_definition in ROLE_DEFINITIONS.items():
-        role, _ = Role.objects.get_or_create(
-            code=role_code,
-            defaults={
-                "name": role_definition["name"],
-                "description": role_definition["description"],
-            },
-        )
-
-        updates = []
-        if role.name != role_definition["name"]:
-            role.name = role_definition["name"]
-            updates.append("name")
-        if role.description != role_definition["description"]:
-            role.description = role_definition["description"]
-            updates.append("description")
-        if not role.is_active:
-            role.is_active = True
-            updates.append("is_active")
-        if updates:
-            role.save(update_fields=updates)
-
-        permission_objects = [resolved_permissions[key] for key in ROLE_PERMISSION_MATRIX[role_code]]
-        role.permissions.set(permission_objects)
+    ensure_required_permissions()

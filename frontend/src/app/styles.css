@@ -2200,6 +2200,109 @@ small {
   align-items: end;
 }
 
+/* Search and filter controls are intentionally denser than data-entry forms. */
+.filter-toolbar {
+  position: relative;
+  isolation: isolate;
+  margin-bottom: 0.35rem;
+  padding: 0.7rem 0.8rem;
+  border-width: 1px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(226, 241, 237, 0.98), var(--panel));
+  box-shadow: 0 8px 22px rgba(8, 33, 40, 0.08);
+}
+
+.filter-toolbar::before,
+.filter-toolbar::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border: 1px solid rgba(21, 132, 111, 0.15);
+  border-radius: 0 0 16px 16px;
+}
+
+.filter-toolbar::before {
+  z-index: -1;
+  inset: 5px 12px -6px;
+  background: rgba(21, 132, 111, 0.1);
+}
+
+.filter-toolbar::after {
+  z-index: -2;
+  inset: 9px 24px -10px;
+  background: rgba(15, 44, 53, 0.06);
+}
+
+.filter-toolbar .field,
+.filter-toolbar.repetition-study-toolbar label {
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.filter-toolbar .field > span,
+.filter-toolbar.repetition-study-toolbar label > span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+
+.filter-toolbar input:not([type="checkbox"]),
+.filter-toolbar select {
+  min-height: 42px;
+  padding: 0.58rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+}
+
+.filter-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.6rem 0.7rem;
+}
+
+.actions-filters-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.filter-toolbar-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.filter-toolbar-inline > input[type="search"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.filter-toolbar-single .field {
+  max-width: 680px;
+}
+
+@media (max-width: 1180px) {
+  .actions-filters-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .filter-grid,
+  .actions-filters-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 540px) {
+  .filter-grid,
+  .actions-filters-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-toolbar-inline {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 .action-card {
   cursor: pointer;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;

@@ -1,32 +1,3 @@
-ROLE_OPERARIO = "OPERARIO"
-ROLE_SUPERVISOR = "SUPERVISOR"
-ROLE_CALIDAD = "CALIDAD"
-ROLE_INGENIERIA = "INGENIERIA"
-ROLE_ADMINISTRADOR = "ADMINISTRADOR"
-
-ROLE_DEFINITIONS = {
-    ROLE_OPERARIO: {
-        "name": "Operario",
-        "description": "Reporta anomalias y ejecuta acciones asignadas dentro de su sector.",
-    },
-    ROLE_SUPERVISOR: {
-        "name": "Supervisor",
-        "description": "Coordina anomalias de su sector y asigna acciones operativas.",
-    },
-    ROLE_CALIDAD: {
-        "name": "Calidad",
-        "description": "Realiza Revisión de hallazgos, verifica eficacia y formaliza cierres del modulo.",
-    },
-    ROLE_INGENIERIA: {
-        "name": "Ingenieria",
-        "description": "Analiza causas y define acciones tecnicas y de mejora.",
-    },
-    ROLE_ADMINISTRADOR: {
-        "name": "Administrador",
-        "description": "Administra seguridad, usuarios y configuracion transversal.",
-    },
-}
-
 PERMISSION_ADD_USER = "accounts.add_user"
 PERMISSION_CHANGE_USER = "accounts.change_user"
 PERMISSION_DELETE_USER = "accounts.delete_user"
@@ -186,59 +157,6 @@ PERMISSION_DEFINITIONS = {
         "codename": "view_auditevent",
         "name": "Puede ver auditoria transversal",
     },
-}
-
-ROLE_PERMISSION_MATRIX = {
-    ROLE_OPERARIO: [
-        PERMISSION_CREATE_ANOMALY,
-        PERMISSION_VIEW_ANOMALY,
-        PERMISSION_VIEW_SECTOR_ANOMALY,
-        PERMISSION_VIEW_ACTION_ITEM,
-        PERMISSION_EXECUTE_ACTION,
-    ],
-    ROLE_SUPERVISOR: [
-        PERMISSION_CREATE_ANOMALY,
-        PERMISSION_EDIT_ANOMALY,
-        PERMISSION_VIEW_ANOMALY,
-        PERMISSION_VIEW_SECTOR_ANOMALY,
-        PERMISSION_ANALYZE_ANOMALY,
-        PERMISSION_VIEW_ACTION_PLAN,
-        PERMISSION_VIEW_ACTION_ITEM,
-        PERMISSION_ASSIGN_ACTION,
-        PERMISSION_EXECUTE_ACTION,
-        PERMISSION_VIEW_USER,
-    ],
-    ROLE_CALIDAD: [
-        PERMISSION_CREATE_ANOMALY,
-        PERMISSION_EDIT_ANOMALY,
-        PERMISSION_VIEW_ANOMALY,
-        PERMISSION_CLASSIFY_ANOMALY,
-        PERMISSION_ANALYZE_ANOMALY,
-        PERMISSION_VERIFY_EFFECTIVENESS_ANOMALY,
-        PERMISSION_VIEW_ALL_ANOMALY,
-        PERMISSION_CLOSE_ANOMALY,
-        PERMISSION_CANCEL_ANOMALY,
-        PERMISSION_REOPEN_ANOMALY,
-        PERMISSION_VIEW_ACTION_PLAN,
-        PERMISSION_VIEW_ACTION_ITEM,
-        PERMISSION_ASSIGN_ACTION,
-        PERMISSION_VERIFY_ACTION_EFFECTIVENESS,
-        PERMISSION_VIEW_USER,
-        PERMISSION_VIEW_AUDIT,
-    ],
-    ROLE_INGENIERIA: [
-        PERMISSION_CREATE_ANOMALY,
-        PERMISSION_EDIT_ANOMALY,
-        PERMISSION_VIEW_ANOMALY,
-        PERMISSION_ANALYZE_ANOMALY,
-        PERMISSION_VIEW_ALL_ANOMALY,
-        PERMISSION_VIEW_ACTION_PLAN,
-        PERMISSION_VIEW_ACTION_ITEM,
-        PERMISSION_ASSIGN_ACTION,
-        PERMISSION_EXECUTE_ACTION,
-        PERMISSION_VIEW_USER,
-    ],
-    ROLE_ADMINISTRADOR: sorted(PERMISSION_DEFINITIONS.keys()),
 }
 
 USER_SCOPE_OPTIONS = [

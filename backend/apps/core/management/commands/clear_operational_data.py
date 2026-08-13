@@ -6,7 +6,7 @@ from django.apps import apps
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from apps.accounts.models import Role, User, UserRoleScope
+from apps.accounts.models import User
 from apps.actions.models import (
     ActionEvidence,
     ActionPlan,
@@ -50,8 +50,6 @@ def _catalog_counts() -> dict[str, int]:
 def _protected_counts() -> dict[str, object]:
     return {
         "users": User.objects.count(),
-        "roles": Role.objects.count(),
-        "user_role_scopes": UserRoleScope.objects.count(),
         "catalog": _catalog_counts(),
     }
 
@@ -76,7 +74,7 @@ def _file_references() -> list[tuple[object, str]]:
 class Command(BaseCommand):
     help = (
         "Elimina datos operativos de prueba y reinicia la numeracion visible, "
-        "conservando usuarios, roles, permisos, alcances, fotos y catalogos."
+        "conservando usuarios, permisos especificos, fotos y catalogos."
     )
 
     def add_arguments(self, parser):
@@ -105,8 +103,6 @@ class Command(BaseCommand):
         self.stdout.write(
             "Datos protegidos: "
             f"{protected_before['users']} usuarios, "
-            f"{protected_before['roles']} roles, "
-            f"{protected_before['user_role_scopes']} alcances y "
             f"{sum(protected_before['catalog'].values())} registros de catalogo."
         )
 
@@ -127,7 +123,7 @@ class Command(BaseCommand):
             if protected_after != protected_before:
                 raise CommandError(
                     "La verificacion de seguridad detecto cambios en usuarios, "
-                    "roles, alcances o catalogos. La transaccion fue revertida."
+                    "permisos o catalogos. La transaccion fue revertida."
                 )
 
             remaining = _operational_counts()
@@ -151,8 +147,6 @@ class Command(BaseCommand):
         self.stdout.write(
             "Se conservaron sin cambios: "
             f"{protected_after['users']} usuarios, "
-            f"{protected_after['roles']} roles, "
-            f"{protected_after['user_role_scopes']} alcances y "
             f"{sum(protected_after['catalog'].values())} registros de catalogo."
         )
         self.stdout.write(

@@ -4,12 +4,11 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from apps.accounts.constants import (
-    PERMISSION_ASSIGN_ACTION,
-    PERMISSION_EXECUTE_ACTION,
-    PERMISSION_VERIFY_ACTION_EFFECTIVENESS,
+from apps.accounts.services.access_policy import (
+    can_execute_assignment,
+    has_global_access,
+    is_management_user,
 )
-from apps.accounts.services.authorization import can_access_area
 from apps.actions.models import (
     ActionEvidence,
     ActionHistoryEvent,
@@ -47,37 +46,25 @@ def _request_id(value: str | None) -> str:
 
 
 
-def _require_permission(user, permission: str, message: str) -> None:
-    if user.is_superuser:
-        return
-    if not user.has_perm(permission):
-        raise PermissionDenied(message)
+def _can_manage_action_plan(user, action_plan: ActionPlan) -> bool:
+    if has_global_access(user):
+        return True
+    user_id = getattr(user, "id", None)
+    return bool(
+        is_management_user(user)
+        and user_id
+        and user_id in {action_plan.owner_id, action_plan.anomaly.owner_id}
+    )
 
 
-
-def _require_any_permission(user, permissions: set[str], message: str) -> None:
-    if user.is_superuser:
-        return
-    if any(user.has_perm(permission) for permission in permissions):
-        return
-    raise PermissionDenied(message)
+def _require_action_plan_manager(user, action_plan: ActionPlan) -> None:
+    if not _can_manage_action_plan(user, action_plan):
+        raise PermissionDenied("Solo el responsable del plan o usuarios ADMIN pueden gestionarlo.")
 
 
-
-def _ensure_scope_from_anomaly(anomaly, user) -> None:
-    if user.is_superuser:
-        return
-    if not can_access_area(user, area_id=anomaly.area_id, site_id=anomaly.site_id):
-        raise PermissionDenied("No tiene alcance sobre el sitio o sector del plan de accion.")
-
-
-
-def _ensure_action_item_execution_scope(action_item, user) -> None:
-    if user.is_superuser:
-        return
-    if action_item.assigned_to_id and action_item.assigned_to_id == user.pk:
-        return
-    _ensure_scope_from_anomaly(action_item.action_plan.anomaly, user)
+def _require_action_assignee(user, action_item: ActionItem) -> None:
+    if not can_execute_assignment(user, action_item.assigned_to_id):
+        raise PermissionDenied("Solo el responsable asignado puede ejecutar esta accion.")
 
 
 
@@ -164,8 +151,10 @@ def _validate_action_item_editable(action_item: ActionItem) -> None:
 
 @transaction.atomic
 def create_action_plan(*, anomaly, user, data: dict, request_id: str = "") -> ActionPlan:
-    _require_permission(user, PERMISSION_ASSIGN_ACTION, "No tiene permisos para crear planes de accion.")
-    _ensure_scope_from_anomaly(anomaly, user)
+    if not has_global_access(user) and not (
+        is_management_user(user) and anomaly.owner_id == getattr(user, "id", None)
+    ):
+        raise PermissionDenied("Solo el responsable asignado o usuarios ADMIN pueden crear el plan de accion.")
 
     if anomaly.action_plans.filter(status=ActionPlanStatus.ACTIVE).exists():
         raise ValidationError({"status": "La anomalia ya tiene un plan de accion activo."})
@@ -196,9 +185,8 @@ def create_action_plan(*, anomaly, user, data: dict, request_id: str = "") -> Ac
 
 @transaction.atomic
 def update_action_plan(*, action_plan: ActionPlan, user, data: dict, request_id: str = "") -> ActionPlan:
-    _require_permission(user, PERMISSION_ASSIGN_ACTION, "No tiene permisos para editar planes de accion.")
     locked = ActionPlan.objects.select_for_update().select_related("anomaly").get(pk=action_plan.pk)
-    _ensure_scope_from_anomaly(locked.anomaly, user)
+    _require_action_plan_manager(user, locked)
     _validate_action_plan_editable(locked)
     before = snapshot_action_plan(locked)
 
@@ -223,9 +211,8 @@ def update_action_plan(*, action_plan: ActionPlan, user, data: dict, request_id:
 
 @transaction.atomic
 def transition_action_plan(*, action_plan: ActionPlan, user, target_status: str, comment: str, request_id: str = "") -> ActionPlan:
-    _require_permission(user, PERMISSION_ASSIGN_ACTION, "No tiene permisos para cambiar el estado del plan de accion.")
     locked = ActionPlan.objects.select_for_update().select_related("anomaly").get(pk=action_plan.pk)
-    _ensure_scope_from_anomaly(locked.anomaly, user)
+    _require_action_plan_manager(user, locked)
 
     if not comment or not comment.strip():
         raise ValidationError({"comment": "El comentario de transicion es obligatorio."})
@@ -274,9 +261,8 @@ def transition_action_plan(*, action_plan: ActionPlan, user, target_status: str,
 
 @transaction.atomic
 def create_action_item(*, action_plan: ActionPlan, user, data: dict, request_id: str = "") -> ActionItem:
-    _require_permission(user, PERMISSION_ASSIGN_ACTION, "No tiene permisos para crear acciones.")
     locked_plan = ActionPlan.objects.select_for_update().select_related("anomaly", "anomaly__priority").get(pk=action_plan.pk)
-    _ensure_scope_from_anomaly(locked_plan.anomaly, user)
+    _require_action_plan_manager(user, locked_plan)
     _validate_action_plan_editable(locked_plan)
 
     sequence = data.get("sequence") or (locked_plan.items.count() + 1)
@@ -320,9 +306,8 @@ def create_action_item(*, action_plan: ActionPlan, user, data: dict, request_id:
 
 @transaction.atomic
 def update_action_item(*, action_item: ActionItem, user, data: dict, request_id: str = "") -> ActionItem:
-    _require_permission(user, PERMISSION_ASSIGN_ACTION, "No tiene permisos para editar acciones.")
     locked = ActionItem.objects.select_for_update().select_related("action_plan", "action_plan__anomaly").get(pk=action_item.pk)
-    _ensure_action_item_execution_scope(locked, user)
+    _require_action_plan_manager(user, locked.action_plan)
     _validate_action_item_editable(locked)
     before = snapshot_action_item(locked)
     previous_assigned_to_id = locked.assigned_to_id
@@ -390,7 +375,6 @@ def transition_action_item(
     *, action_item: ActionItem, user, target_status: str, comment: str, closure_comment: str = "", request_id: str = ""
 ) -> ActionItem:
     locked = ActionItem.objects.select_for_update().select_related("action_plan", "action_plan__anomaly").get(pk=action_item.pk)
-    _ensure_action_item_execution_scope(locked, user)
     _validate_action_item_editable(locked)
 
     if not comment or not comment.strip():
@@ -404,20 +388,9 @@ def transition_action_item(
         raise ValidationError({"target_status": "La transicion de la accion no es valida desde el estado actual."})
 
     if target_status == ActionItemStatus.CANCELLED:
-        _require_permission(user, PERMISSION_ASSIGN_ACTION, "No tiene permisos para cancelar acciones.")
+        _require_action_plan_manager(user, locked.action_plan)
     else:
-        _require_any_permission(
-            user,
-            {PERMISSION_EXECUTE_ACTION, PERMISSION_ASSIGN_ACTION},
-            "No tiene permisos para ejecutar o actualizar el estado de la accion.",
-        )
-        if (
-            not user.is_superuser
-            and not user.has_perm(PERMISSION_ASSIGN_ACTION)
-            and locked.assigned_to_id
-            and locked.assigned_to_id != user.pk
-        ):
-            raise PermissionDenied("Solo el responsable asignado puede ejecutar esta accion.")
+        _require_action_assignee(user, locked)
 
     before = snapshot_action_item(locked)
     locked.status = target_status
@@ -458,13 +431,8 @@ def transition_action_item(
 
 @transaction.atomic
 def add_action_evidence(*, action_item: ActionItem, user, data: dict, request_id: str = "") -> ActionEvidence:
-    _require_any_permission(
-        user,
-        {PERMISSION_EXECUTE_ACTION, PERMISSION_ASSIGN_ACTION, PERMISSION_VERIFY_ACTION_EFFECTIVENESS},
-        "No tiene permisos para registrar evidencias de acciones.",
-    )
     locked = ActionItem.objects.select_related("action_plan", "action_plan__anomaly").get(pk=action_item.pk)
-    _ensure_action_item_execution_scope(locked, user)
+    _require_action_assignee(user, locked)
 
     if not data.get("file") and not (data.get("note") or "").strip():
         raise ValidationError({"note": "Debe adjuntar un archivo o informar una nota de evidencia."})

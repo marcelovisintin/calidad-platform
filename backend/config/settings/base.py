@@ -103,7 +103,7 @@ DATABASES = {
 
 AUTH_USER_MODEL = "accounts.User"
 AUTHENTICATION_BACKENDS = [
-    "apps.accounts.auth_backends.ScopedRolePermissionBackend",
+    "django.contrib.auth.backends.ModelBackend",
 ]
 
 AUTH_PASSWORD_VALIDATORS = [

@@ -12,6 +12,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.models import User
 from apps.actions.api.treatment_serializers import (
     TreatmentAddAnomalySerializer,
     TreatmentAddParticipantSerializer,
@@ -25,6 +26,7 @@ from apps.actions.api.treatment_serializers import (
     TreatmentLearnedLessonWriteSerializer,
     TreatmentListSerializer,
     TreatmentParticipantSerializer,
+    TreatmentParticipantOptionSerializer,
     TreatmentRootCauseSerializer,
     TreatmentTaskEvidenceSerializer,
     TreatmentTaskEvidenceWriteSerializer,
@@ -54,9 +56,11 @@ from apps.actions.services import (
     add_treatment_participant,
     add_treatment_task,
     add_treatment_task_evidence,
+    can_update_treatment_task,
     create_treatment,
     ensure_anomaly_available_for_treatment,
     is_open_treatment_for_association,
+    has_global_treatment_management_access,
     save_treatment_learned_lesson,
     update_treatment,
     update_treatment_task,
@@ -70,11 +74,7 @@ from common.query_params import parse_iso_date_parameter
 
 
 def _is_admin_access(user) -> bool:
-    if not user or not user.is_authenticated:
-        return False
-    if user.is_superuser or getattr(user, "access_level", "") in {"administrador", "desarrollador"}:
-        return True
-    return user.role_scopes.filter(role__code__iexact="ADMINISTRADOR").exists()
+    return has_global_treatment_management_access(user)
 
 
 
@@ -86,8 +86,10 @@ def _visible_treatments_queryset(user):
     return queryset.filter(
         Q(created_by=user)
         | Q(primary_anomaly__reporter=user)
+        | Q(primary_anomaly__owner=user)
         | Q(participants__user=user)
         | Q(tasks__responsible=user)
+        | Q(effectiveness_responsible=user)
     ).distinct()
 
 
@@ -122,8 +124,7 @@ def _validation_ready_treatments_queryset(queryset, user):
         .distinct()
     )
 
-    if not _is_admin_access(user):
-        queryset = queryset.filter(effectiveness_responsible=user)
+    queryset = queryset.filter(effectiveness_responsible=user)
 
     return queryset
 
@@ -311,8 +312,10 @@ class TreatmentViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 Q(created_by=user)
                 | Q(primary_anomaly__reporter=user)
+                | Q(primary_anomaly__owner=user)
                 | Q(participants__user=user)
                 | Q(tasks__responsible=user)
+                | Q(effectiveness_responsible=user)
             ).distinct()
 
         if self.request.query_params.get("validation_ready") in {"1", "true", "True"}:
@@ -344,6 +347,21 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         if self.action == "validate_effectiveness":
             return TreatmentValidateSerializer
         return TreatmentDetailSerializer
+
+    @action(detail=True, methods=["get"], url_path="participant-options")
+    def participant_options(self, request, pk=None):
+        self.get_object()
+        queryset = (
+            User.objects.filter(is_active=True)
+            .select_related("primary_sector", "primary_sector__site")
+            .order_by("first_name", "last_name", "username")
+        )
+        serializer = TreatmentParticipantOptionSerializer(
+            queryset,
+            many=True,
+            context=self.get_serializer_context(),
+        )
+        return Response(serializer.data)
 
     def _detail_response(self, treatment_id, *, response_status=status.HTTP_200_OK):
         instance = self.get_queryset().get(pk=treatment_id)
@@ -422,8 +440,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
             ),
         )
 
-        if not self._is_admin_access(request.user):
-            queryset = queryset.filter(responsible=request.user)
+        queryset = queryset.filter(responsible=request.user)
 
         if query_text := (request.query_params.get("q") or "").strip():
             queryset = queryset.filter(
@@ -662,7 +679,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         task = TreatmentTask.objects.filter(treatment=treatment, pk=task_id).first()
         if not task:
             raise ValidationError({"task": "La tarea no pertenece al tratamiento indicado."})
-        if not self._is_admin_access(request.user) and task.responsible_id != request.user.id:
+        if not can_update_treatment_task(request.user, task):
             raise PermissionDenied("Solo puede modificar tareas asignadas a su usuario.")
 
         serializer = self.get_serializer(data=request.data)
@@ -733,7 +750,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         task = TreatmentTask.objects.filter(treatment=treatment, pk=task_id).first()
         if not task:
             raise ValidationError({"task": "La tarea no pertenece al tratamiento indicado."})
-        if not self._is_admin_access(request.user) and task.responsible_id != request.user.id:
+        if not can_update_treatment_task(request.user, task):
             raise PermissionDenied("Solo puede cargar evidencias en tareas asignadas a su usuario.")
 
         serializer = self.get_serializer(data=request.data)

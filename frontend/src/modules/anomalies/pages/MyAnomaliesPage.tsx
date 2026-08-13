@@ -64,7 +64,9 @@ export function MyAnomaliesPage() {
     return {
       anomalies,
       criteria: catalogs.severities,
-      users: users.results,
+      users: users.results.filter((candidate) =>
+        ["mando_medio_activo", "administrador", "desarrollador"].includes(candidate.access_level),
+      ),
     };
   }, [user?.id, search, adminUser, page]);
 
@@ -174,7 +176,7 @@ export function MyAnomaliesPage() {
         actionTo="/anomalies/new"
       />
 
-      <div className="toolbar-card anomaly-toolbar">
+      <div className="toolbar-card filter-toolbar anomaly-toolbar">
         <input onChange={handleSearchChange} placeholder="Buscar por codigo, titulo, area o estado de hallazgo" type="search" value={search} />
         {strictAdminUser ? (
           <Link className="button button-secondary" to="/anomalies/repetition-study">

@@ -233,7 +233,7 @@ export function UserManagementPage() {
       <section className="user-sticky-shell">
         <PageHeader title="Usuarios" actionLabel="Volver a tarjetas" actionTo="/dashboard?view=admin" compact />
 
-        <section className="toolbar-card user-toolbar user-toolbar-compact">
+        <section className="toolbar-card filter-toolbar user-toolbar user-toolbar-compact">
           <input
             name="search"
             onChange={(event) => { setSearch(event.target.value); setPage(1); }}

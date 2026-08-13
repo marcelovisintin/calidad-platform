@@ -3,7 +3,7 @@ from io import StringIO
 from django.core.management import call_command
 from django.test import TestCase
 
-from apps.accounts.models import Role, User, UserRoleScope
+from apps.accounts.models import User
 from apps.anomalies.models import AnomalyCodeReservation
 from apps.audit.models import AuditEvent
 from apps.catalog.models import Area, Site
@@ -19,13 +19,6 @@ class ClearOperationalDataCommandTests(TestCase):
         )
         self.site = Site.objects.create(code="S01", name="Planta")
         self.area = Area.objects.create(code="CAL", name="Calidad", site=self.site)
-        self.role = Role.objects.create(code="quality", name="Calidad")
-        UserRoleScope.objects.create(
-            user=self.user,
-            role=self.role,
-            site=self.site,
-            area=self.area,
-        )
         NotificationTemplate.objects.create(
             code="test-template",
             subject_template="Prueba",
@@ -63,8 +56,6 @@ class ClearOperationalDataCommandTests(TestCase):
         self.assertFalse(AuditEvent.objects.exists())
         self.assertFalse(AnomalyCodeReservation.objects.exists())
         self.assertTrue(User.objects.filter(pk=self.user.pk).exists())
-        self.assertTrue(Role.objects.filter(pk=self.role.pk).exists())
-        self.assertTrue(UserRoleScope.objects.filter(user=self.user).exists())
         self.assertTrue(Site.objects.filter(pk=self.site.pk).exists())
         self.assertTrue(Area.objects.filter(pk=self.area.pk).exists())
         self.assertTrue(

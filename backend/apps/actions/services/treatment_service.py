@@ -4,8 +4,13 @@ from django.db import models, transaction
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from apps.accounts.constants import PERMISSION_ANALYZE_ANOMALY, PERMISSION_ASSIGN_ACTION
 from apps.accounts.models import User
+from apps.accounts.services.access_policy import (
+    can_execute_assignment,
+    can_manage_assigned_process,
+    has_global_access,
+    is_management_user,
+)
 from apps.actions.models import (
     Treatment,
     TreatmentAnomaly,
@@ -14,6 +19,7 @@ from apps.actions.models import (
     TreatmentLearnedLesson,
     TreatmentLearnedLessonEvidence,
     TreatmentParticipant,
+    TreatmentParticipantRole,
     TreatmentRootCause,
     TreatmentStatus,
     TreatmentTask,
@@ -30,6 +36,12 @@ from apps.anomalies.models import (
     ObservationResolutionPath,
 )
 from apps.anomalies.services.classification_rules import is_immediate_action_anomaly
+from apps.notifications.services import (
+    dismiss_treatment_task_assignment_tasks,
+    notify_treatment_participant_invited,
+    notify_treatment_task_assigned,
+    sync_treatment_task_assignment_status,
+)
 from common.upload_validation import normalized_upload_content_type, validate_evidence_file
 
 
@@ -47,28 +59,77 @@ def _request_id(value: str | None) -> str:
 
 
 
-def _require_treatment_permission(user, message: str, treatment: Treatment | None = None) -> None:
-    if user.is_superuser:
+def has_global_treatment_management_access(user) -> bool:
+    return has_global_access(user)
+
+
+def can_create_treatment_for_anomaly(user, anomaly: Anomaly) -> bool:
+    return can_manage_assigned_process(user, anomaly.owner_id)
+
+
+def can_manage_treatment(user, treatment: Treatment) -> bool:
+    if has_global_treatment_management_access(user):
+        return True
+    user_id = getattr(user, "id", None)
+    if not user_id:
+        return False
+    if not is_management_user(user):
+        return False
+    if treatment.created_by_id == user_id or treatment.primary_anomaly.owner_id == user_id:
+        return True
+    prefetched_participants = getattr(treatment, "_prefetched_objects_cache", {}).get("participants")
+    if prefetched_participants is not None:
+        return any(
+            participant.user_id == user_id and participant.role == TreatmentParticipantRole.OWNER
+            for participant in prefetched_participants
+        )
+    return treatment.participants.filter(user_id=user_id, role=TreatmentParticipantRole.OWNER).exists()
+
+
+def can_update_treatment_task(user, treatment_task: TreatmentTask) -> bool:
+    if can_execute_assignment(user, treatment_task.responsible_id):
+        return True
+    return can_manage_treatment(user, treatment_task.treatment)
+
+
+def can_validate_treatment_effectiveness(user, treatment: Treatment) -> bool:
+    return bool(
+        treatment.effectiveness_responsible_id
+        and treatment.effectiveness_responsible_id == getattr(user, "id", None)
+    )
+
+
+def _require_treatment_management(user, message: str, treatment: Treatment) -> None:
+    if not can_manage_treatment(user, treatment):
+        raise PermissionDenied(message)
+
+
+def _require_treatment_creation(user, message: str, anomaly: Anomaly) -> None:
+    if not can_create_treatment_for_anomaly(user, anomaly):
+        raise PermissionDenied(message)
+
+
+def _ensure_anomaly_owner_is_treatment_participant(*, treatment: Treatment, anomaly: Anomaly, actor) -> None:
+    if not anomaly.owner_id:
         return
-    access_level = getattr(user, "access_level", "")
-    if access_level in {
-        User.AccessLevel.ADMINISTRADOR,
-        User.AccessLevel.DESARROLLADOR,
-        User.AccessLevel.MANDO_MEDIO_ACTIVO,
-    }:
+
+    participant, created = TreatmentParticipant.objects.get_or_create(
+        treatment=treatment,
+        user=anomaly.owner,
+        defaults={
+            "role": TreatmentParticipantRole.OWNER,
+            "note": f"Responsable asignado en Revisión de hallazgos de la anomalía {anomaly.code}.",
+            "created_by": actor,
+            "updated_by": actor,
+        },
+    )
+    if created or participant.role == TreatmentParticipantRole.OWNER:
         return
-    if user.has_perm(PERMISSION_ASSIGN_ACTION) or user.has_perm(PERMISSION_ANALYZE_ANOMALY):
-        return
-    if treatment is not None:
-        if treatment.created_by_id == user.id:
-            return
-        if getattr(treatment, "primary_anomaly_id", None) and getattr(getattr(treatment, "primary_anomaly", None), "reporter_id", None) == user.id:
-            return
-        if treatment.participants.filter(user_id=user.id).exists():
-            return
-        if treatment.tasks.filter(responsible_id=user.id).exists():
-            return
-    raise PermissionDenied(message)
+
+    participant.role = TreatmentParticipantRole.OWNER
+    participant.updated_by = actor
+    participant.full_clean()
+    participant.save(update_fields=["role", "updated_by", "updated_at"])
 
 
 
@@ -271,7 +332,7 @@ def snapshot_learned_lesson(lesson: TreatmentLearnedLesson) -> dict:
 
 @transaction.atomic
 def save_treatment_learned_lesson(*, treatment: Treatment, user, data: dict, files=None, request_id: str = "") -> TreatmentLearnedLesson:
-    _require_treatment_permission(user, "No tiene permisos para registrar lecciones aprendidas.", treatment=treatment)
+    _require_treatment_management(user, "No tiene permisos para registrar lecciones aprendidas.", treatment)
     locked = Treatment.objects.select_for_update().get(pk=treatment.pk)
     if locked.effectiveness_validation_result != TreatmentEffectivenessValidationResult.EFFECTIVE:
         raise ValidationError({"treatment": "Solo se pueden registrar lecciones aprendidas en tratamientos validados como eficaces."})
@@ -578,7 +639,7 @@ def _ensure_treatment_in_progress(*, treatment: Treatment, user, reason: str) ->
 
 @transaction.atomic
 def create_treatment(*, primary_anomaly, user, data: dict, request_id: str = "") -> Treatment:
-    _require_treatment_permission(user, "No tiene permisos para crear tratamientos.")
+    _require_treatment_creation(user, "No tiene permisos para crear tratamientos.", primary_anomaly)
 
     ensure_anomaly_available_for_treatment(primary_anomaly, field="primary_anomaly")
 
@@ -612,6 +673,11 @@ def create_treatment(*, primary_anomaly, user, data: dict, request_id: str = "")
         created_by=user,
         updated_by=user,
     )
+    _ensure_anomaly_owner_is_treatment_participant(
+        treatment=treatment,
+        anomaly=primary_anomaly,
+        actor=user,
+    )
 
     links = TreatmentAnomaly.objects.filter(treatment=treatment).select_related("anomaly")
     for link in links:
@@ -639,7 +705,7 @@ def create_treatment(*, primary_anomaly, user, data: dict, request_id: str = "")
 
 @transaction.atomic
 def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str = "") -> Treatment:
-    _require_treatment_permission(user, "No tiene permisos para actualizar tratamientos.", treatment=treatment)
+    _require_treatment_management(user, "No tiene permisos para actualizar tratamientos.", treatment)
     locked = Treatment.objects.select_for_update().get(pk=treatment.pk)
     ensure_treatment_is_editable(locked)
     before = snapshot_treatment(locked)
@@ -719,7 +785,6 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
 
 @transaction.atomic
 def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str, comment: str = "", request_id: str = "") -> Treatment:
-    _require_treatment_permission(user, "No tiene permisos para validar tratamientos.", treatment=treatment)
     locked = (
         Treatment.objects.select_for_update(of=("self",))
         .select_related("effectiveness_responsible")
@@ -731,7 +796,7 @@ def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str,
 
     if not locked.effectiveness_responsible_id:
         raise ValidationError({"effectiveness_responsible": "El tratamiento no tiene responsable de evaluacion de eficacia."})
-    if locked.effectiveness_responsible_id != user.pk:
+    if not can_validate_treatment_effectiveness(user, locked):
         raise PermissionDenied("Solo el responsable designado puede validar la eficacia del tratamiento.")
 
     validation_state = get_treatment_validation_state(locked)
@@ -781,7 +846,7 @@ def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str,
 
 @transaction.atomic
 def add_treatment_anomaly(*, treatment: Treatment, anomaly, user, request_id: str = "") -> TreatmentAnomaly:
-    _require_treatment_permission(user, "No tiene permisos para asociar anomalias al tratamiento.", treatment=treatment)
+    _require_treatment_management(user, "No tiene permisos para asociar anomalias al tratamiento.", treatment)
     ensure_treatment_is_editable(treatment)
     if not is_open_treatment_for_association(treatment):
         raise ValidationError({"treatment": "Solo se pueden asociar anomalias a tratamientos abiertos y no validados."})
@@ -798,6 +863,11 @@ def add_treatment_anomaly(*, treatment: Treatment, anomaly, user, request_id: st
     )
     if not created:
         raise ValidationError({"anomaly": "La anomalia ya esta asociada a este tratamiento."})
+    _ensure_anomaly_owner_is_treatment_participant(
+        treatment=treatment,
+        anomaly=anomaly,
+        actor=user,
+    )
 
     record_audit_event(
         entity=treatment,
@@ -817,7 +887,7 @@ def add_treatment_anomaly(*, treatment: Treatment, anomaly, user, request_id: st
 
 @transaction.atomic
 def add_treatment_participant(*, treatment: Treatment, participant_user, role: str, note: str, user, request_id: str = "") -> TreatmentParticipant:
-    _require_treatment_permission(user, "No tiene permisos para convocar participantes al tratamiento.", treatment=treatment)
+    _require_treatment_management(user, "No tiene permisos para convocar participantes al tratamiento.", treatment)
     ensure_treatment_is_editable(treatment)
     participant, created = TreatmentParticipant.objects.get_or_create(
         treatment=treatment,
@@ -847,13 +917,20 @@ def add_treatment_participant(*, treatment: Treatment, participant_user, role: s
             else f"Se actualiza la convocatoria de {participant_user.username} en el tratamiento {treatment.code}."
         ),
     )
+    if created:
+        notify_treatment_participant_invited(
+            treatment=treatment,
+            participant=participant,
+            actor=user,
+            request_id=request_id,
+        )
     return participant
 
 
 
 @transaction.atomic
 def add_root_cause(*, treatment: Treatment, description: str, user, request_id: str = "") -> TreatmentRootCause:
-    _require_treatment_permission(user, "No tiene permisos para registrar causas raiz.", treatment=treatment)
+    _require_treatment_management(user, "No tiene permisos para registrar causas raiz.", treatment)
     ensure_treatment_is_editable(treatment)
     if not description.strip():
         raise ValidationError({"description": "La descripcion de la causa raiz es obligatoria."})
@@ -899,7 +976,7 @@ def add_root_cause(*, treatment: Treatment, description: str, user, request_id: 
 
 @transaction.atomic
 def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: str = "") -> TreatmentTask:
-    _require_treatment_permission(user, "No tiene permisos para registrar tareas de tratamiento.", treatment=treatment)
+    _require_treatment_management(user, "No tiene permisos para registrar tareas de tratamiento.", treatment)
     ensure_treatment_is_editable(treatment)
     title = (data.get("title") or "").strip()
     if not title:
@@ -968,19 +1045,41 @@ def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: st
         user=user,
         comment=f"Tratamiento {treatment.code}: se crea la tarea {task.code or task.title}.",
     )
+    notify_treatment_task_assigned(
+        treatment_task=task,
+        actor=user,
+        request_id=request_id,
+    )
+    sync_treatment_task_assignment_status(
+        treatment_task=task,
+        actor=user,
+        request_id=request_id,
+    )
     return task
 
 
 
 @transaction.atomic
 def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, request_id: str = "") -> TreatmentTask:
-    _require_treatment_permission(user, "No tiene permisos para actualizar tareas de tratamiento.", treatment=treatment_task.treatment)
+    if not can_update_treatment_task(user, treatment_task):
+        raise PermissionDenied("No tiene permisos para actualizar esta tarea de tratamiento.")
+    task_manager = can_manage_treatment(user, treatment_task.treatment)
+    if not task_manager:
+        restricted_fields = set(data) - {"status", "evidence_note"}
+        if restricted_fields:
+            raise PermissionDenied(
+                "El responsable asignado solo puede actualizar el estado de su tarea y registrar la nota de evidencia."
+            )
     ensure_treatment_is_editable(treatment_task.treatment)
     locked = TreatmentTask.objects.select_for_update().get(pk=treatment_task.pk)
     previous_status = locked.status
+    previous_responsible_id = locked.responsible_id
     next_status = data.get("status", locked.status)
     status_changed = "status" in data and next_status != previous_status
     evidence_note = (data.pop("evidence_note", "") or "").strip()
+
+    if status_changed and locked.responsible_id != getattr(user, "id", None):
+        raise PermissionDenied("Solo el responsable asignado puede actualizar el estado de esta tarea.")
 
     if status_changed and not evidence_note:
         raise ValidationError({"evidence_note": "Debe cargar una nota de evidencia para cambiar el estado de la tarea."})
@@ -1050,12 +1149,31 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
             user=user,
             comment=f"Tratamiento {locked.treatment.code}: se actualiza la tarea {locked.code or locked.title}.",
         )
+    if previous_responsible_id != locked.responsible_id:
+        dismiss_treatment_task_assignment_tasks(
+            treatment_task=locked,
+            actor=user,
+            keep_user_id=locked.responsible_id,
+            request_id=request_id,
+        )
+        notify_treatment_task_assigned(
+            treatment_task=locked,
+            actor=user,
+            reassigned=True,
+            request_id=request_id,
+        )
+    if status_changed or "execution_date" in data or previous_responsible_id != locked.responsible_id:
+        sync_treatment_task_assignment_status(
+            treatment_task=locked,
+            actor=user,
+            request_id=request_id,
+        )
     return locked
 
 
 @transaction.atomic
 def add_treatment_evidence(*, treatment: Treatment, user, data: dict, request_id: str = "") -> TreatmentEvidence:
-    _require_treatment_permission(user, "No tiene permisos para agregar evidencias al tratamiento.", treatment=treatment)
+    _require_treatment_management(user, "No tiene permisos para agregar evidencias al tratamiento.", treatment)
     ensure_treatment_is_editable(treatment)
 
     file_obj = data.get("file")
@@ -1094,7 +1212,8 @@ def add_treatment_evidence(*, treatment: Treatment, user, data: dict, request_id
 @transaction.atomic
 def add_treatment_task_evidence(*, treatment_task: TreatmentTask, user, data: dict, request_id: str = "") -> TreatmentTaskEvidence:
     treatment = treatment_task.treatment
-    _require_treatment_permission(user, "No tiene permisos para agregar evidencias a la tarea.", treatment=treatment)
+    if not can_execute_assignment(user, treatment_task.responsible_id):
+        raise PermissionDenied("Solo el responsable asignado puede agregar evidencias a esta tarea.")
     ensure_treatment_is_editable(treatment)
 
     file_obj = data.get("file")

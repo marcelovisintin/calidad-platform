@@ -231,9 +231,20 @@ class ActionPlanDetailSerializer(serializers.ModelSerializer):
         )
 
 
+PROCESS_MANAGER_QUERYSET = User.objects.filter(
+    is_active=True,
+    access_level__in=[
+        User.AccessLevel.MANDO_MEDIO_ACTIVO,
+        User.AccessLevel.ADMINISTRADOR,
+        User.AccessLevel.DESARROLLADOR,
+    ],
+)
+ACTIVE_USER_QUERYSET = User.objects.filter(is_active=True)
+
+
 class ActionPlanWriteSerializer(serializers.ModelSerializer):
     anomaly = serializers.PrimaryKeyRelatedField(queryset=Anomaly.objects.all())
-    owner = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
+    owner = serializers.PrimaryKeyRelatedField(queryset=PROCESS_MANAGER_QUERYSET, required=False, allow_null=True)
 
     class Meta:
         model = ActionPlan
@@ -241,7 +252,7 @@ class ActionPlanWriteSerializer(serializers.ModelSerializer):
 
 
 class ActionPlanUpdateSerializer(serializers.ModelSerializer):
-    owner = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
+    owner = serializers.PrimaryKeyRelatedField(queryset=PROCESS_MANAGER_QUERYSET, required=False, allow_null=True)
 
     class Meta:
         model = ActionPlan
@@ -257,7 +268,7 @@ class ActionItemWriteSerializer(serializers.ModelSerializer):
     due_date = serializers.DateField(required=False, allow_null=True, input_formats=["%Y-%m-%d"], style=DATE_INPUT_STYLE)
     action_type = serializers.PrimaryKeyRelatedField(queryset=ActionType.objects.all())
     priority = serializers.PrimaryKeyRelatedField(queryset=Priority.objects.all(), required=False, allow_null=True)
-    assigned_to = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
+    assigned_to = serializers.PrimaryKeyRelatedField(queryset=ACTIVE_USER_QUERYSET, required=False, allow_null=True)
 
     class Meta:
         model = ActionItem
@@ -289,7 +300,7 @@ class ActionItemUpdateSerializer(serializers.ModelSerializer):
     due_date = serializers.DateField(required=False, allow_null=True, input_formats=["%Y-%m-%d"], style=DATE_INPUT_STYLE)
     action_type = serializers.PrimaryKeyRelatedField(queryset=ActionType.objects.all(), required=False)
     priority = serializers.PrimaryKeyRelatedField(queryset=Priority.objects.all(), required=False, allow_null=True)
-    assigned_to = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
+    assigned_to = serializers.PrimaryKeyRelatedField(queryset=ACTIVE_USER_QUERYSET, required=False, allow_null=True)
 
     class Meta:
         model = ActionItem

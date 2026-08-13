@@ -4,10 +4,11 @@ from datetime import datetime, time
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
-from apps.actions.models import ActionItemStatus
+from apps.actions.models import ActionItemStatus, TreatmentTaskStatus
 from apps.anomalies.models import ParticipantRole
 from apps.audit.services import record_audit_event
 from apps.notifications.models import (
@@ -34,6 +35,15 @@ ACTION_ITEM_TASK_STATUS_MAP = {
     ActionItemStatus.COMPLETED: RecipientTaskStatus.COMPLETED,
     ActionItemStatus.CANCELLED: RecipientTaskStatus.DISMISSED,
 }
+
+TREATMENT_TASK_STATUS_MAP = {
+    TreatmentTaskStatus.PENDING: RecipientTaskStatus.PENDING,
+    TreatmentTaskStatus.IN_PROGRESS: RecipientTaskStatus.IN_PROGRESS,
+    TreatmentTaskStatus.COMPLETED: RecipientTaskStatus.COMPLETED,
+    TreatmentTaskStatus.CANCELLED: RecipientTaskStatus.DISMISSED,
+}
+
+FINDING_MANAGEMENT_TEMPLATE = "finding_management_assigned"
 
 
 def _request_id(value: str | None) -> str:
@@ -64,6 +74,13 @@ def _action_due_at(action_item):
     if not action_item.due_date:
         return None
     due_datetime = datetime.combine(action_item.due_date, time(23, 59, 59))
+    return timezone.make_aware(due_datetime, timezone.get_current_timezone())
+
+
+def _treatment_task_due_at(treatment_task):
+    if not treatment_task.execution_date:
+        return None
+    due_datetime = datetime.combine(treatment_task.execution_date, time(23, 59, 59))
     return timezone.make_aware(due_datetime, timezone.get_current_timezone())
 
 
@@ -304,6 +321,277 @@ def sync_action_assignment_task_status(*, action_item, actor=None, request_id: s
         )
 
 
+@transaction.atomic
+def dismiss_treatment_task_assignment_tasks(
+    *, treatment_task, actor=None, keep_user_id=None, request_id: str = ""
+) -> None:
+    queryset = NotificationRecipient.objects.select_for_update().filter(
+        notification__source_type="actions.treatmenttask",
+        notification__source_id=treatment_task.pk,
+        notification__task_type=NotificationTaskType.ACTION_ASSIGNMENT,
+        task_status__in=[RecipientTaskStatus.PENDING, RecipientTaskStatus.IN_PROGRESS],
+    )
+    if keep_user_id:
+        queryset = queryset.exclude(user_id=keep_user_id)
+
+    recipients = list(queryset.select_related("notification"))
+    if not recipients:
+        return
+
+    now = timezone.now()
+    for recipient in recipients:
+        recipient.task_status = RecipientTaskStatus.DISMISSED
+        recipient.resolved_at = now
+        if recipient.channel == NotificationChannel.EMAIL and recipient.delivery_status == DeliveryStatus.PENDING:
+            recipient.delivery_status = DeliveryStatus.SKIPPED
+            recipient.delivery_error = "Asignación reemplazada antes del envío."
+        recipient.updated_by = actor
+        recipient.row_version = (recipient.row_version or 0) + 1
+        recipient.updated_at = now
+
+    NotificationRecipient.objects.bulk_update(
+        recipients,
+        [
+            "task_status",
+            "resolved_at",
+            "delivery_status",
+            "delivery_error",
+            "updated_by",
+            "row_version",
+            "updated_at",
+        ],
+    )
+    notification_ids = {recipient.notification_id for recipient in recipients}
+    Notification.objects.filter(pk__in=notification_ids).update(
+        status=NotificationStatus.SENT,
+        row_version=F("row_version") + 1,
+        updated_at=now,
+    )
+    for recipient in recipients:
+        record_audit_event(
+            entity=recipient.notification,
+            action="notification.task_dismissed",
+            actor=actor,
+            after_data={
+                "recipient_id": str(recipient.pk),
+                "task_status": recipient.task_status,
+                "reason": "treatment_task_reassigned",
+            },
+            request_id=_request_id(request_id),
+        )
+
+
+@transaction.atomic
+def sync_treatment_task_assignment_status(*, treatment_task, actor=None, request_id: str = "") -> None:
+    task_status = TREATMENT_TASK_STATUS_MAP.get(treatment_task.status, RecipientTaskStatus.PENDING)
+    is_terminal = task_status in {RecipientTaskStatus.COMPLETED, RecipientTaskStatus.DISMISSED}
+    now = timezone.now()
+    recipients = list(
+        NotificationRecipient.objects.select_for_update()
+        .select_related("notification")
+        .filter(
+            notification__source_type="actions.treatmenttask",
+            notification__source_id=treatment_task.pk,
+            notification__task_type=NotificationTaskType.ACTION_ASSIGNMENT,
+            user_id=treatment_task.responsible_id,
+        )
+    )
+    if not recipients:
+        return
+
+    for recipient in recipients:
+        recipient.task_status = task_status
+        recipient.resolved_at = now if is_terminal else None
+        if (
+            is_terminal
+            and recipient.channel == NotificationChannel.EMAIL
+            and recipient.delivery_status == DeliveryStatus.PENDING
+        ):
+            recipient.delivery_status = DeliveryStatus.SKIPPED
+            recipient.delivery_error = "La tarea finalizó antes del envío de la asignación."
+        recipient.updated_by = actor
+        recipient.row_version = (recipient.row_version or 0) + 1
+        recipient.updated_at = now
+
+    NotificationRecipient.objects.bulk_update(
+        recipients,
+        [
+            "task_status",
+            "resolved_at",
+            "delivery_status",
+            "delivery_error",
+            "updated_by",
+            "row_version",
+            "updated_at",
+        ],
+    )
+    notification_ids = {recipient.notification_id for recipient in recipients}
+    notification_updates = {
+        "due_at": _treatment_task_due_at(treatment_task),
+        "row_version": F("row_version") + 1,
+        "updated_at": now,
+    }
+    if is_terminal:
+        notification_updates["status"] = NotificationStatus.SENT
+    Notification.objects.filter(pk__in=notification_ids).update(**notification_updates)
+    for recipient in recipients:
+        record_audit_event(
+            entity=recipient.notification,
+            action="notification.task_synced",
+            actor=actor,
+            after_data={"recipient_id": str(recipient.pk), "task_status": recipient.task_status},
+            request_id=_request_id(request_id),
+        )
+
+
+def _dismiss_previous_finding_management_tasks(
+    *, anomaly, actor=None, keep_notification_id=None, request_id: str = ""
+) -> None:
+    active_in_app = list(
+        NotificationRecipient.objects.select_for_update()
+        .select_related("notification")
+        .filter(
+            channel=NotificationChannel.IN_APP,
+            notification__source_type="anomalies.anomaly",
+            notification__source_id=anomaly.pk,
+            notification__template_code=FINDING_MANAGEMENT_TEMPLATE,
+            notification__task_type=NotificationTaskType.FINDING_MANAGEMENT,
+            task_status__in=[RecipientTaskStatus.PENDING, RecipientTaskStatus.IN_PROGRESS],
+        )
+        .exclude(notification_id=keep_notification_id)
+    )
+    if not active_in_app:
+        return
+
+    notification_ids = [recipient.notification_id for recipient in active_in_app]
+    recipients = list(
+        NotificationRecipient.objects.select_for_update().filter(notification_id__in=notification_ids)
+    )
+    now = timezone.now()
+    for recipient in recipients:
+        if recipient.task_status in {RecipientTaskStatus.PENDING, RecipientTaskStatus.IN_PROGRESS}:
+            recipient.task_status = RecipientTaskStatus.DISMISSED
+            recipient.resolved_at = now
+        if recipient.channel == NotificationChannel.EMAIL and recipient.delivery_status == DeliveryStatus.PENDING:
+            recipient.delivery_status = DeliveryStatus.SKIPPED
+            recipient.delivery_error = "Asignación reemplazada antes del envío."
+        recipient.updated_by = actor
+        recipient.row_version = (recipient.row_version or 0) + 1
+        recipient.updated_at = now
+
+    NotificationRecipient.objects.bulk_update(
+        recipients,
+        [
+            "task_status",
+            "resolved_at",
+            "delivery_status",
+            "delivery_error",
+            "updated_by",
+            "row_version",
+            "updated_at",
+        ],
+    )
+    for recipient in active_in_app:
+        record_audit_event(
+            entity=recipient.notification,
+            action="notification.task_dismissed",
+            actor=actor,
+            after_data={
+                "recipient_id": str(recipient.pk),
+                "task_status": RecipientTaskStatus.DISMISSED,
+                "reason": "finding_responsible_reassigned",
+            },
+            request_id=_request_id(request_id),
+        )
+
+
+@transaction.atomic
+def notify_finding_management_assigned(*, anomaly, responsible, actor=None, request_id: str = ""):
+    from apps.anomalies.services.classification_rules import is_immediate_action_anomaly
+
+    severity_id = str(anomaly.severity_id or "")
+    matching_recipient = None
+    if responsible:
+        active_recipients = (
+            NotificationRecipient.objects.select_for_update()
+            .select_related("notification")
+            .filter(
+                user=responsible,
+                channel=NotificationChannel.IN_APP,
+                notification__source_type="anomalies.anomaly",
+                notification__source_id=anomaly.pk,
+                notification__template_code=FINDING_MANAGEMENT_TEMPLATE,
+                notification__task_type=NotificationTaskType.FINDING_MANAGEMENT,
+                task_status__in=[RecipientTaskStatus.PENDING, RecipientTaskStatus.IN_PROGRESS],
+            )
+            .order_by("-created_at")
+        )
+        matching_recipient = next(
+            (
+                recipient
+                for recipient in active_recipients
+                if recipient.notification.context_data.get("severity_id") == severity_id
+            ),
+            None,
+        )
+
+    _dismiss_previous_finding_management_tasks(
+        anomaly=anomaly,
+        actor=actor,
+        keep_notification_id=matching_recipient.notification_id if matching_recipient else None,
+        request_id=request_id,
+    )
+    if matching_recipient:
+        return matching_recipient.notification
+    if not responsible:
+        return None
+
+    is_observation = is_immediate_action_anomaly(anomaly)
+    if is_observation:
+        title = f"Gestión requerida para la observación {anomaly.code}"
+        instruction = (
+            "Debes revisar el hallazgo y definir si corresponde gestionarlo como observación directa "
+            "o derivarlo a un tratamiento."
+        )
+        action_url = f"/anomalies/{anomaly.pk}"
+    else:
+        title = f"Tratamiento requerido para la anomalía {anomaly.code}"
+        instruction = "Debes crear y coordinar el tratamiento, convocando a los participantes necesarios."
+        action_url = f"/treatments?anomaly={anomaly.pk}"
+
+    return create_internal_notification(
+        recipients=[responsible],
+        title=title,
+        body=(
+            f"Hola {responsible.full_name},\n\n"
+            f"Fuiste designado responsable del hallazgo {anomaly.code}.\n"
+            f"Clasificación: {anomaly.severity.name}\n"
+            f"Título: {anomaly.title}\n"
+            f"Sector: {anomaly.area.name}\n\n"
+            f"{instruction}"
+        ),
+        source_type="anomalies.anomaly",
+        source_id=anomaly.pk,
+        actor=actor,
+        category=NotificationCategory.ACTION,
+        template_code=FINDING_MANAGEMENT_TEMPLATE,
+        is_task=True,
+        task_type=NotificationTaskType.FINDING_MANAGEMENT,
+        action_url=action_url,
+        due_at=anomaly.due_at,
+        context_data={
+            "anomaly_id": str(anomaly.pk),
+            "anomaly_code": anomaly.code,
+            "severity_id": severity_id,
+            "severity_code": anomaly.severity.code,
+            "responsible_id": str(responsible.pk),
+            "management_path": "observation_or_treatment" if is_observation else "treatment",
+        },
+        request_id=request_id,
+        email_enabled=True,
+    )
+
+
 
 def notify_anomaly_created(*, anomaly, actor=None, request_id: str = ""):
     current_responsible = anomaly.owner
@@ -368,6 +656,58 @@ def notify_action_item_assigned(*, action_item, actor=None, reassigned: bool = F
     )
 
 
+def notify_treatment_task_assigned(*, treatment_task, actor=None, reassigned: bool = False, request_id: str = ""):
+    if not treatment_task.responsible_id:
+        return None
+
+    treatment = treatment_task.treatment
+    verb = "reasignada" if reassigned else "asignada"
+    execution_label = (
+        treatment_task.execution_date.strftime("%d/%m/%Y")
+        if treatment_task.execution_date
+        else "Sin fecha definida"
+    )
+    anomaly_codes = list(
+        treatment_task.anomaly_links.select_related("anomaly")
+        .order_by("anomaly__code")
+        .values_list("anomaly__code", flat=True)
+    )
+    anomaly_label = ", ".join(anomaly_codes) or treatment.primary_anomaly.code
+    return create_internal_notification(
+        recipients=[treatment_task.responsible],
+        title=f"Tarea {treatment_task.code or treatment_task.title} {verb}",
+        body=(
+            f"Hola {treatment_task.responsible.full_name},\n\n"
+            f"Se te asignó la tarea {treatment_task.code or treatment_task.title} del tratamiento {treatment.code}.\n"
+            f"Título: {treatment_task.title}\n"
+            f"Descripción: {treatment_task.description}\n"
+            f"Anomalía(s): {anomaly_label}\n"
+            f"Fecha de ejecución: {execution_label}.\n\n"
+            "Ingresá al Sistema de Gestión de Calidad con tu propio usuario para consultar y gestionar la tarea."
+        ),
+        source_type="actions.treatmenttask",
+        source_id=treatment_task.pk,
+        actor=actor,
+        category=NotificationCategory.ACTION,
+        template_code="treatment_task_assigned",
+        is_task=True,
+        task_type=NotificationTaskType.ACTION_ASSIGNMENT,
+        action_url="/actions/mine",
+        due_at=_treatment_task_due_at(treatment_task),
+        context_data={
+            "treatment_id": str(treatment.pk),
+            "treatment_code": treatment.code,
+            "treatment_task_id": str(treatment_task.pk),
+            "treatment_task_code": treatment_task.code,
+            "responsible_id": str(treatment_task.responsible_id),
+            "anomaly_codes": anomaly_codes,
+            "include_action_url_in_email": False,
+        },
+        request_id=request_id,
+        email_enabled=True,
+    )
+
+
 
 def notify_participation_request(*, anomaly, participant, actor=None, request_id: str = ""):
     task_type = PARTICIPATION_TASK_TYPE_BY_ROLE.get(participant.role)
@@ -392,4 +732,45 @@ def notify_participation_request(*, anomaly, participant, actor=None, request_id
             "participant_role": participant.role,
         },
         request_id=request_id,
+    )
+
+
+def notify_treatment_participant_invited(*, treatment, participant, actor=None, request_id: str = ""):
+    scheduled_label = "Sin fecha programada"
+    if treatment.scheduled_for:
+        scheduled_label = timezone.localtime(treatment.scheduled_for).strftime("%d/%m/%Y %H:%M")
+    location_label = (treatment.treatment_location or "").strip() or "Sin lugar definido"
+    anomaly = treatment.primary_anomaly
+    return create_internal_notification(
+        recipients=[participant.user],
+        title=f"Invitación al tratamiento {treatment.code}",
+        body=(
+            f"Hola {participant.user.full_name},\n\n"
+            f"Fuiste invitado al tratamiento {treatment.code}.\n"
+            f"Anomalía: {anomaly.code} - {anomaly.title}\n"
+            f"Rol: {participant.get_role_display()}\n"
+            f"Fecha programada: {scheduled_label}\n"
+            f"Lugar: {location_label}.\n\n"
+            "Ingresá al Sistema de Gestión de Calidad con tu propio usuario para consultar y gestionar la invitación."
+        ),
+        source_type="actions.treatment",
+        source_id=treatment.pk,
+        actor=actor,
+        category=NotificationCategory.PARTICIPATION,
+        template_code="treatment_participant_invited",
+        is_task=True,
+        task_type=NotificationTaskType.TREATMENT_PARTICIPATION,
+        action_url=f"/treatments?treatment={treatment.pk}",
+        due_at=treatment.scheduled_for,
+        context_data={
+            "treatment_id": str(treatment.pk),
+            "treatment_code": treatment.code,
+            "anomaly_id": str(anomaly.pk),
+            "anomaly_code": anomaly.code,
+            "participant_id": str(participant.pk),
+            "participant_role": participant.role,
+            "include_action_url_in_email": False,
+        },
+        request_id=request_id,
+        email_enabled=True,
     )

@@ -281,7 +281,7 @@ export function ImmediateActionsPage() {
       description="Gestion directa para anomalias con Revisión de hallazgos como Observacion. No generan tratamiento: se ejecuta, verifica eficacia y se cierra en este flujo."
       />
 
-      <div className="toolbar-card">
+      <div className="toolbar-card filter-toolbar filter-toolbar-inline">
         <input
           onChange={handleSearch}
           placeholder="Buscar por codigo, titulo, area o usuario"

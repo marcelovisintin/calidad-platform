@@ -167,8 +167,8 @@ export function TreatmentTrackingPage() {
         description="Consulta y auditoria solo lectura de tratamientos, procedimientos, tareas y validaciones."
       />
 
-      <section className="toolbar-card">
-        <div className="form-grid">
+      <section className="toolbar-card filter-toolbar">
+        <div className="form-grid filter-grid">
           <label className="field">
             <span>Codigo de procedimiento</span>
             <input

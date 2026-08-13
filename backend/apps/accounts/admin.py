@@ -1,7 +1,7 @@
 ﻿from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from apps.accounts.models import Role, User, UserRoleScope
+from apps.accounts.models import User
 
 
 @admin.register(User)
@@ -57,18 +57,3 @@ class UserAdmin(DjangoUserAdmin):
             },
         ),
     )
-
-
-@admin.register(Role)
-class RoleAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "is_active")
-    list_filter = ("is_active",)
-    search_fields = ("code", "name")
-    filter_horizontal = ("permissions",)
-
-
-@admin.register(UserRoleScope)
-class UserRoleScopeAdmin(admin.ModelAdmin):
-    list_display = ("user", "role", "site", "area")
-    list_select_related = ("user", "role", "site", "area")
-    search_fields = ("user__username", "role__name", "site__name", "area__name")

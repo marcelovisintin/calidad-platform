@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.utils import timezone
+from rest_framework.exceptions import PermissionDenied
 
 from apps.accounts.models import User
 from apps.actions.models import ActionHistoryEvent, ActionItemHistory, ActionItemStatus
@@ -120,3 +121,29 @@ class ActionWorkflowServiceTests(TestCase):
         recipient.refresh_from_db()
         self.assertEqual(recipient.task_status, RecipientTaskStatus.COMPLETED)
         self.assertFalse(my_action_items_queryset(self.assignee, pending_only=True).filter(pk=item.pk).exists())
+
+    def test_admin_monitors_but_cannot_execute_an_action_assigned_to_another_user(self):
+        action_plan = create_action_plan(
+            anomaly=self.anomaly,
+            user=self.admin,
+            data={"owner": self.admin},
+        )
+        item = create_action_item(
+            action_plan=action_plan,
+            user=self.admin,
+            data={
+                "action_type": self.action_type,
+                "assigned_to": self.assignee,
+                "title": "Accion exclusiva del responsable",
+                "description": "Debe ejecutarla el usuario asignado.",
+                "sequence": 1,
+            },
+        )
+
+        with self.assertRaises(PermissionDenied):
+            transition_action_item(
+                action_item=item,
+                user=self.admin,
+                target_status=ActionItemStatus.IN_PROGRESS,
+                comment="Intento administrativo.",
+            )

@@ -637,7 +637,7 @@ class AnomalyCreateSerializer(serializers.ModelSerializer):
             "code": {"required": False, "allow_blank": True},
             "imputed_area": {"required": False, "allow_null": True},
             "line": {"required": False, "allow_null": True},
-            "owner": {"required": False, "allow_null": True},
+            "owner": {"read_only": True},
             "duplicate_of": {"required": False, "allow_null": True},
             "containment_summary": {"required": False, "allow_blank": True},
             "resolution_summary": {"required": False, "allow_blank": True},
@@ -655,7 +655,14 @@ class AnomalyUpdateSerializer(serializers.ModelSerializer):
     detected_at = serializers.DateTimeField(required=False, style=DATETIME_INPUT_STYLE)
     due_at = serializers.DateTimeField(required=False, allow_null=True, style=DATETIME_INPUT_STYLE)
     classification_responsible = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.filter(is_active=True),
+        queryset=User.objects.filter(
+            is_active=True,
+            access_level__in=[
+                User.AccessLevel.MANDO_MEDIO_ACTIVO,
+                User.AccessLevel.ADMINISTRADOR,
+                User.AccessLevel.DESARROLLADOR,
+            ],
+        ),
         required=False,
         allow_null=True,
         write_only=True,
@@ -695,7 +702,7 @@ class AnomalyUpdateSerializer(serializers.ModelSerializer):
             "area": {"required": False},
             "imputed_area": {"required": False, "allow_null": True},
             "line": {"required": False, "allow_null": True},
-            "owner": {"required": False, "allow_null": True},
+            "owner": {"read_only": True},
             "anomaly_type": {"required": False},
             "anomaly_origin": {"required": False},
             "severity": {"required": False, "allow_null": True},

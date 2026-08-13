@@ -222,13 +222,17 @@ export function MyActionsPage() {
     if (!selectedTask) {
       return;
     }
+    if (!selectedTask.can_update_status) {
+      setFormError("No tienes permisos para actualizar esta tarea.");
+      return;
+    }
 
     if (!selectedTask.treatment?.id) {
       setFormError("No se encontro el tratamiento asociado a la tarea.");
       return;
     }
 
-    if (!taskDraft.title.trim()) {
+    if (selectedTask.can_manage && !taskDraft.title.trim()) {
       setFormError("El titulo de la tarea es obligatorio.");
       return;
     }
@@ -242,20 +246,29 @@ export function MyActionsPage() {
 
     await runMutation(
       async () => {
-        await updateTreatmentTask(selectedTask.treatment.id, selectedTask.id, {
-          title: taskDraft.title.trim(),
-          description: taskDraft.description.trim(),
-          responsible: taskDraft.responsible || null,
-          execution_date: taskDraft.execution_date || null,
-          status: taskDraft.status,
-          evidence_note: statusChanged ? taskStatusEvidenceNote.trim() : undefined,
-          root_cause_ids: selectedTask.root_causes?.length
-            ? selectedTask.root_causes.map((cause) => cause.id)
-            : selectedTask.root_cause
-              ? [selectedTask.root_cause.id]
-              : [],
-          anomaly_ids: taskDraft.anomaly_ids,
-        });
+        await updateTreatmentTask(
+          selectedTask.treatment.id,
+          selectedTask.id,
+          selectedTask.can_manage
+            ? {
+                title: taskDraft.title.trim(),
+                description: taskDraft.description.trim(),
+                responsible: taskDraft.responsible || null,
+                execution_date: taskDraft.execution_date || null,
+                status: taskDraft.status,
+                evidence_note: statusChanged ? taskStatusEvidenceNote.trim() : undefined,
+                root_cause_ids: selectedTask.root_causes?.length
+                  ? selectedTask.root_causes.map((cause) => cause.id)
+                  : selectedTask.root_cause
+                    ? [selectedTask.root_cause.id]
+                    : [],
+                anomaly_ids: taskDraft.anomaly_ids,
+              }
+            : {
+                status: taskDraft.status,
+                evidence_note: statusChanged ? taskStatusEvidenceNote.trim() : undefined,
+              },
+        );
         setTaskStatusEvidenceNote("");
       },
       "Tarea actualizada.",
@@ -321,6 +334,10 @@ export function MyActionsPage() {
     if (!selectedTask) {
       return;
     }
+    if (!selectedTask.can_add_evidence) {
+      setFormError("No tienes permisos para cargar evidencias en esta tarea.");
+      return;
+    }
 
     if (!selectedTask.treatment?.id) {
       setFormError("No se encontro el tratamiento asociado a la tarea.");
@@ -355,8 +372,8 @@ export function MyActionsPage() {
         description="Listado historico de tareas con filtros por anomalia, tratamiento, estado, fecha terminada y usuario que la realizo."
       />
 
-      <section className="toolbar-card">
-        <div className="form-grid actions-filters-grid">
+      <section className="toolbar-card filter-toolbar">
+        <div className="form-grid filter-grid actions-filters-grid">
           <label className="field">
             <span>Buscar</span>
             <input
@@ -476,6 +493,11 @@ export function MyActionsPage() {
             <p className="muted-copy">
               Tratamiento: {selectedTask.treatment?.code || "Sin tratamiento"} | Anomalias asociadas: {selectedTask.anomalies.map((anomaly) => anomaly.code).join(", ") || "Sin asociar"}
             </p>
+            {!selectedTask.can_manage ? (
+              <div className="panel info compact-inline-panel">
+                <p>Como responsable de la tarea puedes actualizar su estado y cargar evidencias. La definicion, responsable y fecha solo pueden modificarlos quienes gestionan el tratamiento.</p>
+              </div>
+            ) : null}
 
             <div className="form-section nested-form">
               <div className="section-head compact">
@@ -540,7 +562,7 @@ export function MyActionsPage() {
                       {statusEvidenceError}
                     </span>
                   ) : null}
-                  <button className="button button-primary" disabled={busy} type="submit">
+                  <button className="button button-primary" disabled={busy || !selectedTask.can_update_status} type="submit">
                     Guardar tarea
                   </button>
                 </div>
@@ -549,6 +571,7 @@ export function MyActionsPage() {
                 <label className="field">
                   <span>Titulo</span>
                   <input
+                    disabled={!selectedTask.can_manage}
                     onChange={(event) => handleTaskDraftChange("title", event.target.value)}
                     required
                     type="text"
@@ -558,6 +581,7 @@ export function MyActionsPage() {
                 <label className="field">
                   <span>Estado</span>
                   <select
+                    disabled={!selectedTask.can_update_status}
                     onChange={(event) => {
                       setStatusEvidenceError(null);
                       handleTaskDraftChange("status", event.target.value as TaskDraft["status"]);
@@ -574,6 +598,7 @@ export function MyActionsPage() {
                 <label className="field">
                   <span>Responsable</span>
                   <select
+                    disabled={!selectedTask.can_manage}
                     onChange={(event) => handleTaskDraftChange("responsible", event.target.value)}
                     value={taskDraft.responsible}
                   >
@@ -588,6 +613,7 @@ export function MyActionsPage() {
                 <label className="field">
                   <span>Fecha ejecucion</span>
                   <input
+                    disabled={!selectedTask.can_manage}
                     onChange={(event) => handleTaskDraftChange("execution_date", event.target.value)}
                     type="date"
                     value={taskDraft.execution_date}
@@ -597,6 +623,7 @@ export function MyActionsPage() {
               <label className="field">
                 <span>Descripcion</span>
                 <textarea
+                  disabled={!selectedTask.can_manage}
                   onChange={(event) => handleTaskDraftChange("description", event.target.value)}
                   rows={3}
                   value={taskDraft.description}
@@ -628,7 +655,7 @@ export function MyActionsPage() {
                 <h3>Evidencias de la tarea</h3>
                 <button
                   className="button button-primary"
-                  disabled={busy || !taskEvidenceFile}
+                  disabled={busy || !selectedTask.can_add_evidence || !taskEvidenceFile}
                   onClick={() => void handleAddTaskEvidence()}
                   type="button"
                 >
@@ -640,6 +667,7 @@ export function MyActionsPage() {
                   <span>Archivo (imagen, PDF, Word, Excel, texto o ZIP)</span>
                   <input
                     accept={EVIDENCE_ACCEPT}
+                    disabled={!selectedTask.can_add_evidence}
                     key={taskEvidenceInputKey}
                     onChange={handleTaskEvidenceFileChange}
                     type="file"
@@ -648,6 +676,7 @@ export function MyActionsPage() {
                 <label className="field field-span-2">
                   <span>Nota de evidencia (opcional)</span>
                   <textarea
+                    disabled={!selectedTask.can_add_evidence}
                     onChange={(event) => setTaskEvidenceNote(event.target.value)}
                     rows={3}
                     value={taskEvidenceNote}

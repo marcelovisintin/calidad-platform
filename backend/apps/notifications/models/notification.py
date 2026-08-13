@@ -36,6 +36,7 @@ class NotificationTaskType(models.TextChoices):
     NONE = "", "Sin tarea"
     ACTION_ASSIGNMENT = "action_assignment", "Asignacion de accion"
     ANALYSIS_PARTICIPATION = "analysis_participation", "Participacion en analisis"
+    FINDING_MANAGEMENT = "finding_management", "Gestion de hallazgo"
     TREATMENT_PARTICIPATION = "treatment_participation", "Participacion en tratamiento"
     VERIFICATION_PARTICIPATION = "verification_participation", "Participacion en verificacion"
 

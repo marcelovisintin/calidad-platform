@@ -33,7 +33,11 @@ def _absolute_action_url(action_url: str) -> str:
 def _email_body(recipient: NotificationRecipient) -> str:
     notification = recipient.notification
     parts = [notification.body.strip()]
-    if action_url := _absolute_action_url(notification.action_url):
+    include_action_url = (
+        notification.template_code not in {"treatment_participant_invited", "treatment_task_assigned"}
+        and notification.context_data.get("include_action_url_in_email", True)
+    )
+    if include_action_url and (action_url := _absolute_action_url(notification.action_url)):
         parts.extend(["", f"Abrir en el sistema: {action_url}"])
     parts.extend(["", "Este es un mensaje automático del Sistema de Gestión de Calidad."])
     return "\n".join(parts).strip()
