@@ -23,6 +23,7 @@ import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
 import { StatusBadge } from "../../../components/StatusBadge";
+import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
@@ -481,6 +482,19 @@ export function TreatmentsPage() {
     setLinkCandidateAnomalyFilter(linkCandidateAnomalyDraft.trim());
     setLinkCandidateSectorFilter(linkCandidateSectorDraft.trim());
     setLinkCandidateAreaFilter(linkCandidateAreaDraft.trim());
+    setLinkCandidatePage(1);
+  };
+
+  const clearLinkCandidateFilters = () => {
+    setLinkCandidateAnomalyDraft("");
+    setLinkCandidateSectorDraft("");
+    setLinkCandidateAreaDraft("");
+    setLinkCandidateAnomalyFilter("");
+    setLinkCandidateSectorFilter("");
+    setLinkCandidateAreaFilter("");
+    setLinkCandidateUserFilter("");
+    setLinkCandidateDateFrom("");
+    setLinkCandidateDateTo("");
     setLinkCandidatePage(1);
   };
 
@@ -954,13 +968,18 @@ return (
       description="Gestion de tratamientos por anomalia con Revisión de hallazgos: convocatoria, analisis de causa y tareas asociadas."
       />
 
-      <div className="toolbar-card filter-toolbar treatment-toolbar">
-        <input
-          onChange={(event: ChangeEvent<HTMLInputElement>) => { setSearch(event.target.value); setPage(1); }}
-          placeholder="Buscar por tratamiento, anomalia, responsable o sector"
-          type="search"
-          value={search}
-        />
+      <TabbedFilters
+        ariaLabel="Filtros de tratamientos"
+        onClear={() => { setSearch(""); setPage(1); }}
+        items={[{
+          id: "search",
+          label: "Buscar tratamiento",
+          active: Boolean(search),
+          content: <input aria-label="Buscar tratamiento" onChange={(event: ChangeEvent<HTMLInputElement>) => { setSearch(event.target.value); setPage(1); }} placeholder="Tratamiento, anomalia, responsable o sector" type="search" value={search} />,
+        }]}
+      />
+
+      <section className="panel treatment-create-panel">
         <div className="treatment-toolbar-actions">
           <select onChange={(event) => setSelectedCandidateId(event.target.value)} value={selectedCandidateId}>
                     <option value="">Seleccionar anomalia con Revisión de hallazgos...</option>
@@ -995,7 +1014,7 @@ return (
         {selectedCandidateId && openTreatments.length ? (
           <p className="muted-copy">Hay tratamientos abiertos disponibles. Podes asociar la anomalia a uno existente o crear un tratamiento nuevo con esta anomalia.</p>
         ) : null}
-      </div>
+      </section>
 
       {message ? <div className="panel">{message}</div> : null}
       {formError ? <div className="panel danger">{formError}</div> : null}
@@ -1183,124 +1202,67 @@ return (
                             Asociar anomalias
                           </button>
                         </div>
-                        <div className="form-grid">
-                          <label className="field field-span-2">
-                            <span>ID / codigo / titulo</span>
-                            <input
-                              onChange={(event) => {
-                                setLinkCandidateAnomalyDraft(event.target.value);
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                  event.preventDefault();
-                                  handleApplyLinkCandidateFilters();
-                                }
-                              }}
-                              placeholder="Buscar anomalia"
-                              type="search"
-                              value={linkCandidateAnomalyDraft}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>Sector</span>
-                            <input
-                              onChange={(event) => {
-                                setLinkCandidateSectorDraft(event.target.value);
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                  event.preventDefault();
-                                  handleApplyLinkCandidateFilters();
-                                }
-                              }}
-                              placeholder="Codigo o nombre de sector"
-                              type="search"
-                              value={linkCandidateSectorDraft}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>Area</span>
-                            <input
-                              onChange={(event) => {
-                                setLinkCandidateAreaDraft(event.target.value);
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                  event.preventDefault();
-                                  handleApplyLinkCandidateFilters();
-                                }
-                              }}
-                              placeholder="Codigo o nombre de area"
-                              type="search"
-                              value={linkCandidateAreaDraft}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>Usuario reporta</span>
-                            <select
-                              onChange={(event) => {
-                                setLinkCandidateUserFilter(event.target.value);
-                                setLinkCandidatePage(1);
-                              }}
-                              value={linkCandidateUserFilter}
-                            >
-                              <option value="">Todos</option>
-                              {(supportData?.users ?? []).map((user) => (
-                                <option key={user.id} value={user.id}>
-                                  {buildUsersLabel(user)}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="field">
-                            <span>Fecha desde</span>
-                            <input
-                              onChange={(event) => {
-                                setLinkCandidateDateFrom(event.target.value);
-                                setLinkCandidatePage(1);
-                              }}
-                              type="date"
-                              value={linkCandidateDateFrom}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>Fecha hasta</span>
-                            <input
-                              onChange={(event) => {
-                                setLinkCandidateDateTo(event.target.value);
-                                setLinkCandidatePage(1);
-                              }}
-                              type="date"
-                              value={linkCandidateDateTo}
-                            />
-                          </label>
-                        </div>
-                        <button
-                          className="button button-secondary"
-                          disabled={loading || busy}
-                          onClick={handleApplyLinkCandidateFilters}
-                          type="button"
-                        >
-                          Buscar
-                        </button>
-                        <button
-                          className="button button-secondary"
-                          onClick={() => {
-                            setLinkCandidateAnomalyDraft("");
-                            setLinkCandidateSectorDraft("");
-                            setLinkCandidateAreaDraft("");
-                            setLinkCandidateAnomalyFilter("");
-                            setLinkCandidateSectorFilter("");
-                            setLinkCandidateAreaFilter("");
-                            setLinkCandidateUserFilter("");
-                            setLinkCandidateDateFrom("");
-                            setLinkCandidateDateTo("");
-                            setLinkCandidatePage(1);
-                          }}
-                          type="button"
-                        >
-                          Limpiar filtros
-                        </button>
+                        <TabbedFilters
+                          actions={(
+                            <button className="button button-secondary" disabled={loading || busy} onClick={handleApplyLinkCandidateFilters} type="button">
+                              Buscar
+                            </button>
+                          )}
+                          ariaLabel="Filtros de anomalias disponibles"
+                          onClear={clearLinkCandidateFilters}
+                          items={[
+                            {
+                              id: "anomaly",
+                              label: "Anomalia",
+                              active: Boolean(linkCandidateAnomalyDraft),
+                              content: (
+                                <input
+                                  aria-label="Anomalia"
+                                  onChange={(event) => setLinkCandidateAnomalyDraft(event.target.value)}
+                                  onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); handleApplyLinkCandidateFilters(); } }}
+                                  placeholder="ID, codigo o titulo"
+                                  type="search"
+                                  value={linkCandidateAnomalyDraft}
+                                />
+                              ),
+                            },
+                            {
+                              id: "sector",
+                              label: "Sector",
+                              active: Boolean(linkCandidateSectorDraft),
+                              content: <input aria-label="Sector" onChange={(event) => setLinkCandidateSectorDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); handleApplyLinkCandidateFilters(); } }} placeholder="Codigo o nombre de sector" type="search" value={linkCandidateSectorDraft} />,
+                            },
+                            {
+                              id: "area",
+                              label: "Area",
+                              active: Boolean(linkCandidateAreaDraft),
+                              content: <input aria-label="Area" onChange={(event) => setLinkCandidateAreaDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); handleApplyLinkCandidateFilters(); } }} placeholder="Codigo o nombre de area" type="search" value={linkCandidateAreaDraft} />,
+                            },
+                            {
+                              id: "user",
+                              label: "Usuario reporta",
+                              active: Boolean(linkCandidateUserFilter),
+                              content: (
+                                <select aria-label="Usuario que reporta" onChange={(event) => { setLinkCandidateUserFilter(event.target.value); setLinkCandidatePage(1); }} value={linkCandidateUserFilter}>
+                                  <option value="">Todos los usuarios</option>
+                                  {(supportData?.users ?? []).map((user) => <option key={user.id} value={user.id}>{buildUsersLabel(user)}</option>)}
+                                </select>
+                              ),
+                            },
+                            {
+                              id: "date-from",
+                              label: "Fecha desde",
+                              active: Boolean(linkCandidateDateFrom),
+                              content: <input aria-label="Fecha desde" onChange={(event) => { setLinkCandidateDateFrom(event.target.value); setLinkCandidatePage(1); }} type="date" value={linkCandidateDateFrom} />,
+                            },
+                            {
+                              id: "date-to",
+                              label: "Fecha hasta",
+                              active: Boolean(linkCandidateDateTo),
+                              content: <input aria-label="Fecha hasta" onChange={(event) => { setLinkCandidateDateTo(event.target.value); setLinkCandidatePage(1); }} type="date" value={linkCandidateDateTo} />,
+                            },
+                          ]}
+                        />
                         <label className="field">
                   <span>Anomalias con Revisión de hallazgos disponibles</span>
                           <select

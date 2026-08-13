@@ -6,6 +6,7 @@ import { formatDate, formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { StatCard } from "../../../components/StatCard";
+import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
@@ -77,14 +78,18 @@ export function AnomalyRepetitionStudyPage() {
         <div className="panel danger">Esta consulta esta disponible solo para usuarios administradores.</div>
       ) : (
         <>
-      <form className="toolbar-card filter-toolbar repetition-study-toolbar" data-update-ignore="true" onSubmit={handleSubmit}>
-        <label>
-          <span>Desde fecha</span>
-          <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-        </label>
-        <button className="button button-primary" type="submit">
-          Ejecutar busqueda
-        </button>
+      <form data-update-ignore="true" onSubmit={handleSubmit}>
+        <TabbedFilters
+          actions={<button className="button button-primary" type="submit">Ejecutar busqueda</button>}
+          ariaLabel="Filtros del estudio de repitencia"
+          onClear={() => { setDateFrom(""); setAnalysisDateFrom(""); setSelectedDetail(null); setValidationError(null); }}
+          items={[{
+            id: "date-from",
+            label: "Desde fecha",
+            active: Boolean(dateFrom),
+            content: <input aria-label="Desde fecha" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />,
+          }]}
+        />
       </form>
 
       {validationError ? <div className="panel warning">{validationError}</div> : null}

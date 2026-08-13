@@ -9,6 +9,7 @@ import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
 import { StatusBadge } from "../../../components/StatusBadge";
+import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
@@ -293,32 +294,42 @@ export function CatalogManagementPage() {
       <section className="user-sticky-shell">
         <PageHeader title={meta.title} description={meta.description} actionLabel="Volver a tarjetas" actionTo="/dashboard?view=admin" compact />
 
-        <section className="toolbar-card filter-toolbar user-toolbar user-toolbar-compact">
-          <select value={entity} onChange={(event) => changeEntity(event.target.value as CatalogEntity)}>
-            {ENTITY_META.map((option) => (
-              <option key={option.key} value={option.key}>
-                {option.title}
-              </option>
-            ))}
-          </select>
-
-          <input
-            name="search"
-            onChange={(event) => { setSearch(event.target.value); setPage(1); }}
-            placeholder="Buscar por codigo o nombre"
-            type="search"
-            value={search}
-          />
-
-          <label className="checkbox-inline">
-            <input checked={includeInactive} onChange={(event) => { setIncludeInactive(event.target.checked); setPage(1); }} type="checkbox" />
-            Incluir inactivos
-          </label>
-
-          <button className="button button-secondary" onClick={resetForm} type="button">
-            Nuevo registro
-          </button>
-        </section>
+        <TabbedFilters
+          actions={<button className="button button-secondary" onClick={resetForm} type="button">Nuevo registro</button>}
+          ariaLabel="Filtros de catalogos"
+          onClear={() => { setSearch(""); setIncludeInactive(false); setPage(1); }}
+          items={[
+            {
+              id: "catalog",
+              label: "Catalogo",
+              active: false,
+              content: (
+                <select aria-label="Catalogo" value={entity} onChange={(event) => changeEntity(event.target.value as CatalogEntity)}>
+                  {ENTITY_META.map((option) => <option key={option.key} value={option.key}>{option.title}</option>)}
+                </select>
+              ),
+            },
+            {
+              id: "search",
+              label: "Buscar",
+              active: Boolean(search),
+              content: <input aria-label="Buscar en catalogo" name="search" onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Codigo o nombre" type="search" value={search} />,
+            },
+            {
+              id: "status",
+              label: "Estado",
+              active: includeInactive,
+              content: (
+                <div className="tabbed-filter-toggle">
+                  <label className="checkbox-inline">
+                    <input checked={includeInactive} onChange={(event) => { setIncludeInactive(event.target.checked); setPage(1); }} type="checkbox" />
+                    Incluir registros inactivos
+                  </label>
+                </div>
+              ),
+            },
+          ]}
+        />
       </section>
 
       {feedback ? <div className="panel">{feedback}</div> : null}

@@ -10,6 +10,7 @@ import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
 import { StatusBadge } from "../../../components/StatusBadge";
+import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
@@ -233,25 +234,37 @@ export function UserManagementPage() {
       <section className="user-sticky-shell">
         <PageHeader title="Usuarios" actionLabel="Volver a tarjetas" actionTo="/dashboard?view=admin" compact />
 
-        <section className="toolbar-card filter-toolbar user-toolbar user-toolbar-compact">
-          <input
-            name="search"
-            onChange={(event) => { setSearch(event.target.value); setPage(1); }}
-            placeholder="Buscar por usuario, email, nombre o legajo"
-            type="search"
-            value={search}
-          />
-          <label className="checkbox-inline">
-            <input checked={includeInactive} onChange={(event) => { setIncludeInactive(event.target.checked); setPage(1); }} type="checkbox" />
-            Incluir inactivos
-          </label>
-          <button className="button button-secondary" onClick={resetForm} type="button">
-            Nuevo usuario
-          </button>
-          <Link className="button button-secondary" to="/management/users/import">
-            Importacion masiva
-          </Link>
-        </section>
+        <TabbedFilters
+          actions={(
+            <>
+              <button className="button button-secondary" onClick={resetForm} type="button">Nuevo usuario</button>
+              <Link className="button button-secondary" to="/management/users/import">Importacion masiva</Link>
+            </>
+          )}
+          ariaLabel="Filtros de usuarios"
+          onClear={() => { setSearch(""); setIncludeInactive(false); setPage(1); }}
+          items={[
+            {
+              id: "search",
+              label: "Buscar usuario",
+              active: Boolean(search),
+              content: <input aria-label="Buscar usuario" name="search" onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Usuario, email, nombre o legajo" type="search" value={search} />,
+            },
+            {
+              id: "status",
+              label: "Estado",
+              active: includeInactive,
+              content: (
+                <div className="tabbed-filter-toggle">
+                  <label className="checkbox-inline">
+                    <input checked={includeInactive} onChange={(event) => { setIncludeInactive(event.target.checked); setPage(1); }} type="checkbox" />
+                    Incluir usuarios inactivos
+                  </label>
+                </div>
+              ),
+            },
+          ]}
+        />
       </section>
 
       {feedback ? <div className="panel">{feedback}</div> : null}

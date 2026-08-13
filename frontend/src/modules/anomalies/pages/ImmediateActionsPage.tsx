@@ -14,6 +14,7 @@ import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
 import { StatusBadge } from "../../../components/StatusBadge";
+import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
@@ -281,18 +282,31 @@ export function ImmediateActionsPage() {
       description="Gestion directa para anomalias con Revisión de hallazgos como Observacion. No generan tratamiento: se ejecuta, verifica eficacia y se cierra en este flujo."
       />
 
-      <div className="toolbar-card filter-toolbar filter-toolbar-inline">
-        <input
-          onChange={handleSearch}
-          placeholder="Buscar por codigo, titulo, area o usuario"
-          type="search"
-          value={search}
-        />
-        <label className="checkbox-inline">
-          <input checked={includeClosed} onChange={(event) => setIncludeClosed(event.target.checked)} type="checkbox" />
-          <span>Incluir cerradas</span>
-        </label>
-      </div>
+      <TabbedFilters
+        ariaLabel="Filtros de observaciones"
+        onClear={() => { setSearch(""); setIncludeClosed(false); setPage(1); }}
+        items={[
+          {
+            id: "search",
+            label: "Buscar",
+            active: Boolean(search),
+            content: <input aria-label="Buscar observaciones" onChange={handleSearch} placeholder="Codigo, titulo, area o usuario" type="search" value={search} />,
+          },
+          {
+            id: "closed",
+            label: "Cerradas",
+            active: includeClosed,
+            content: (
+              <div className="tabbed-filter-toggle">
+                <label className="checkbox-inline">
+                  <input checked={includeClosed} onChange={(event) => { setIncludeClosed(event.target.checked); setPage(1); }} type="checkbox" />
+                  <span>Incluir observaciones cerradas</span>
+                </label>
+              </div>
+            ),
+          },
+        ]}
+      />
 
       <DataState
         loading={loading}

@@ -6,6 +6,7 @@ import { formatDate, formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
+import { TabbedFilters } from "../../../components/TabbedFilters";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
@@ -253,12 +254,16 @@ export function LearnedLessonsPage() {
     <section className="page-shell">
       <PageHeader title="Lecciones aprendidas" description="Registro de aprendizajes de tratamientos validados como eficaces." />
 
-      <section className="toolbar-card filter-toolbar filter-toolbar-single">
-        <label className="field">
-          <span>Buscar tratamiento</span>
-          <input onChange={handleSearch} placeholder="Codigo, anomalia o area" type="search" value={search} />
-        </label>
-      </section>
+      <TabbedFilters
+        ariaLabel="Filtros de lecciones aprendidas"
+        onClear={() => { setSearch(""); setPage(1); }}
+        items={[{
+          id: "search",
+          label: "Buscar tratamiento",
+          active: Boolean(search),
+          content: <input aria-label="Buscar tratamiento" onChange={handleSearch} placeholder="Codigo, anomalia o area" type="search" value={search} />,
+        }]}
+      />
 
       <DataState
         loading={loading}

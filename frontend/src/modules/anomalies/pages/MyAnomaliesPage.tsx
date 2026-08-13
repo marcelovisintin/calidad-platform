@@ -11,6 +11,7 @@ import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
 import { StatusBadge } from "../../../components/StatusBadge";
+import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
@@ -176,14 +177,21 @@ export function MyAnomaliesPage() {
         actionTo="/anomalies/new"
       />
 
-      <div className="toolbar-card filter-toolbar anomaly-toolbar">
-        <input onChange={handleSearchChange} placeholder="Buscar por codigo, titulo, area o estado de hallazgo" type="search" value={search} />
-        {strictAdminUser ? (
+      <TabbedFilters
+        actions={strictAdminUser ? (
           <Link className="button button-secondary" to="/anomalies/repetition-study">
             Estudio de repitencia
           </Link>
         ) : null}
-      </div>
+        ariaLabel="Filtros de seguimiento de anomalias"
+        onClear={() => { setSearch(""); setPage(1); }}
+        items={[{
+          id: "search",
+          label: "Buscar",
+          active: Boolean(search),
+          content: <input aria-label="Buscar anomalias" onChange={handleSearchChange} placeholder="Codigo, titulo, area o estado de hallazgo" type="search" value={search} />,
+        }]}
+      />
 
       {classificationError ? <div className="panel danger">{classificationError}</div> : null}
       {classificationMessage ? <div className="panel info">{classificationMessage}</div> : null}

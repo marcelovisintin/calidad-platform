@@ -8,12 +8,13 @@ export type TabbedFilterItem = {
 };
 
 type TabbedFiltersProps = {
+  actions?: ReactNode;
   ariaLabel?: string;
   items: TabbedFilterItem[];
   onClear: () => void;
 };
 
-export function TabbedFilters({ ariaLabel = "Filtros", items, onClear }: TabbedFiltersProps) {
+export function TabbedFilters({ actions, ariaLabel = "Filtros", items, onClear }: TabbedFiltersProps) {
   const componentId = useId().replace(/:/g, "");
   const [selectedId, setSelectedId] = useState(items[0]?.id ?? "");
   const panelRef = useRef<HTMLDivElement>(null);
@@ -63,7 +64,8 @@ export function TabbedFilters({ ariaLabel = "Filtros", items, onClear }: TabbedF
           const selected = item.id === selectedItem.id;
           return (
             <button
-              aria-controls={`${componentId}-${item.id}-panel`}
+              aria-controls={`${componentId}-panel`}
+              aria-label={`${item.label}${item.active ? " (filtro activo)" : ""}`}
               aria-selected={selected}
               className={`tabbed-filter-tab${item.active ? " has-value" : ""}`}
               id={`${componentId}-${item.id}-tab`}
@@ -75,7 +77,7 @@ export function TabbedFilters({ ariaLabel = "Filtros", items, onClear }: TabbedF
               type="button"
             >
               <span>{item.label}</span>
-              {item.active ? <span className="tabbed-filter-dot" aria-label="Filtro activo" /> : null}
+              {item.active ? <span className="tabbed-filter-dot" aria-hidden="true" /> : null}
             </button>
           );
         })}
@@ -84,11 +86,12 @@ export function TabbedFilters({ ariaLabel = "Filtros", items, onClear }: TabbedF
       <div
         aria-labelledby={`${componentId}-${selectedItem.id}-tab`}
         className="tabbed-filters-panel"
-        id={`${componentId}-${selectedItem.id}-panel`}
+        id={`${componentId}-panel`}
         ref={panelRef}
         role="tabpanel"
       >
         <div className="tabbed-filter-control">{selectedItem.content}</div>
+        {actions ? <div className="tabbed-filter-actions">{actions}</div> : null}
         {activeCount > 0 ? (
           <button className="button button-secondary tabbed-filter-clear" onClick={onClear} type="button">
             {`Limpiar filtros (${activeCount})`}

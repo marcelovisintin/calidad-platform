@@ -12,6 +12,7 @@ import { useAuth } from "../../../app/providers/AuthProvider";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { StatusBadge } from "../../../components/StatusBadge";
+import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
@@ -187,16 +188,17 @@ export function UserScopesPage() {
       {feedback ? <div className="panel info">{feedback}</div> : null}
       {profileError ? <div className="panel danger">{profileError}</div> : null}
 
-      <div className="toolbar-card filter-toolbar compact-toolbar user-scope-search">
-        <input
-          autoComplete="off"
-          onChange={handleSearchChange}
-          placeholder="Buscar usuario, nombre o email"
-          type="search"
-          value={search}
-        />
-        {loading ? <span className="search-loading-indicator">Actualizando...</span> : null}
-      </div>
+      <TabbedFilters
+        actions={loading ? <span className="search-loading-indicator">Actualizando...</span> : null}
+        ariaLabel="Filtros de alcances de usuario"
+        onClear={() => setSearch("")}
+        items={[{
+          id: "search",
+          label: "Buscar usuario",
+          active: Boolean(search),
+          content: <input aria-label="Buscar usuario" autoComplete="off" onChange={handleSearchChange} placeholder="Usuario, nombre o email" type="search" value={search} />,
+        }]}
+      />
 
       <DataState loading={loading} error={error} onRetry={reload}>
         <div className="user-management-grid">
