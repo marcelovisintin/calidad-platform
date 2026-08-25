@@ -44,6 +44,8 @@ TREATMENT_TASK_STATUS_MAP = {
 }
 
 FINDING_MANAGEMENT_TEMPLATE = "finding_management_assigned"
+TREATMENT_EFFECTIVENESS_TEMPLATE = "treatment_effectiveness_assigned"
+OBSERVATION_EFFECTIVENESS_TEMPLATE = "observation_effectiveness_assigned"
 
 
 def _request_id(value: str | None) -> str:
@@ -81,6 +83,13 @@ def _treatment_task_due_at(treatment_task):
     if not treatment_task.execution_date:
         return None
     due_datetime = datetime.combine(treatment_task.execution_date, time(23, 59, 59))
+    return timezone.make_aware(due_datetime, timezone.get_current_timezone())
+
+
+def _date_due_at(due_date):
+    if not due_date:
+        return None
+    due_datetime = datetime.combine(due_date, time(23, 59, 59))
     return timezone.make_aware(due_datetime, timezone.get_current_timezone())
 
 
@@ -444,6 +453,157 @@ def sync_treatment_task_assignment_status(*, treatment_task, actor=None, request
         )
 
 
+def _dismiss_previous_effectiveness_tasks(
+    *, source_type: str, source_id, template_code: str, actor=None, keep_notification_id=None, request_id: str = ""
+) -> None:
+    active_in_app = list(
+        NotificationRecipient.objects.select_for_update()
+        .select_related("notification")
+        .filter(
+            channel=NotificationChannel.IN_APP,
+            notification__source_type=source_type,
+            notification__source_id=source_id,
+            notification__template_code=template_code,
+            notification__task_type=NotificationTaskType.VERIFICATION_PARTICIPATION,
+            task_status__in=[RecipientTaskStatus.PENDING, RecipientTaskStatus.IN_PROGRESS],
+        )
+        .exclude(notification_id=keep_notification_id)
+    )
+    if not active_in_app:
+        return
+
+    notification_ids = [recipient.notification_id for recipient in active_in_app]
+    recipients = list(
+        NotificationRecipient.objects.select_for_update().filter(notification_id__in=notification_ids)
+    )
+    now = timezone.now()
+    for recipient in recipients:
+        if recipient.task_status in {RecipientTaskStatus.PENDING, RecipientTaskStatus.IN_PROGRESS}:
+            recipient.task_status = RecipientTaskStatus.DISMISSED
+            recipient.resolved_at = now
+        if recipient.channel == NotificationChannel.EMAIL and recipient.delivery_status == DeliveryStatus.PENDING:
+            recipient.delivery_status = DeliveryStatus.SKIPPED
+            recipient.delivery_error = "Asignación de verificación reemplazada antes del envío."
+        recipient.updated_by = actor
+        recipient.row_version = (recipient.row_version or 0) + 1
+        recipient.updated_at = now
+
+    NotificationRecipient.objects.bulk_update(
+        recipients,
+        [
+            "task_status",
+            "resolved_at",
+            "delivery_status",
+            "delivery_error",
+            "updated_by",
+            "row_version",
+            "updated_at",
+        ],
+    )
+    Notification.objects.filter(pk__in=notification_ids).update(
+        status=NotificationStatus.SENT,
+        row_version=F("row_version") + 1,
+        updated_at=now,
+    )
+    for recipient in active_in_app:
+        record_audit_event(
+            entity=recipient.notification,
+            action="notification.task_dismissed",
+            actor=actor,
+            after_data={
+                "recipient_id": str(recipient.pk),
+                "task_status": RecipientTaskStatus.DISMISSED,
+                "reason": "effectiveness_assignment_replaced",
+            },
+            request_id=_request_id(request_id),
+        )
+
+
+def _matching_effectiveness_task(
+    *, source_type: str, source_id, template_code: str, responsible, due_date
+):
+    due_date_value = due_date.isoformat() if due_date else ""
+    candidates = (
+        NotificationRecipient.objects.select_for_update()
+        .select_related("notification")
+        .filter(
+            user=responsible,
+            channel=NotificationChannel.IN_APP,
+            notification__source_type=source_type,
+            notification__source_id=source_id,
+            notification__template_code=template_code,
+            notification__task_type=NotificationTaskType.VERIFICATION_PARTICIPATION,
+            task_status__in=[RecipientTaskStatus.PENDING, RecipientTaskStatus.IN_PROGRESS],
+        )
+        .order_by("-created_at")
+    )
+    return next(
+        (
+            recipient
+            for recipient in candidates
+            if recipient.notification.context_data.get("due_date") == due_date_value
+        ),
+        None,
+    )
+
+
+@transaction.atomic
+def _complete_effectiveness_tasks(
+    *, source_type: str, source_id, template_code: str, actor=None, request_id: str = ""
+) -> None:
+    recipients = list(
+        NotificationRecipient.objects.select_for_update()
+        .select_related("notification")
+        .filter(
+            notification__source_type=source_type,
+            notification__source_id=source_id,
+            notification__template_code=template_code,
+            notification__task_type=NotificationTaskType.VERIFICATION_PARTICIPATION,
+            task_status__in=[RecipientTaskStatus.PENDING, RecipientTaskStatus.IN_PROGRESS],
+        )
+    )
+    if not recipients:
+        return
+
+    now = timezone.now()
+    for recipient in recipients:
+        recipient.task_status = RecipientTaskStatus.COMPLETED
+        recipient.resolved_at = now
+        if recipient.channel == NotificationChannel.EMAIL and recipient.delivery_status == DeliveryStatus.PENDING:
+            recipient.delivery_status = DeliveryStatus.SKIPPED
+            recipient.delivery_error = "La verificación se completó antes del envío de la asignación."
+        recipient.updated_by = actor
+        recipient.row_version = (recipient.row_version or 0) + 1
+        recipient.updated_at = now
+
+    NotificationRecipient.objects.bulk_update(
+        recipients,
+        [
+            "task_status",
+            "resolved_at",
+            "delivery_status",
+            "delivery_error",
+            "updated_by",
+            "row_version",
+            "updated_at",
+        ],
+    )
+    notification_ids = {recipient.notification_id for recipient in recipients}
+    Notification.objects.filter(pk__in=notification_ids).update(
+        status=NotificationStatus.SENT,
+        row_version=F("row_version") + 1,
+        updated_at=now,
+    )
+    for recipient in recipients:
+        record_audit_event(
+            entity=recipient.notification,
+            action="notification.task_synced",
+            actor=actor,
+            after_data={"recipient_id": str(recipient.pk), "task_status": RecipientTaskStatus.COMPLETED},
+            request_id=_request_id(request_id),
+        )
+
+
 def _dismiss_previous_finding_management_tasks(
     *, anomaly, actor=None, keep_notification_id=None, request_id: str = ""
 ) -> None:
@@ -705,6 +865,147 @@ def notify_treatment_task_assigned(*, treatment_task, actor=None, reassigned: bo
         },
         request_id=request_id,
         email_enabled=True,
+    )
+
+
+@transaction.atomic
+def notify_treatment_effectiveness_assigned(*, treatment, actor=None, request_id: str = ""):
+    responsible = treatment.effectiveness_responsible
+    due_date = treatment.effectiveness_evaluation_date
+    if not responsible or not due_date:
+        return None
+
+    matching_recipient = _matching_effectiveness_task(
+        source_type="actions.treatment",
+        source_id=treatment.pk,
+        template_code=TREATMENT_EFFECTIVENESS_TEMPLATE,
+        responsible=responsible,
+        due_date=due_date,
+    )
+    _dismiss_previous_effectiveness_tasks(
+        source_type="actions.treatment",
+        source_id=treatment.pk,
+        template_code=TREATMENT_EFFECTIVENESS_TEMPLATE,
+        actor=actor,
+        keep_notification_id=matching_recipient.notification_id if matching_recipient else None,
+        request_id=request_id,
+    )
+    if matching_recipient:
+        return matching_recipient.notification
+
+    anomaly_codes = list(
+        treatment.anomaly_links.select_related("anomaly")
+        .order_by("anomaly__code")
+        .values_list("anomaly__code", flat=True)
+    )
+    anomaly_label = ", ".join(anomaly_codes) or treatment.primary_anomaly.code
+    due_label = due_date.strftime("%d/%m/%Y")
+    return create_internal_notification(
+        recipients=[responsible],
+        title=f"Verificación de eficacia asignada: {treatment.code}",
+        body=(
+            f"Hola {responsible.full_name},\n\n"
+            f"Fuiste designado para verificar la eficacia del tratamiento {treatment.code}.\n"
+            f"Anomalía(s): {anomaly_label}\n"
+            f"Fecha de evaluación: {due_label}.\n\n"
+            "Ingresá al Sistema de Gestión de Calidad con tu propio usuario para realizar la verificación."
+        ),
+        source_type="actions.treatment",
+        source_id=treatment.pk,
+        actor=actor,
+        category=NotificationCategory.ACTION,
+        template_code=TREATMENT_EFFECTIVENESS_TEMPLATE,
+        is_task=True,
+        task_type=NotificationTaskType.VERIFICATION_PARTICIPATION,
+        action_url=f"/treatments?treatment={treatment.pk}",
+        due_at=_date_due_at(due_date),
+        context_data={
+            "treatment_id": str(treatment.pk),
+            "treatment_code": treatment.code,
+            "responsible_id": str(responsible.pk),
+            "due_date": due_date.isoformat(),
+            "anomaly_codes": anomaly_codes or [treatment.primary_anomaly.code],
+            "include_action_url_in_email": False,
+        },
+        request_id=request_id,
+        email_enabled=True,
+    )
+
+
+@transaction.atomic
+def notify_observation_effectiveness_assigned(*, anomaly, immediate_action, actor=None, request_id: str = ""):
+    responsible = immediate_action.responsible
+    due_date = immediate_action.effectiveness_due_at
+    if not responsible or not due_date:
+        return None
+
+    matching_recipient = _matching_effectiveness_task(
+        source_type="anomalies.anomaly",
+        source_id=anomaly.pk,
+        template_code=OBSERVATION_EFFECTIVENESS_TEMPLATE,
+        responsible=responsible,
+        due_date=due_date,
+    )
+    _dismiss_previous_effectiveness_tasks(
+        source_type="anomalies.anomaly",
+        source_id=anomaly.pk,
+        template_code=OBSERVATION_EFFECTIVENESS_TEMPLATE,
+        actor=actor,
+        keep_notification_id=matching_recipient.notification_id if matching_recipient else None,
+        request_id=request_id,
+    )
+    if matching_recipient:
+        return matching_recipient.notification
+
+    due_label = due_date.strftime("%d/%m/%Y")
+    return create_internal_notification(
+        recipients=[responsible],
+        title=f"Verificación de eficacia asignada: {anomaly.code}",
+        body=(
+            f"Hola {responsible.full_name},\n\n"
+            f"Debes verificar la eficacia de la observación {anomaly.code} - {anomaly.title}.\n"
+            f"Acción realizada: {immediate_action.actions_taken}\n"
+            f"Fecha de verificación: {due_label}.\n\n"
+            "Ingresá al Sistema de Gestión de Calidad con tu propio usuario para realizar la verificación."
+        ),
+        source_type="anomalies.anomaly",
+        source_id=anomaly.pk,
+        actor=actor,
+        category=NotificationCategory.ACTION,
+        template_code=OBSERVATION_EFFECTIVENESS_TEMPLATE,
+        is_task=True,
+        task_type=NotificationTaskType.VERIFICATION_PARTICIPATION,
+        action_url=f"/anomalies/{anomaly.pk}",
+        due_at=_date_due_at(due_date),
+        context_data={
+            "anomaly_id": str(anomaly.pk),
+            "anomaly_code": anomaly.code,
+            "responsible_id": str(responsible.pk),
+            "due_date": due_date.isoformat(),
+            "include_action_url_in_email": False,
+        },
+        request_id=request_id,
+        email_enabled=True,
+    )
+
+
+def complete_treatment_effectiveness_assignment(*, treatment, actor=None, request_id: str = "") -> None:
+    _complete_effectiveness_tasks(
+        source_type="actions.treatment",
+        source_id=treatment.pk,
+        template_code=TREATMENT_EFFECTIVENESS_TEMPLATE,
+        actor=actor,
+        request_id=request_id,
+    )
+
+
+def complete_observation_effectiveness_assignment(*, anomaly, actor=None, request_id: str = "") -> None:
+    _complete_effectiveness_tasks(
+        source_type="anomalies.anomaly",
+        source_id=anomaly.pk,
+        template_code=OBSERVATION_EFFECTIVENESS_TEMPLATE,
+        actor=actor,
+        request_id=request_id,
     )
 
 

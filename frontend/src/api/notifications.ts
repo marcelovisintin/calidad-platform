@@ -10,8 +10,11 @@ export function fetchInbox(page = 1) {
   return apiRequest<PagedResponse<NotificationInboxItem>>(`/notifications/inbox/?${params.toString()}`);
 }
 
-export function fetchInboxTasks(page = 1) {
+export function fetchInboxTasks(page = 1, taskStatus?: string) {
   const params = new URLSearchParams({ page: String(page), page_size: "10" });
+  if (taskStatus?.trim()) {
+    params.set("task_status", taskStatus.trim());
+  }
   return apiRequest<PagedResponse<NotificationInboxItem>>(`/notifications/inbox/tasks/?${params.toString()}`);
 }
 

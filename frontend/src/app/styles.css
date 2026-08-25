@@ -465,6 +465,60 @@ small {
   background: rgba(86, 114, 123, 0.08);
 }
 
+.completed-disclosure {
+  padding: 0;
+  overflow: hidden;
+}
+
+.completed-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 54px;
+  padding: 0.85rem 1.1rem;
+  cursor: pointer;
+  color: var(--primary-dark);
+  font-weight: 800;
+  list-style: none;
+  background: rgba(21, 132, 111, 0.08);
+}
+
+.completed-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.completed-disclosure > summary::after {
+  content: "▾";
+  margin-left: auto;
+  transition: transform 160ms ease;
+}
+
+.completed-disclosure[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.completed-disclosure-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  color: var(--primary-dark);
+  background: rgba(21, 132, 111, 0.16);
+  font-size: 0.82rem;
+}
+
+.completed-disclosure-content {
+  padding: 1rem;
+  border-top: 1px solid rgba(15, 44, 53, 0.12);
+}
+
+.completed-disclosure-content > .stack-list > .panel {
+  box-shadow: none;
+}
+
 .stats-grid,
 .dashboard-grid,
 .detail-layout,

@@ -493,6 +493,8 @@ class TreatmentViewSet(viewsets.ModelViewSet):
             )
         elif status_value:
             queryset = queryset.filter(status=status_value)
+        else:
+            queryset = queryset.filter(status__in=["pending", "in_progress"])
 
         queryset = queryset.distinct().order_by("-updated_at", "-created_at")
 

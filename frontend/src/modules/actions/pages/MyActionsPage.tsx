@@ -95,6 +95,7 @@ export function MyActionsPage() {
   usePageTitle("Acciones y pendientes");
 
   const [page, setPage] = useState(1);
+  const [completedPage, setCompletedPage] = useState(1);
   const [query, setQuery] = useState("");
   const [anomalyFilter, setAnomalyFilter] = useState("");
   const [treatmentFilter, setTreatmentFilter] = useState("");
@@ -135,11 +136,29 @@ export function MyActionsPage() {
         q: deferredQuery,
         anomaly: deferredAnomalyFilter,
         treatment: deferredTreatmentFilter,
-        completedOn,
         performedBy,
         status: statusFilter,
       }),
-    [page, deferredQuery, deferredAnomalyFilter, deferredTreatmentFilter, completedOn, performedBy, statusFilter],
+    [page, deferredQuery, deferredAnomalyFilter, deferredTreatmentFilter, performedBy, statusFilter],
+  );
+
+  const {
+    data: completedData,
+    loading: completedLoading,
+    error: completedError,
+    reload: reloadCompleted,
+  } = useAsyncTask(
+    () =>
+      fetchTreatmentTasksHistory({
+        page: completedPage,
+        q: deferredQuery,
+        anomaly: deferredAnomalyFilter,
+        treatment: deferredTreatmentFilter,
+        completedOn,
+        performedBy,
+        status: "completed",
+      }),
+    [completedPage, deferredQuery, deferredAnomalyFilter, deferredTreatmentFilter, completedOn, performedBy],
   );
 
   const selectedTask = useMemo(
@@ -205,7 +224,7 @@ export function MyActionsPage() {
       await task();
       setMessage(successMessage);
       setStatusEvidenceError(null);
-      await reload();
+      await Promise.all([reload(), reloadCompleted()]);
     } catch (mutationError) {
       const mutationMessage = mutationError instanceof Error ? mutationError.message : "No se pudo guardar la tarea.";
       if (mutationMessage.toLowerCase().startsWith("evidence_note:")) {
@@ -374,13 +393,14 @@ export function MyActionsPage() {
     setCompletedOn("");
     setPerformedBy("");
     setPage(1);
+    setCompletedPage(1);
   };
 
   return (
     <section className="page-shell">
       <PageHeader
         title="Acciones y pendientes"
-        description="Listado historico de tareas con filtros por anomalia, tratamiento, estado, fecha terminada y usuario que la realizo."
+        description="Tareas pendientes y en curso. Las completadas quedan disponibles en el historial desplegable."
       />
 
       <TabbedFilters
@@ -397,6 +417,7 @@ export function MyActionsPage() {
                 onChange={(event: ChangeEvent<HTMLInputElement>) => {
                   setQuery(event.target.value);
                   setPage(1);
+                  setCompletedPage(1);
                 }}
                 placeholder="Codigo, titulo, descripcion, anomalia o usuario"
                 type="search"
@@ -414,6 +435,7 @@ export function MyActionsPage() {
                 onChange={(event: ChangeEvent<HTMLInputElement>) => {
                   setAnomalyFilter(event.target.value);
                   setPage(1);
+                  setCompletedPage(1);
                 }}
                 placeholder="Codigo o titulo de anomalia"
                 type="text"
@@ -431,6 +453,7 @@ export function MyActionsPage() {
                 onChange={(event: ChangeEvent<HTMLInputElement>) => {
                   setTreatmentFilter(event.target.value);
                   setPage(1);
+                  setCompletedPage(1);
                 }}
                 placeholder="Codigo de tratamiento (ej. TRT-2026-0001)"
                 type="text"
@@ -451,11 +474,9 @@ export function MyActionsPage() {
                 }}
                 value={statusFilter}
               >
-                <option value="">Todos</option>
+                <option value="">Pendientes y en curso</option>
                 <option value="pending">Pendiente</option>
                 <option value="in_progress">En curso</option>
-                <option value="completed">Terminada</option>
-                <option value="cancelled">Cancelada</option>
                 <option value="overdue">Vencida</option>
               </select>
             ),
@@ -470,6 +491,7 @@ export function MyActionsPage() {
                 onChange={(event: ChangeEvent<HTMLInputElement>) => {
                   setCompletedOn(event.target.value);
                   setPage(1);
+                  setCompletedPage(1);
                 }}
                 type="date"
                 value={completedOn}
@@ -486,6 +508,7 @@ export function MyActionsPage() {
                 onChange={(event: ChangeEvent<HTMLSelectElement>) => {
                   setPerformedBy(event.target.value);
                   setPage(1);
+                  setCompletedPage(1);
                 }}
                 value={performedBy}
               >
@@ -518,8 +541,8 @@ export function MyActionsPage() {
         error={error}
         onRetry={reload}
         empty={totalCount === 0}
-        emptyTitle="No hay acciones para mostrar"
-        emptyDescription="Ajusta los filtros para revisar el historico de tareas."
+        emptyTitle="No hay acciones pendientes"
+        emptyDescription="No tienes tareas pendientes o en curso con los filtros seleccionados."
       >
         {selectedTask ? (
           <section className="panel action-detail-fixed">
@@ -796,6 +819,58 @@ export function MyActionsPage() {
 
         <PaginationControls page={page} totalCount={totalCount} onPageChange={setPage} disabled={loading || busy} />
       </DataState>
+
+      <details className="panel completed-disclosure">
+        <summary>
+          <span>Completadas</span>
+          <span className="completed-disclosure-count">{completedData?.count ?? 0}</span>
+        </summary>
+        <div className="completed-disclosure-content">
+          <DataState
+            loading={completedLoading}
+            error={completedError}
+            onRetry={reloadCompleted}
+            empty={(completedData?.count ?? 0) === 0}
+            emptyTitle="No hay tareas completadas"
+            emptyDescription="Las tareas terminadas apareceran en este historial."
+          >
+            <div className="stack-list">
+              {completedData?.results.map((item) => {
+                const anomalySummary = item.anomalies?.length
+                  ? item.anomalies.map((anomaly) => `${anomaly.code} - ${anomaly.title}`).join(" | ")
+                  : "Sin anomalia asociada";
+                return (
+                  <article className="panel action-card" key={`completed-${item.id}`}>
+                    <div className="section-head compact">
+                      <div>
+                        <strong>{item.code || item.title}</strong>
+                        <p>{item.title}</p>
+                        <small>{item.description || "Sin descripcion."}</small>
+                      </div>
+                      <StatusBadge value={item.status} />
+                    </div>
+                    <dl className="key-grid compact">
+                      <div><dt>Anomalia</dt><dd>{anomalySummary}</dd></div>
+                      <div><dt>Tratamiento</dt><dd>{item.treatment?.code || "Sin tratamiento"}</dd></div>
+                      <div>
+                        <dt>Usuario que la realizo</dt>
+                        <dd>{item.responsible?.full_name || item.responsible?.username || "Sin asignar"}</dd>
+                      </div>
+                      <div><dt>Fecha terminada</dt><dd>{formatDate(item.execution_date)}</dd></div>
+                    </dl>
+                  </article>
+                );
+              })}
+            </div>
+            <PaginationControls
+              page={completedPage}
+              totalCount={completedData?.count ?? 0}
+              onPageChange={setCompletedPage}
+              disabled={completedLoading}
+            />
+          </DataState>
+        </div>
+      </details>
     </section>
   );
 }

@@ -37,7 +37,9 @@ from apps.anomalies.models import (
 )
 from apps.anomalies.services.classification_rules import is_immediate_action_anomaly
 from apps.notifications.services import (
+    complete_treatment_effectiveness_assignment,
     dismiss_treatment_task_assignment_tasks,
+    notify_treatment_effectiveness_assigned,
     notify_treatment_participant_invited,
     notify_treatment_task_assigned,
     sync_treatment_task_assignment_status,
@@ -780,6 +782,13 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
     if comments:
         _register_history_for_treatment(treatment=locked, user=user, comment=" ".join(comments))
 
+    if "effectiveness_evaluation_date" in data or "effectiveness_responsible" in data:
+        notify_treatment_effectiveness_assigned(
+            treatment=locked,
+            actor=user,
+            request_id=request_id,
+        )
+
     return locked
 
 
@@ -838,6 +847,11 @@ def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str,
             result=result,
             comment=comment,
         ),
+    )
+    complete_treatment_effectiveness_assignment(
+        treatment=locked,
+        actor=user,
+        request_id=request_id,
     )
     if result == TreatmentEffectivenessValidationResult.EFFECTIVE:
         _close_anomalies_for_effective_treatment(treatment=locked, user=user, changed_at=timezone.now())

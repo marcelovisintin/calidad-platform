@@ -1353,9 +1353,21 @@ Correo al responsable cuando se le asignen:
 La verificación de eficacia.
 La fecha de evaluación.
 Más adelante podremos agregar recordatorios por vencimiento.
-Fase 7 — Prueba controlada
+Estado: implementada y probada localmente para tratamientos y observaciones.
+La notificación crea también una tarea interna, evita duplicados si no cambia la asignación, reemplaza el aviso anterior
+si cambia el responsable o la fecha y cierra la tarea cuando se registra la verificación.
+Fase 7 — Informe de cierre al usuario que generó la anomalía
+Enviar un correo al usuario que registró la anomalía cuando esta pase efectivamente a estado Cerrada.
+El correo debe generarse una sola vez por cada cierre y adaptarse al camino recorrido:
+- Tratamiento finalizado y validado como eficaz: tratamiento, principales acciones realizadas, resultado de eficacia y fecha de cierre.
+- Observación finalizada y verificada como eficaz: observación, acción tomada, resultado de eficacia y fecha de cierre.
+- Hallazgo clasificado como Inválido: clasificación, motivo registrado, usuario que realizó la revisión y fecha de cierre.
+Incluir código, título y un resumen breve de lo actuado, sin adjuntar evidencias ni información sensible.
+Respetar la casilla “Notificación por correo” del usuario generador.
+Una reapertura y un cierre posterior deben producir un nuevo informe correspondiente al nuevo ciclo, sin duplicar correos por ediciones comunes.
+Fase 8 — Prueba controlada
 Activar la casilla únicamente en uno o dos usuarios de prueba.
-Probar los cuatro eventos.
+Probar todos los eventos, incluidos los tres caminos de cierre.
 Verificar ausencia de correos duplicados.
 Simular una falla del servidor SMTP.
 Confirmar que las operaciones se guardan aunque el correo falle.
@@ -1400,3 +1412,11 @@ Reglas vigentes:
 
 Los modelos de roles dejaron de usarse en aplicación y API. Sus tablas anteriores se conservan archivadas en base de datos
 para permitir recuperación histórica; no otorgan permisos ni se muestran en la interfaz.
+
+____14/8 - SEPARACION DE PENDIENTES Y COMPLETADAS____________________________________________________________________
+
+- Tareas pendientes muestra solamente tareas en estado Pendiente o En curso.
+- Acciones y pendientes muestra solamente tareas asignadas en estado Pendiente o En curso.
+- Cada pantalla incorpora un listado Completadas desplegable, cerrado por defecto, con contador y paginación propia.
+- Al completar una tarea, se actualizan ambos listados para retirarla de pendientes y conservarla en el historial.
+- Los filtros de fecha terminada se aplican al listado histórico de completadas.

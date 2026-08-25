@@ -3,12 +3,14 @@ from unittest.mock import patch
 from django.core import mail
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 from apps.actions.models import Treatment, TreatmentParticipantRole, TreatmentRootCause, TreatmentTaskStatus
 from apps.actions.services.treatment_service import (
     add_treatment_participant,
     add_treatment_task,
+    update_treatment,
     update_treatment_task,
 )
 from apps.anomalies.models import ParticipantRole
@@ -26,7 +28,7 @@ from apps.notifications.models import (
 )
 from apps.notifications.selectors import notification_summary_for_user
 from apps.notifications.services.email_delivery import dispatch_pending_email_notifications
-from apps.notifications.services.notification_service import create_internal_notification
+from apps.notifications.services.notification_service import create_internal_notification, resolve_notification_task
 
 
 class NotificationServiceTests(TestCase):
@@ -182,6 +184,47 @@ class NotificationServiceTests(TestCase):
         summary = notification_summary_for_user(self.analyst)
         self.assertEqual(summary["tasks_total"], 1)
         self.assertEqual(summary["tasks_pending"], 1)
+
+    def test_tasks_endpoint_separates_open_and_completed_tasks(self):
+        pending = create_internal_notification(
+            recipients=[self.reporter],
+            title="Gestión pendiente",
+            body="Debe gestionar el hallazgo.",
+            source_type="anomalies.anomaly",
+            source_id=self._create_unclassified_anomaly().pk,
+            actor=self.admin,
+            is_task=True,
+            task_type=NotificationTaskType.FINDING_MANAGEMENT,
+        )
+        completed = create_internal_notification(
+            recipients=[self.reporter],
+            title="Tarea completada",
+            body="La tarea ya fue realizada.",
+            source_type="anomalies.anomaly",
+            source_id=self._create_unclassified_anomaly(title="Hallazgo completado").pk,
+            actor=self.admin,
+            is_task=True,
+            task_type=NotificationTaskType.ACTION_ASSIGNMENT,
+        )
+        completed_recipient = completed.recipients.get(
+            user=self.reporter,
+            channel=NotificationChannel.IN_APP,
+        )
+        resolve_notification_task(
+            recipient=completed_recipient,
+            user=self.reporter,
+            task_status=RecipientTaskStatus.COMPLETED,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.reporter)
+        open_response = client.get("/api/v1/notifications/inbox/tasks/")
+        completed_response = client.get("/api/v1/notifications/inbox/tasks/?task_status=completed")
+
+        self.assertEqual(open_response.status_code, 200)
+        self.assertEqual(completed_response.status_code, 200)
+        self.assertEqual({item["title"] for item in open_response.data["results"]}, {pending.title})
+        self.assertEqual({item["title"] for item in completed_response.data["results"]}, {completed.title})
 
     @override_settings(
         EMAIL_NOTIFICATIONS_ENABLED=True,
@@ -787,3 +830,159 @@ class NotificationServiceTests(TestCase):
         recipient.refresh_from_db()
         self.assertEqual(recipient.task_status, RecipientTaskStatus.COMPLETED)
         self.assertIsNotNone(recipient.resolved_at)
+
+    @override_settings(
+        EMAIL_NOTIFICATIONS_ENABLED=True,
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        APP_PUBLIC_URL="http://calidad.local:8088",
+    )
+    def test_treatment_effectiveness_assignment_queues_task_and_email_without_link(self):
+        self.analyst.email_notifications_enabled = True
+        self.analyst.save(update_fields=["email_notifications_enabled", "updated_at"])
+        treatment = self._create_treatment()
+        add_treatment_participant(
+            treatment=treatment,
+            participant_user=self.analyst,
+            role=TreatmentParticipantRole.CONVOKED,
+            note="Responsable de eficacia.",
+            user=self.admin,
+        )
+        due_date = timezone.localdate() + timezone.timedelta(days=10)
+
+        treatment = update_treatment(
+            treatment=treatment,
+            data={
+                "effectiveness_evaluation_date": due_date,
+                "effectiveness_responsible": self.analyst,
+            },
+            user=self.admin,
+            request_id="req-effectiveness-assignment",
+        )
+
+        recipients = NotificationRecipient.objects.filter(
+            notification__template_code="treatment_effectiveness_assigned",
+            notification__source_id=treatment.pk,
+            user=self.analyst,
+        )
+        email_recipient = recipients.get(channel=NotificationChannel.EMAIL)
+        notification = email_recipient.notification
+        self.assertEqual(recipients.count(), 2)
+        self.assertEqual(notification.task_type, NotificationTaskType.VERIFICATION_PARTICIPATION)
+        self.assertEqual(timezone.localtime(notification.due_at).date(), due_date)
+        self.assertIn(treatment.code, notification.title)
+        self.assertIn(due_date.strftime("%d/%m/%Y"), notification.body)
+
+        dispatch_pending_email_notifications()
+
+        message = next(item for item in mail.outbox if item.subject == notification.title)
+        self.assertNotIn("Abrir en el sistema", message.body)
+        self.assertNotIn("/treatments", message.body)
+        self.assertIn("con tu propio usuario", message.body)
+
+    @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
+    def test_same_treatment_effectiveness_assignment_is_not_duplicated(self):
+        treatment = self._create_treatment()
+        add_treatment_participant(
+            treatment=treatment,
+            participant_user=self.analyst,
+            role=TreatmentParticipantRole.CONVOKED,
+            note="Responsable de eficacia.",
+            user=self.admin,
+        )
+        due_date = timezone.localdate() + timezone.timedelta(days=10)
+        payload = {
+            "effectiveness_evaluation_date": due_date,
+            "effectiveness_responsible": self.analyst,
+        }
+
+        treatment = update_treatment(treatment=treatment, data=payload, user=self.admin)
+        update_treatment(treatment=treatment, data=payload, user=self.admin)
+
+        self.assertEqual(
+            Notification.objects.filter(
+                template_code="treatment_effectiveness_assigned",
+                source_id=treatment.pk,
+            ).count(),
+            1,
+        )
+
+    @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
+    def test_effectiveness_date_change_replaces_previous_assignment(self):
+        self.analyst.email_notifications_enabled = True
+        self.analyst.save(update_fields=["email_notifications_enabled", "updated_at"])
+        treatment = self._create_treatment()
+        add_treatment_participant(
+            treatment=treatment,
+            participant_user=self.analyst,
+            role=TreatmentParticipantRole.CONVOKED,
+            note="Responsable de eficacia.",
+            user=self.admin,
+        )
+        first_date = timezone.localdate() + timezone.timedelta(days=7)
+        second_date = first_date + timezone.timedelta(days=2)
+
+        treatment = update_treatment(
+            treatment=treatment,
+            data={
+                "effectiveness_evaluation_date": first_date,
+                "effectiveness_responsible": self.analyst,
+            },
+            user=self.admin,
+        )
+        update_treatment(
+            treatment=treatment,
+            data={
+                "effectiveness_evaluation_date": second_date,
+                "effectiveness_responsible": self.analyst,
+            },
+            user=self.admin,
+        )
+
+        recipients = NotificationRecipient.objects.filter(
+            notification__template_code="treatment_effectiveness_assigned",
+            notification__source_id=treatment.pk,
+            user=self.analyst,
+        )
+        previous_in_app = recipients.get(
+            notification__context_data__due_date=first_date.isoformat(),
+            channel=NotificationChannel.IN_APP,
+        )
+        previous_email = recipients.get(
+            notification__context_data__due_date=first_date.isoformat(),
+            channel=NotificationChannel.EMAIL,
+        )
+        current_in_app = recipients.get(
+            notification__context_data__due_date=second_date.isoformat(),
+            channel=NotificationChannel.IN_APP,
+        )
+        self.assertEqual(previous_in_app.task_status, RecipientTaskStatus.DISMISSED)
+        self.assertEqual(previous_email.delivery_status, DeliveryStatus.SKIPPED)
+        self.assertEqual(current_in_app.task_status, RecipientTaskStatus.PENDING)
+
+    @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
+    def test_opted_out_effectiveness_responsible_receives_internal_task_only(self):
+        treatment = self._create_treatment()
+        add_treatment_participant(
+            treatment=treatment,
+            participant_user=self.analyst,
+            role=TreatmentParticipantRole.CONVOKED,
+            note="Responsable de eficacia.",
+            user=self.admin,
+        )
+
+        treatment = update_treatment(
+            treatment=treatment,
+            data={
+                "effectiveness_evaluation_date": timezone.localdate() + timezone.timedelta(days=5),
+                "effectiveness_responsible": self.analyst,
+            },
+            user=self.admin,
+        )
+
+        recipients = NotificationRecipient.objects.filter(
+            notification__template_code="treatment_effectiveness_assigned",
+            notification__source_id=treatment.pk,
+            user=self.analyst,
+        )
+        self.assertEqual(recipients.count(), 1)
+        self.assertTrue(recipients.filter(channel=NotificationChannel.IN_APP).exists())

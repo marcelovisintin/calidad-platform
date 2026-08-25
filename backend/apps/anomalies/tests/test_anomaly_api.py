@@ -22,6 +22,14 @@ from apps.anomalies.models import (
     ParticipantRole,
 )
 from apps.catalog.models import AnomalyOrigin, AnomalyType, Area, Priority, Severity, Site
+from apps.notifications.models import (
+    DeliveryStatus,
+    Notification,
+    NotificationChannel,
+    NotificationRecipient,
+    NotificationTaskType,
+    RecipientTaskStatus,
+)
 
 
 class AnomalyCreateApiTests(APITestCase):
@@ -509,6 +517,69 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertTrue(
             any("Anomalia cerrada" in item["comment"] for item in effective_response.data["status_history"])
         )
+
+    @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
+    def test_observation_action_assigns_effectiveness_verification_without_duplicates(self):
+        self.user.email_notifications_enabled = True
+        self.user.save(update_fields=["email_notifications_enabled", "updated_at"])
+        anomaly = self._immediate_anomaly("AI-NOTIFY-001")
+        due_date = timezone.localdate() + timedelta(days=7)
+
+        load_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": timezone.localdate().isoformat(),
+                "observation": "Observación con verificación asignada",
+            },
+            format="json",
+        )
+        self.assertEqual(load_response.status_code, status.HTTP_200_OK)
+
+        payload = {
+            "action_completed_at": timezone.localdate().isoformat(),
+            "actions_taken": "Se corrigió el desvío observado",
+            "effectiveness_due_at": due_date.isoformat(),
+        }
+        first_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions-taken/",
+            payload,
+            format="json",
+        )
+        second_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions-taken/",
+            payload,
+            format="json",
+        )
+        self.assertEqual(first_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(second_response.status_code, status.HTTP_200_OK)
+
+        notifications = Notification.objects.filter(
+            template_code="observation_effectiveness_assigned",
+            source_id=anomaly.pk,
+        )
+        self.assertEqual(notifications.count(), 1)
+        notification = notifications.get()
+        self.assertEqual(notification.task_type, NotificationTaskType.VERIFICATION_PARTICIPATION)
+        self.assertEqual(timezone.localtime(notification.due_at).date(), due_date)
+        self.assertFalse(notification.context_data["include_action_url_in_email"])
+        recipients = NotificationRecipient.objects.filter(notification=notification, user=self.user)
+        self.assertEqual(recipients.count(), 2)
+
+        effectiveness_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/effectiveness/",
+            {
+                "effectiveness_verified_at": timezone.now().isoformat(),
+                "effectiveness_is_effective": False,
+                "effectiveness_comment": "Debe repetirse la acción",
+            },
+            format="json",
+        )
+        self.assertEqual(effectiveness_response.status_code, status.HTTP_200_OK)
+        in_app = recipients.get(channel=NotificationChannel.IN_APP)
+        email = recipients.get(channel=NotificationChannel.EMAIL)
+        self.assertEqual(in_app.task_status, RecipientTaskStatus.COMPLETED)
+        self.assertEqual(email.delivery_status, DeliveryStatus.SKIPPED)
 
     def test_usuario_activo_can_create_anomaly(self):
         active_user = User.objects.create_user(

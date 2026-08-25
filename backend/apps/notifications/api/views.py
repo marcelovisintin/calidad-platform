@@ -10,6 +10,7 @@ from apps.notifications.api.serializers import (
     NotificationsApiRootSerializer,
 )
 from apps.notifications.selectors import (
+    OPEN_TASK_STATUSES,
     apply_inbox_filters,
     build_notification_recipient_queryset,
     filter_notification_recipient_queryset_for_user,
@@ -52,6 +53,8 @@ class NotificationInboxViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     @action(detail=False, methods=["get"], url_path="tasks")
     def tasks(self, request):
         queryset = self.get_queryset().filter(notification__is_task=True)
+        if not (request.query_params.get("task_status") or "").strip():
+            queryset = queryset.filter(task_status__in=OPEN_TASK_STATUSES)
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = NotificationInboxItemSerializer(page, many=True, context=self.get_serializer_context())

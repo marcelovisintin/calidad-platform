@@ -7,7 +7,14 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import User
-from apps.actions.models import Treatment, TreatmentAnomaly, TreatmentParticipant, TreatmentRootCause, TreatmentTask
+from apps.actions.models import (
+    Treatment,
+    TreatmentAnomaly,
+    TreatmentParticipant,
+    TreatmentRootCause,
+    TreatmentTask,
+    TreatmentTaskStatus,
+)
 from apps.anomalies.models import (
     Anomaly,
     AnomalyClassification,
@@ -540,14 +547,29 @@ class TreatmentCandidatesApiTests(APITestCase):
             created_by=self.admin,
             updated_by=self.admin,
         )
+        completed_task = TreatmentTask.objects.create(
+            treatment=self.treatment_one,
+            code="TRT-TASK-COMPLETED-001",
+            title="Tarea completada de Mechi",
+            responsible=self.task_user,
+            execution_date=timezone.localdate(),
+            status=TreatmentTaskStatus.COMPLETED,
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
 
         self.client.force_authenticate(user=self.task_user)
         response = self.client.get("/api/v1/actions/treatments/tasks-history/")
+        completed_response = self.client.get("/api/v1/actions/treatments/tasks-history/?status=completed")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         task_ids = {item["id"] for item in response.data["results"]}
         self.assertIn(str(own_task.pk), task_ids)
         self.assertNotIn(str(other_task.pk), task_ids)
+        self.assertNotIn(str(completed_task.pk), task_ids)
+        self.assertEqual(completed_response.status_code, status.HTTP_200_OK)
+        completed_task_ids = {item["id"] for item in completed_response.data["results"]}
+        self.assertEqual(completed_task_ids, {str(completed_task.pk)})
 
     def test_admin_tasks_history_only_returns_tasks_assigned_to_admin(self):
         own_task = TreatmentTask.objects.create(

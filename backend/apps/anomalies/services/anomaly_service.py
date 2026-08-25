@@ -17,8 +17,10 @@ from apps.accounts.services.access_policy import (
 from apps.actions.models import Treatment, TreatmentEffectivenessValidationResult, TreatmentStatus
 from apps.audit.services import record_audit_event
 from apps.notifications.services import (
+    complete_observation_effectiveness_assignment,
     notify_anomaly_created,
     notify_finding_management_assigned,
+    notify_observation_effectiveness_assigned,
     notify_participation_request,
 )
 from apps.anomalies.models import (
@@ -1186,6 +1188,12 @@ def save_observation_action_taken(*, anomaly: Anomaly, user, data: dict, request
         after_data=snapshot_anomaly(locked) | {"immediate_action_id": str(immediate_action.pk)},
         request_id=_request_id(request_id),
     )
+    notify_observation_effectiveness_assigned(
+        anomaly=locked,
+        immediate_action=immediate_action,
+        actor=user,
+        request_id=request_id,
+    )
     return immediate_action
 
 
@@ -1282,6 +1290,11 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
         before_data=before,
         after_data=snapshot_anomaly(locked) | {"immediate_action_id": str(immediate_action.pk)},
         request_id=_request_id(request_id),
+    )
+    complete_observation_effectiveness_assignment(
+        anomaly=locked,
+        actor=user,
+        request_id=request_id,
     )
     return immediate_action
 
