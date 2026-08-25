@@ -35,8 +35,12 @@ export function AnomalyCreatedPage() {
             <div><dt>Etapa actual</dt><dd>{humanizeToken(anomaly.current_stage)}</dd></div>
             <div><dt>Fecha y hora</dt><dd>{formatDateTime(anomaly.detected_at)}</dd></div>
             <div><dt>Responsable actual</dt><dd>{anomaly.current_responsible?.full_name || "Sin asignar"}</dd></div>
-            <div><dt>Numero de OF</dt><dd>{anomaly.manufacturing_order_number || "No informada"}</dd></div>
-            <div><dt>Piezas afectadas</dt><dd>{anomaly.affected_quantity ?? "No informada"}</dd></div>
+            {anomaly.affected_orders.length ? anomaly.affected_orders.map((order) => (
+              <div key={order.id}>
+                <dt>{`${order.order_type.code} ${order.number}`}</dt>
+                <dd>{`${order.quantity} pieza(s)/producto(s)`}</dd>
+              </div>
+            )) : <div><dt>Ordenes afectadas</dt><dd>No informadas</dd></div>}
           </dl>
           <div className="form-actions">
             <Link className="button button-primary" to={`/anomalies/${anomaly.id}`}>Ver detalle</Link>

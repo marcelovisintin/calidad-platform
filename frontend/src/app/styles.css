@@ -604,6 +604,40 @@ small {
   min-height: 90px;
 }
 
+.affected-orders-editor {
+  gap: 0.7rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(21, 132, 111, 0.24);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.affected-orders-editor .section-head small {
+  display: block;
+  margin-top: 0.2rem;
+}
+
+.affected-orders-form-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.affected-order-form-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(180px, 1fr) minmax(190px, 0.8fr) auto;
+  gap: 0.7rem;
+  align-items: end;
+  padding: 0.75rem;
+  border: 1px solid rgba(15, 44, 53, 0.14);
+  border-radius: 14px;
+  background: rgba(226, 241, 237, 0.7);
+}
+
+.affected-order-remove {
+  min-height: 43px;
+}
+
 .compact-form-grid {
   gap: 1rem 1.1rem;
 }
@@ -815,6 +849,30 @@ small {
 
 .data-table td:nth-child(3) {
   max-width: 360px;
+}
+
+.affected-orders-table td small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+}
+
+.inline-filter-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 0.7rem;
+}
+
+.affected-orders-breakdown {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.badge-stack.horizontal {
+  flex-flow: row wrap;
+  justify-content: flex-end;
 }
 
 .anomaly-row-actions {
@@ -1116,6 +1174,19 @@ small {
 
   .anomaly-row {
     grid-template-columns: 1fr;
+  }
+
+  .affected-order-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .affected-orders-breakdown {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .badge-stack.horizontal {
+    justify-content: flex-start;
   }
 
   .anomaly-row-actions,

@@ -2,7 +2,7 @@
 import { useNavigate } from "react-router-dom";
 import { createAnomaly, reserveAnomalyCode, uploadAnomalyAttachment } from "../../../api/anomalies";
 import { fetchCatalogBootstrap } from "../../../api/catalog";
-import type { AnomalyCodeReservation, CatalogBootstrap } from "../../../api/types";
+import type { AffectedOrderInput, AnomalyCodeReservation, CatalogBootstrap } from "../../../api/types";
 import { toOffsetIso } from "../../../app/utils";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
@@ -10,6 +10,22 @@ import { usePageTitle } from "../../../hooks/usePageTitle";
 const CREATED_ANOMALY_KEY = "calidad-platform.last-created-anomaly";
 const EVIDENCE_ACCEPT =
   "image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.odt,.ods,.zip";
+
+type AffectedOrderFormRow = {
+  id: string;
+  order_type: string;
+  number: string;
+  quantity: string;
+};
+
+function createAffectedOrderRow(): AffectedOrderFormRow {
+  return {
+    id: typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `order-${Date.now()}-${Math.random()}`,
+    order_type: "",
+    number: "",
+    quantity: "",
+  };
+}
 
 function nowAsLocalDateTime() {
   const date = new Date();
@@ -41,11 +57,10 @@ export function NewAnomalyPage() {
     anomaly_type: "",
     anomaly_origin: "",
     priority: "",
-    manufacturing_order_number: "",
-    affected_quantity: "",
     detected_at: nowAsLocalDateTime(),
   });
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
+  const [affectedOrders, setAffectedOrders] = useState<AffectedOrderFormRow[]>([createAffectedOrderRow()]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -131,11 +146,47 @@ export function NewAnomalyPage() {
     setEvidenceFiles([]);
   };
 
+  const handleAffectedOrderChange = (rowId: string, field: "order_type" | "number" | "quantity", value: string) => {
+    setAffectedOrders((current) => current.map((row) => (row.id === rowId ? { ...row, [field]: value } : row)));
+  };
+
+  const handleAddAffectedOrder = () => {
+    setAffectedOrders((current) => [...current, createAffectedOrderRow()]);
+  };
+
+  const handleRemoveAffectedOrder = (rowId: string) => {
+    setAffectedOrders((current) => {
+      const next = current.filter((row) => row.id !== rowId);
+      return next.length ? next : [createAffectedOrderRow()];
+    });
+  };
+
+  const buildAffectedOrdersPayload = (): AffectedOrderInput[] => {
+    const activeRows = affectedOrders.filter((row) => row.order_type || row.number.trim() || row.quantity);
+    const seen = new Set<string>();
+    return activeRows.map((row, index) => {
+      if (!row.order_type || !row.number.trim() || !row.quantity) {
+        throw new Error(`Completa tipo, numero y cantidad en la orden afectada ${index + 1}.`);
+      }
+      const quantity = Number(row.quantity);
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        throw new Error(`La cantidad de la orden afectada ${index + 1} debe ser un numero entero mayor que cero.`);
+      }
+      const key = `${row.order_type}:${row.number.trim().toLocaleLowerCase()}`;
+      if (seen.has(key)) {
+        throw new Error(`La orden afectada ${index + 1} esta repetida.`);
+      }
+      seen.add(key);
+      return { order_type: row.order_type, number: row.number.trim(), quantity };
+    });
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
     setSubmitError(null);
     try {
+      const affectedOrdersPayload = buildAffectedOrdersPayload();
       const response = await createAnomaly({
         title: form.title,
         description: form.description,
@@ -146,8 +197,7 @@ export function NewAnomalyPage() {
         anomaly_origin: form.anomaly_origin,
         priority: form.priority || undefined,
         detected_at: toOffsetIso(form.detected_at),
-        manufacturing_order_number: form.manufacturing_order_number.trim() || undefined,
-        affected_quantity: form.affected_quantity ? Number(form.affected_quantity) : undefined,
+        affected_orders: affectedOrdersPayload,
         code_reservation_id: codeReservation?.id,
       });
 
@@ -291,6 +341,73 @@ export function NewAnomalyPage() {
                 value={form.title}
               />
             </label>
+            <div className="field field-span-2 affected-orders-editor">
+              <div className="section-head compact">
+                <div>
+                  <span>Ordenes afectadas</span>
+                  <small className="muted-copy">Opcional. Agrega una o varias ordenes relacionadas con la anomalia.</small>
+                </div>
+                <button className="button button-secondary" onClick={handleAddAffectedOrder} type="button">
+                  Agregar otra orden
+                </button>
+              </div>
+              <div className="affected-orders-form-list">
+                {affectedOrders.map((row, index) => {
+                  const selectedType = bootstrap?.orderTypes.find((item) => item.id === row.order_type);
+                  const rowActive = Boolean(row.order_type || row.number.trim() || row.quantity);
+                  return (
+                    <div className="affected-order-form-row" key={row.id}>
+                      <label className="field">
+                        <span>Tipo de orden</span>
+                        <select
+                          aria-label={`Tipo de orden ${index + 1}`}
+                          disabled={!bootstrap?.orderTypes.length}
+                          onChange={(event) => handleAffectedOrderChange(row.id, "order_type", event.target.value)}
+                          required={rowActive}
+                          value={row.order_type}
+                        >
+                          <option value="">No aplica / Sin orden</option>
+                          {bootstrap?.orderTypes.map((item) => (
+                            <option key={item.id} value={item.id}>{`${item.code} - ${item.name}`}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>{selectedType ? `Nro. de ${selectedType.code}` : "Nro. de orden"}</span>
+                        <input
+                          maxLength={50}
+                          onChange={(event) => handleAffectedOrderChange(row.id, "number", event.target.value)}
+                          placeholder="Ej. 000123"
+                          required={rowActive}
+                          type="text"
+                          value={row.number}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Cantidad de piezas/productos</span>
+                        <input
+                          min="1"
+                          onChange={(event) => handleAffectedOrderChange(row.id, "quantity", event.target.value)}
+                          placeholder="Ej. 25"
+                          required={rowActive}
+                          step="1"
+                          type="number"
+                          value={row.quantity}
+                        />
+                      </label>
+                      <button
+                        aria-label={`Quitar orden ${index + 1}`}
+                        className="button button-ghost affected-order-remove"
+                        onClick={() => handleRemoveAffectedOrder(row.id)}
+                        type="button"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
             <label className="field field-span-2">
               <span>Observacion</span>
               <textarea

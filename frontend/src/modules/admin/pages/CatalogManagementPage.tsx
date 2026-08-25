@@ -79,6 +79,11 @@ const ENTITY_META: EntityMeta[] = [
     title: "Tipos de accion",
     description: "Contencion, correctiva, preventiva o mejora.",
   },
+  {
+    key: "order-types",
+    title: "Tipos de ordenes afectadas",
+    description: "Tipos de orden que pueden vincularse con una anomalia, por ejemplo OP, OF u OM.",
+  },
 ];
 
 const EMPTY_FORM: FormState = {

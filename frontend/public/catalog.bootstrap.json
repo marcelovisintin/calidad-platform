@@ -68,6 +68,23 @@
       "name": "Prioridad baja"
     }
   ],
+  "orderTypes": [
+    {
+      "id": "3e607440-b5ee-4f08-9ad0-fcd14e734001",
+      "code": "OP",
+      "name": "Orden de produccion"
+    },
+    {
+      "id": "3e607440-b5ee-4f08-9ad0-fcd14e734002",
+      "code": "OF",
+      "name": "Orden de fabricacion"
+    },
+    {
+      "id": "3e607440-b5ee-4f08-9ad0-fcd14e734003",
+      "code": "OM",
+      "name": "Orden de mantenimiento"
+    }
+  ],
   "actionTypes": [
     {
       "id": "51e99a20-8846-4bcc-9a07-177bb322a53c",

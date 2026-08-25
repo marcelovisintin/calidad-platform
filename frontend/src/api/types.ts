@@ -30,7 +30,8 @@ export type CatalogEntity =
   | "anomaly-origins"
   | "severities"
   | "priorities"
-  | "action-types";
+  | "action-types"
+  | "order-types";
 
 export interface CatalogManagementItem extends CatalogSummary {
   is_active: boolean;
@@ -615,12 +616,61 @@ export interface AnomalyListItem {
   classification_change_count?: number;
   classification_change_unlocked?: boolean;
   observation_resolution_path?: ObservationResolutionPath | null;
+  affected_orders: AffectedOrderSummary[];
   manufacturing_order_number?: string;
   affected_quantity?: number | null;
   affected_process?: string;
   due_at?: string | null;
   closed_at?: string | null;
   reopened_count?: number;
+}
+
+export interface AffectedOrderSummary {
+  id: UUID;
+  order_type: CatalogSummary;
+  number: string;
+  quantity: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AffectedOrderInput {
+  order_type: UUID;
+  number: string;
+  quantity: number;
+}
+
+export interface AffectedOrderListItem {
+  id: UUID;
+  order_type: CatalogSummary;
+  number: string;
+  quantity: number;
+  anomaly_id: UUID;
+  anomaly_code: string;
+  anomaly_title: string;
+  anomaly_status: string;
+  detected_at: string;
+  process: AreaSummary;
+}
+
+export interface AffectedOrderTypeTotal {
+  order_type_id: UUID;
+  code: string;
+  name: string;
+  records: number;
+  total_quantity: number;
+}
+
+export interface AffectedOrderTotals {
+  records: number;
+  unique_orders: number;
+  anomalies: number;
+  total_quantity: number;
+  by_type: AffectedOrderTypeTotal[];
+}
+
+export interface AffectedOrderListResponse extends PagedResponse<AffectedOrderListItem> {
+  totals: AffectedOrderTotals;
 }
 
 export interface AnomalyRepetitionStudyBucket {
@@ -891,6 +941,7 @@ export interface AnomalyCreatePayload {
   anomaly_origin: UUID;
   priority?: UUID;
   detected_at: string;
+  affected_orders?: AffectedOrderInput[];
   manufacturing_order_number?: string;
   affected_quantity?: number;
   affected_process?: string;
@@ -907,6 +958,7 @@ export interface CatalogBootstrap {
   severities: CatalogSummary[];
   priorities: CatalogSummary[];
   actionTypes: CatalogSummary[];
+  orderTypes: CatalogSummary[];
 }
 
 

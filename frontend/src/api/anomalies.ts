@@ -6,6 +6,7 @@ import type {
   AnomalyDetail,
   AnomalyListItem,
   AnomalyRepetitionStudyResponse,
+  AffectedOrderListResponse,
   ImmediateActionPayload,
   ObservationActionPayload,
   ObservationLoadPayload,
@@ -13,6 +14,47 @@ import type {
   PagedResponse,
   WorkflowMetadata,
 } from "./types";
+
+export type AffectedOrderFilters = {
+  search?: string;
+  orderType?: string;
+  number?: string;
+  anomaly?: string;
+  area?: string;
+  status?: string;
+  quantityMin?: string;
+  quantityMax?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  ordering?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+function affectedOrderParams(filters: AffectedOrderFilters) {
+  const params = new URLSearchParams();
+  params.set("page", String(filters.page ?? 1));
+  params.set("page_size", String(filters.pageSize ?? 20));
+  const values: Array<[string, string | undefined]> = [
+    ["search", filters.search],
+    ["order_type", filters.orderType],
+    ["number", filters.number],
+    ["anomaly", filters.anomaly],
+    ["area", filters.area],
+    ["status", filters.status],
+    ["quantity_min", filters.quantityMin],
+    ["quantity_max", filters.quantityMax],
+    ["date_from", filters.dateFrom],
+    ["date_to", filters.dateTo],
+    ["ordering", filters.ordering],
+  ];
+  values.forEach(([key, value]) => {
+    if (value?.trim()) {
+      params.set(key, value.trim());
+    }
+  });
+  return params;
+}
 
 export function fetchWorkflowMetadata() {
   return apiRequest<WorkflowMetadata>("/anomalies/workflow-metadata/");
@@ -56,6 +98,25 @@ export function fetchAnomalyRepetitionStudy(dateFrom: string) {
   const params = new URLSearchParams();
   params.set("date_from", dateFrom);
   return apiRequest<AnomalyRepetitionStudyResponse>(`/anomalies/repetition-study/?${params.toString()}`);
+}
+
+export function fetchAffectedOrders(filters: AffectedOrderFilters) {
+  return apiRequest<AffectedOrderListResponse>(`/anomalies/affected-orders/?${affectedOrderParams(filters).toString()}`);
+}
+
+export async function downloadAffectedOrdersCsv(filters: AffectedOrderFilters) {
+  const params = affectedOrderParams({ ...filters, page: 1, pageSize: 100 });
+  params.set("export", "csv");
+  const content = await apiRequest<string>(`/anomalies/affected-orders/?${params.toString()}`);
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "ordenes-afectadas.csv";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 export function reserveAnomalyCode() {

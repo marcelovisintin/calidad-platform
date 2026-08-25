@@ -10,6 +10,7 @@ const EMPTY_BOOTSTRAP: CatalogBootstrap = {
   severities: [],
   priorities: [],
   actionTypes: [],
+  orderTypes: [],
 };
 
 function normalizeBootstrap(payload: Partial<CatalogBootstrap>): CatalogBootstrap {
@@ -23,6 +24,7 @@ function normalizeBootstrap(payload: Partial<CatalogBootstrap>): CatalogBootstra
     severities: payload.severities ?? [],
     priorities: payload.priorities ?? [],
     actionTypes: payload.actionTypes ?? [],
+    orderTypes: payload.orderTypes ?? [],
   };
 }
 

@@ -10,6 +10,7 @@ import { UserManagementPage } from "../modules/admin/pages/UserManagementPage";
 import { UserScopesPage } from "../modules/admin/pages/UserScopesPage";
 import { MyActionsPage } from "../modules/actions/pages/MyActionsPage";
 import { AnomalyCreatedPage } from "../modules/anomalies/pages/AnomalyCreatedPage";
+import { AffectedOrdersPage } from "../modules/anomalies/pages/AffectedOrdersPage";
 import { AnomalyDetailPage } from "../modules/anomalies/pages/AnomalyDetailPage";
 import { AnomalyRepetitionStudyPage } from "../modules/anomalies/pages/AnomalyRepetitionStudyPage";
 import { MyAnomaliesPage } from "../modules/anomalies/pages/MyAnomaliesPage";
@@ -52,6 +53,7 @@ export const router = createBrowserRouter([
       { path: "anomalies/repetition-study", element: <AnomalyRepetitionStudyPage /> },
       { path: "anomalies/new", element: <NewAnomalyPage /> },
       { path: "anomalies/created", element: <AnomalyCreatedPage /> },
+      { path: "affected-orders", element: <AffectedOrdersPage /> },
       { path: "anomalies/:anomalyId", element: <AnomalyDetailPage /> },
       { path: "treatments", element: <TreatmentsPage /> },
       { path: "treatments/tracking", element: <TreatmentTrackingPage /> },

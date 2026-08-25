@@ -17,7 +17,7 @@ const primarySectionsBase = [
   {
     sequence: 1,
     title: "Registrar anomalia",
-    description: "Carga inicial desde planta con datos rapidos, OF, cantidad afectada y confirmacion inmediata.",
+    description: "Carga inicial desde planta con datos rapidos, multiples ordenes afectadas y confirmacion inmediata.",
     to: "/anomalies/new",
     label: "Ir a nueva anomalia",
   },
@@ -77,6 +77,13 @@ const primarySectionsBase = [
     to: "/notifications/inbox",
     label: "Abrir bandeja",
   },
+  {
+    sequence: 10,
+    title: "Ordenes afectadas",
+    description: "Consulta ordenes vinculadas con anomalias, cantidades, procesos y totalizadores.",
+    to: "/affected-orders",
+    label: "Ver ordenes afectadas",
+  },
 ];
 
 const workflowSections = [
@@ -115,6 +122,7 @@ const adminSections = [
   { title: "Criterios de Revisión de hallazgos", description: "Criterios usados para la Revisión de hallazgos de cada anomalia.", to: "/management/catalogs?entity=severities" },
   { title: "Orden operativo", description: "Criterios internos de ordenamiento operativo y tratamiento.", to: "/management/catalogs?entity=priorities" },
   { title: "Tipos de accion", description: "Contencion, correctiva, preventiva o mejora.", to: "/management/catalogs?entity=action-types" },
+  { title: "Tipos de ordenes afectadas", description: "Maestro de OP, OF, OM y otros tipos de orden.", to: "/management/catalogs?entity=order-types" },
   { title: "Panel admin Django", description: "Acceso completo al panel tecnico y maestros.", href: "/admin/" },
 ];
 

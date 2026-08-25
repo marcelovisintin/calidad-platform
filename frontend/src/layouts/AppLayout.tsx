@@ -26,7 +26,13 @@ export function AppLayout() {
   const [loggingOut, setLoggingOut] = useState(false);
   const currentSection =
     mainNav.find((item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`))?.label ||
-    (location.pathname.startsWith("/management/users") ? "Usuarios" : location.pathname.startsWith("/management/catalogs") ? "Catalogos" : "Plataforma");
+    (location.pathname.startsWith("/affected-orders")
+      ? "Ordenes afectadas"
+      : location.pathname.startsWith("/management/users")
+        ? "Usuarios"
+        : location.pathname.startsWith("/management/catalogs")
+          ? "Catalogos"
+          : "Plataforma");
   const userTag = user?.username || user?.email?.split("@")[0] || "usuario";
   const [photoSrc, setPhotoSrc] = useState("");
   const canGoBack = (window.history.state?.idx ?? 0) > 0;

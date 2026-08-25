@@ -181,8 +181,12 @@ export function AnomalyDetailPage() {
                 <div className="field-span-2"><dt>Descripcion detallada</dt><dd>{data.description || "Sin descripcion detallada."}</dd></div>
                 <div><dt>Fecha y hora</dt><dd>{formatDateTime(data.detected_at)}</dd></div>
                 <div><dt>Responsable actual</dt><dd>{data.current_responsible?.full_name || "Sin asignar"}</dd></div>
-                <div><dt>Numero de OF</dt><dd>{data.manufacturing_order_number || "No informada"}</dd></div>
-                <div><dt>Piezas afectadas</dt><dd>{data.affected_quantity ?? "No informada"}</dd></div>
+                {data.affected_orders.length ? data.affected_orders.map((order) => (
+                  <div key={order.id}>
+                    <dt>{`${order.order_type.code} ${order.number}`}</dt>
+                    <dd>{`${order.quantity} pieza(s)/producto(s)`}</dd>
+                  </div>
+                )) : <div><dt>Ordenes afectadas</dt><dd>No informadas</dd></div>}
                 <div><dt>Asignado a</dt><dd>{data.imputed_area?.name || data.anomaly_origin?.name || "-"}</dd></div>
                 <div><dt>Criticidad</dt><dd>{data.severity?.name || "-"}</dd></div>
                 <div><dt>Resultados</dt><dd>{data.result_summary || "Sin resumen de resultados."}</dd></div>

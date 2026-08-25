@@ -1432,3 +1432,18 @@ ____25/8 - CREDENCIALES PROVISORIAS DE USUARIO__________________________________
 - La contraseña definitiva exige al menos 8 caracteres, mayúscula, minúscula, número y carácter especial.
 - La creación sin clave manual conserva la generación segura del servidor y muestra la credencial una sola vez.
 - Se agregaron pruebas del ciclo reasignación, login y cambio obligatorio, y del rechazo por confirmación diferente.
+
+____25/8 - ORDENES AFECTADAS________________________________________________________________________________________
+
+- Nueva anomalia permite asociar una o varias ordenes debajo de Observacion.
+- Cada fila registra tipo de orden, numero y cantidad de piezas/productos; el grupo es opcional, pero una fila iniciada
+  exige los tres datos y no admite cantidades menores que uno ni duplicados dentro de la misma anomalia.
+- Configuracion y maestros incorpora Tipos de ordenes afectadas, con OP, OF y OM iniciales, ampliables o desactivables.
+- El detalle y la confirmacion de la anomalia muestran todas las ordenes relacionadas.
+- El Panel de gestion incorpora Ordenes afectadas con filtros por tipo, numero, anomalia, proceso, cantidad, estado y fecha.
+- Los totalizadores muestran ordenes unicas, registros de afectacion, anomalias involucradas, cantidad total y desglose
+  por tipo. Todos los totales respetan los filtros aplicados.
+- El listado puede exportarse a CSV y respeta la misma visibilidad de anomalias definida para cada usuario.
+- Los campos anteriores de OF y cantidad se conservan internamente por compatibilidad y se migran como tipo OF sin
+  perdida de datos. La nueva relacion admite multiples ordenes por anomalia.
+- Estado: implementado y validado en el entorno local de pruebas. Produccion pendiente de aprobacion.
