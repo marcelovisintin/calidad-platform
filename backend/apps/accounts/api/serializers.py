@@ -205,6 +205,13 @@ class UserWriteSerializer(serializers.ModelSerializer):
         required=False,
     )
     password = serializers.CharField(write_only=True, required=False, allow_blank=True, min_length=8, trim_whitespace=False)
+    password_confirmation = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        min_length=8,
+        trim_whitespace=False,
+    )
     initial_password = serializers.SerializerMethodField()
     access_level = serializers.ChoiceField(
         choices=User.AccessLevel.choices,
@@ -226,6 +233,7 @@ class UserWriteSerializer(serializers.ModelSerializer):
             "is_active",
             "email_notifications_enabled",
             "password",
+            "password_confirmation",
             "initial_password",
         )
 
@@ -248,6 +256,17 @@ class UserWriteSerializer(serializers.ModelSerializer):
         if notifications_enabled and not email:
             raise serializers.ValidationError(
                 {"email": "Debe indicar un correo válido para activar las notificaciones."}
+            )
+
+        password = attrs.get("password")
+        password_confirmation = attrs.get("password_confirmation")
+        if password_confirmation and not password:
+            raise serializers.ValidationError(
+                {"password": "Debe ingresar la contraseña provisoria."}
+            )
+        if password and password_confirmation is not None and password != password_confirmation:
+            raise serializers.ValidationError(
+                {"password_confirmation": "La confirmación no coincide con la contraseña provisoria."}
             )
 
         return attrs
@@ -278,6 +297,7 @@ class UserWriteSerializer(serializers.ModelSerializer):
         validated_data["is_superuser"] = level == User.AccessLevel.DESARROLLADOR
 
     def create(self, validated_data):
+        validated_data.pop("password_confirmation", None)
         supplied_password = (validated_data.pop("password", "") or "").strip()
         password = supplied_password or generate_temporary_password()
         validated_data.setdefault("is_active", True)
@@ -291,6 +311,7 @@ class UserWriteSerializer(serializers.ModelSerializer):
         return user
 
     def update(self, instance, validated_data):
+        validated_data.pop("password_confirmation", None)
         raw_password = validated_data.pop("password", None)
         password = raw_password.strip() if isinstance(raw_password, str) else None
         self._apply_access_level_flags(validated_data)

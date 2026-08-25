@@ -143,6 +143,7 @@ export interface UserWritePayload {
   is_active?: boolean;
   email_notifications_enabled?: boolean;
   password?: string;
+  password_confirmation?: string;
 }
 
 export type UserImportMode = "create_only" | "update_existing" | "upsert";

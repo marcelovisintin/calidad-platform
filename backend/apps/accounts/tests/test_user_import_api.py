@@ -1,4 +1,5 @@
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -138,6 +139,66 @@ class UserImportApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("password", response.data)
+
+    def test_admin_can_assign_confirmed_temporary_password_to_existing_user(self):
+        user = User.objects.create_user(
+            username="existing.operator",
+            email="existing.operator@example.com",
+            password="PreviousPassword#2026",
+            must_change_password=False,
+            password_changed_at=timezone.now(),
+        )
+
+        response = self.client.patch(
+            f"/api/v1/accounts/users/{user.pk}/",
+            {
+                "password": "TemporaryAccess#2026",
+                "password_confirmation": "TemporaryAccess#2026",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertTrue(user.check_password("TemporaryAccess#2026"))
+        self.assertFalse(user.check_password("PreviousPassword#2026"))
+        self.assertTrue(user.must_change_password)
+        self.assertIsNone(user.password_changed_at)
+
+        self.client.force_authenticate(user=None)
+        login_response = self.client.post(
+            "/api/v1/accounts/login/",
+            {
+                "identifier": user.username,
+                "password": "TemporaryAccess#2026",
+            },
+            format="json",
+        )
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(login_response.data["user"]["must_change_password"])
+
+    def test_temporary_password_confirmation_must_match_before_update(self):
+        user = User.objects.create_user(
+            username="unchanged.operator",
+            email="unchanged.operator@example.com",
+            password="PreviousPassword#2026",
+            must_change_password=False,
+        )
+
+        response = self.client.patch(
+            f"/api/v1/accounts/users/{user.pk}/",
+            {
+                "password": "TemporaryAccess#2026",
+                "password_confirmation": "DifferentAccess#2026",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("password_confirmation", response.data)
+        user.refresh_from_db()
+        self.assertTrue(user.check_password("PreviousPassword#2026"))
+        self.assertFalse(user.must_change_password)
 
     def test_user_photo_rejects_unsupported_format(self):
         serializer = UserWriteSerializer(

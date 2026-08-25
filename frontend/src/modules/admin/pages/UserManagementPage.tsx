@@ -29,6 +29,12 @@ type UserFormState = {
   is_active: boolean;
   email_notifications_enabled: boolean;
   password: string;
+  password_confirmation: string;
+};
+
+type IssuedCredential = {
+  username: string;
+  password: string;
 };
 
 const accessLevelOptions: Array<{ value: AccessLevel; label: string }> = [
@@ -51,7 +57,48 @@ const emptyForm: UserFormState = {
   is_active: true,
   email_notifications_enabled: false,
   password: "",
+  password_confirmation: "",
 };
+
+const temporaryPasswordAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%*-_";
+
+function secureRandomIndex(maximum: number) {
+  const values = new Uint32Array(1);
+  crypto.getRandomValues(values);
+  return values[0] % maximum;
+}
+
+function generateSecureTemporaryPassword() {
+  const characters = [
+    "ABCDEFGHJKLMNPQRSTUVWXYZ"[secureRandomIndex(24)],
+    "abcdefghijkmnopqrstuvwxyz"[secureRandomIndex(25)],
+    "23456789"[secureRandomIndex(8)],
+    "!@#$%*-_"[secureRandomIndex(8)],
+  ];
+
+  while (characters.length < 16) {
+    characters.push(temporaryPasswordAlphabet[secureRandomIndex(temporaryPasswordAlphabet.length)]);
+  }
+
+  for (let index = characters.length - 1; index > 0; index -= 1) {
+    const swapIndex = secureRandomIndex(index + 1);
+    [characters[index], characters[swapIndex]] = [characters[swapIndex], characters[index]];
+  }
+
+  return characters.join("");
+}
+
+function fallbackCopy(text: string) {
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.style.position = "fixed";
+  textArea.style.opacity = "0";
+  document.body.appendChild(textArea);
+  textArea.select();
+  const copied = document.execCommand("copy");
+  textArea.remove();
+  return copied;
+}
 
 function resolveAccessLevel(item: UserDirectoryItem): AccessLevel {
   if (item.access_level) {
@@ -77,6 +124,9 @@ export function UserManagementPage() {
   const [busyDeleteId, setBusyDeleteId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showTemporaryPassword, setShowTemporaryPassword] = useState(false);
+  const [issuedCredential, setIssuedCredential] = useState<IssuedCredential | null>(null);
+  const [credentialCopied, setCredentialCopied] = useState(false);
 
   const { data, loading, error, reload } = useAsyncTask(async () => {
     const [users, bootstrap] = await Promise.all([
@@ -104,6 +154,14 @@ export function UserManagementPage() {
     setEditingId(null);
     setForm(emptyForm);
     setSubmitError(null);
+    setShowTemporaryPassword(false);
+  };
+
+  const startNewUser = () => {
+    resetForm();
+    setFeedback(null);
+    setIssuedCredential(null);
+    setCredentialCopied(false);
   };
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -126,6 +184,8 @@ export function UserManagementPage() {
     setEditingId(item.id);
     setFeedback(null);
     setSubmitError(null);
+    setIssuedCredential(null);
+    setCredentialCopied(false);
     setForm({
       username: item.username,
       email: item.email,
@@ -139,14 +199,53 @@ export function UserManagementPage() {
       is_active: item.is_active,
       email_notifications_enabled: item.email_notifications_enabled,
       password: "",
+      password_confirmation: "",
     });
+  };
+
+  const handleGenerateTemporaryPassword = () => {
+    const password = generateSecureTemporaryPassword();
+    setForm((current) => ({
+      ...current,
+      password,
+      password_confirmation: password,
+    }));
+    setShowTemporaryPassword(true);
+    setSubmitError(null);
+  };
+
+  const handleCopyIssuedCredential = async () => {
+    if (!issuedCredential) {
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(issuedCredential.password);
+      } else if (!fallbackCopy(issuedCredential.password)) {
+        throw new Error("No se pudo copiar");
+      }
+      setCredentialCopied(true);
+    } catch {
+      setCredentialCopied(fallbackCopy(issuedCredential.password));
+    }
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSubmitting(true);
     setSubmitError(null);
     setFeedback(null);
+    setIssuedCredential(null);
+    setCredentialCopied(false);
+
+    const temporaryPassword = form.password.trim();
+    const passwordConfirmation = form.password_confirmation.trim();
+    if (temporaryPassword !== passwordConfirmation) {
+      setSubmitError("La confirmación no coincide con la contraseña provisoria.");
+      return;
+    }
+
+    setSubmitting(true);
 
     try {
       const payload = {
@@ -161,19 +260,25 @@ export function UserManagementPage() {
         primary_sector: form.primary_sector || null,
         is_active: form.is_active,
         email_notifications_enabled: form.email_notifications_enabled,
-        password: form.password.trim() || undefined,
+        password: temporaryPassword || undefined,
+        password_confirmation: temporaryPassword ? passwordConfirmation : undefined,
       };
 
       if (editingId) {
         await updateUser(editingId, payload);
-        setFeedback("Usuario actualizado correctamente.");
+        if (temporaryPassword) {
+          setIssuedCredential({ username: payload.username, password: temporaryPassword });
+          setFeedback("Contraseña provisoria asignada correctamente. El cambio será obligatorio en el próximo ingreso.");
+        } else {
+          setFeedback("Usuario actualizado correctamente.");
+        }
       } else {
         const createdUser = await createUser(payload);
-        setFeedback(
-          createdUser.initial_password
-            ? `Usuario creado. Contrasena temporal: ${createdUser.initial_password}`
-            : "Usuario creado correctamente con la contrasena temporal ingresada.",
-        );
+        const issuedPassword = createdUser.initial_password || temporaryPassword;
+        if (issuedPassword) {
+          setIssuedCredential({ username: payload.username, password: issuedPassword });
+        }
+        setFeedback("Usuario creado correctamente. Deberá cambiar la contraseña provisoria en su primer ingreso.");
       }
 
       await reload();
@@ -194,6 +299,8 @@ export function UserManagementPage() {
     setBusyDeleteId(userId);
     setSubmitError(null);
     setFeedback(null);
+    setIssuedCredential(null);
+    setCredentialCopied(false);
 
     try {
       await deleteUser(userId);
@@ -237,7 +344,7 @@ export function UserManagementPage() {
         <TabbedFilters
           actions={(
             <>
-              <button className="button button-secondary" onClick={resetForm} type="button">Nuevo usuario</button>
+              <button className="button button-secondary" onClick={startNewUser} type="button">Nuevo usuario</button>
               <Link className="button button-secondary" to="/management/users/import">Importacion masiva</Link>
             </>
           )}
@@ -269,6 +376,26 @@ export function UserManagementPage() {
 
       {feedback ? <div className="panel">{feedback}</div> : null}
       {submitError ? <div className="panel danger">{submitError}</div> : null}
+      {issuedCredential ? (
+        <section className="panel success temporary-credential-panel" role="status">
+          <div>
+            <strong>Credencial provisoria confirmada</strong>
+            <p>
+              Usuario: <b>{issuedCredential.username}</b>
+            </p>
+            <code>{issuedCredential.password}</code>
+            <small>Se muestra una sola vez. Entrégala al usuario por un medio seguro.</small>
+          </div>
+          <div className="form-actions">
+            <button className="button button-primary" onClick={() => void handleCopyIssuedCredential()} type="button">
+              {credentialCopied ? "Copiada" : "Copiar contraseña"}
+            </button>
+            <button className="button button-secondary" onClick={() => setIssuedCredential(null)} type="button">
+              Cerrar
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <DataState loading={loading} error={error} onRetry={reload}>
         <div className="user-management-grid">
@@ -336,23 +463,58 @@ export function UserManagementPage() {
                   ))}
                 </select>
               </label>
-              <label className="field">
-                <span>Contrasena</span>
-                <input
-                  autoComplete="new-password"
-                  minLength={8}
-                  name="password"
-                  onChange={handleInputChange}
-                  placeholder={editingId ? "Dejar vacia para no cambiar" : "Dejar vacia para generar una segura"}
-                  type="password"
-                  value={form.password}
-                />
-                <small>
-                  {editingId
-                    ? "Si cargas una nueva contrasena, el usuario debera cambiarla en su proximo inicio de sesion."
-                    : "Si queda vacia, se genera una clave temporal segura y se muestra una sola vez."}
-                </small>
-              </label>
+              <div className="field field-span-2 temporary-password-card">
+                <div className="section-head compact">
+                  <div>
+                    <span>Contraseña provisoria</span>
+                    <small>
+                      {editingId
+                        ? "Déjala vacía para conservar la actual. Si asignas otra, el cambio será obligatorio al ingresar."
+                        : "Déjala vacía para que el servidor genere una clave segura automáticamente."}
+                    </small>
+                  </div>
+                  <button className="button button-secondary" onClick={handleGenerateTemporaryPassword} type="button">
+                    Generar segura
+                  </button>
+                </div>
+                <div className="temporary-password-grid">
+                  <label className="field">
+                    <span>Contraseña</span>
+                    <input
+                      autoComplete="new-password"
+                      minLength={8}
+                      name="password"
+                      onChange={handleInputChange}
+                      placeholder="Mínimo 8 caracteres"
+                      type={showTemporaryPassword ? "text" : "password"}
+                      value={form.password}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Confirmar contraseña</span>
+                    <input
+                      autoComplete="new-password"
+                      minLength={8}
+                      name="password_confirmation"
+                      onChange={handleInputChange}
+                      placeholder="Repetir la contraseña"
+                      type={showTemporaryPassword ? "text" : "password"}
+                      value={form.password_confirmation}
+                    />
+                  </label>
+                </div>
+                <div className="temporary-password-help">
+                  <small>Mínimo 8 caracteres; no puede ser común ni estar formada solamente por números.</small>
+                  <label className="checkbox-inline">
+                    <input
+                      checked={showTemporaryPassword}
+                      onChange={(event) => setShowTemporaryPassword(event.target.checked)}
+                      type="checkbox"
+                    />
+                    Mostrar contraseña
+                  </label>
+                </div>
+              </div>
               <div className="field user-checkbox-group">
                 <label className="checkbox-inline">
                   <input checked={form.is_active} name="is_active" onChange={handleInputChange} type="checkbox" />
