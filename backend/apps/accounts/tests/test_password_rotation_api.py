@@ -29,8 +29,8 @@ class PasswordRotationApiTests(APITestCase):
             "/api/v1/accounts/change-password/",
             {
                 "current_password": "Temporary1!",
-                "new_password": "SaferPassword#2026",
-                "confirm_password": "SaferPassword#2026",
+                "new_password": "Abcd1!xy",
+                "confirm_password": "Abcd1!xy",
             },
             format="json",
         )
@@ -42,3 +42,24 @@ class PasswordRotationApiTests(APITestCase):
             self.client.get("/api/v1/actions/dashboard-summary/").status_code,
             status.HTTP_200_OK,
         )
+
+    def test_definitive_password_requires_uppercase_number_and_special_character(self):
+        invalid_passwords = (
+            "abcdef1!",
+            "Abcdefg!",
+            "Abcdefg1",
+        )
+
+        for candidate in invalid_passwords:
+            with self.subTest(candidate=candidate):
+                response = self.client.post(
+                    "/api/v1/accounts/change-password/",
+                    {
+                        "current_password": "Temporary1!",
+                        "new_password": candidate,
+                        "confirm_password": candidate,
+                    },
+                    format="json",
+                )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("new_password", response.data)

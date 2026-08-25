@@ -279,10 +279,10 @@ class UserWriteSerializer(serializers.ModelSerializer):
     def validate_password(self, value):
         if not value:
             return value
-        try:
-            validate_password(value)
-        except DjangoValidationError as exc:
-            raise serializers.ValidationError(list(exc.messages)) from exc
+        if len(value.strip()) < 8:
+            raise serializers.ValidationError(
+                "La contraseña provisoria debe tener al menos 8 caracteres."
+            )
         return value
 
     def _apply_access_level_flags(self, validated_data):
@@ -356,8 +356,8 @@ class ChangePasswordSerializer(serializers.Serializer):
         return attrs
 
     def _validate_password_strength(self, user: User, password: str):
-        if len(password) < 10:
-            raise serializers.ValidationError({"new_password": "Debe tener al menos 10 caracteres."})
+        if len(password) < 8:
+            raise serializers.ValidationError({"new_password": "Debe tener al menos 8 caracteres."})
 
         if not re.search(r"[A-Z]", password):
             raise serializers.ValidationError({"new_password": "Debe incluir al menos una letra mayuscula."})

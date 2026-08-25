@@ -79,8 +79,8 @@ class UserImportApiTests(APITestCase):
         self.assertEqual(user.last_name, "Gomez")
         self.assertEqual(user.phone, "+54 9 11 1234-5678")
         initial_password = response.data["items"][0]["initial_password"]
-        self.assertGreaterEqual(len(initial_password), 16)
-        self.assertNotEqual(initial_password, "12345678")
+        self.assertEqual(len(initial_password), 8)
+        self.assertTrue(initial_password.isdigit())
         self.assertTrue(user.check_password(initial_password))
         self.assertFalse(user.email_notifications_enabled)
 
@@ -96,8 +96,8 @@ class UserImportApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         initial_password = response.data["initial_password"]
-        self.assertGreaterEqual(len(initial_password), 16)
-        self.assertNotEqual(initial_password, "12345678")
+        self.assertEqual(len(initial_password), 8)
+        self.assertTrue(initial_password.isdigit())
         user = User.objects.get(username="new.operator")
         self.assertTrue(user.check_password(initial_password))
         self.assertTrue(user.must_change_password)
@@ -126,19 +126,22 @@ class UserImportApiTests(APITestCase):
         detail_response = self.client.get(f"/api/v1/accounts/users/{user.pk}/")
         self.assertTrue(detail_response.data["email_notifications_enabled"])
 
-    def test_manual_user_creation_rejects_common_temporary_password(self):
+    def test_manual_user_creation_accepts_simple_numeric_temporary_password(self):
         response = self.client.post(
             "/api/v1/accounts/users/",
             {
                 "username": "unsafe.operator",
                 "email": "unsafe.operator@example.com",
-                "password": "12345678",
+                "password": "123456789",
+                "password_confirmation": "123456789",
             },
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("password", response.data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        user = User.objects.get(username="unsafe.operator")
+        self.assertTrue(user.check_password("123456789"))
+        self.assertTrue(user.must_change_password)
 
     def test_admin_can_assign_confirmed_temporary_password_to_existing_user(self):
         user = User.objects.create_user(
@@ -152,15 +155,15 @@ class UserImportApiTests(APITestCase):
         response = self.client.patch(
             f"/api/v1/accounts/users/{user.pk}/",
             {
-                "password": "TemporaryAccess#2026",
-                "password_confirmation": "TemporaryAccess#2026",
+                "password": "11111111",
+                "password_confirmation": "11111111",
             },
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         user.refresh_from_db()
-        self.assertTrue(user.check_password("TemporaryAccess#2026"))
+        self.assertTrue(user.check_password("11111111"))
         self.assertFalse(user.check_password("PreviousPassword#2026"))
         self.assertTrue(user.must_change_password)
         self.assertIsNone(user.password_changed_at)
@@ -170,7 +173,7 @@ class UserImportApiTests(APITestCase):
             "/api/v1/accounts/login/",
             {
                 "identifier": user.username,
-                "password": "TemporaryAccess#2026",
+                "password": "11111111",
             },
             format="json",
         )
@@ -188,8 +191,8 @@ class UserImportApiTests(APITestCase):
         response = self.client.patch(
             f"/api/v1/accounts/users/{user.pk}/",
             {
-                "password": "TemporaryAccess#2026",
-                "password_confirmation": "DifferentAccess#2026",
+                "password": "11111111",
+                "password_confirmation": "12345678",
             },
             format="json",
         )

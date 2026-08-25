@@ -107,7 +107,7 @@ export function ChangePasswordPage() {
         <div className="panel muted">
           <strong>Requisitos:</strong>
           <ul>
-            <li>Minimo 10 caracteres</li>
+            <li>Minimo 8 caracteres</li>
             <li>Al menos una mayuscula, una minuscula, un numero y un simbolo</li>
             <li>No debe incluir tu usuario o partes de tu email</li>
           </ul>
@@ -129,6 +129,7 @@ export function ChangePasswordPage() {
             <span>Nueva contrasena</span>
             <input
               autoComplete="new-password"
+              minLength={8}
               onChange={(event) => setNewPassword(event.target.value)}
               required
               type="password"
@@ -140,6 +141,7 @@ export function ChangePasswordPage() {
             <span>Confirmar nueva contrasena</span>
             <input
               autoComplete="new-password"
+              minLength={8}
               onChange={(event) => setConfirmPassword(event.target.value)}
               required
               type="password"

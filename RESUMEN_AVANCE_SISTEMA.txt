@@ -1424,9 +1424,11 @@ ____14/8 - SEPARACION DE PENDIENTES Y COMPLETADAS_______________________________
 ____25/8 - CREDENCIALES PROVISORIAS DE USUARIO_______________________________________________________________________
 
 - La tarjeta de usuario solicita contraseña provisoria y confirmación antes de reasignar una credencial.
-- El administrador puede generar una clave aleatoria segura de 16 caracteres y mostrarla durante la carga.
+- El administrador puede asignar una clave provisoria sencilla de al menos 8 caracteres, incluso solo numérica.
+- Si la deja vacía, el sistema genera una clave numérica aleatoria de 8 dígitos y la muestra durante la carga.
 - La clave solo se ofrece para copiar después de que el servidor confirma que fue guardada correctamente.
 - Si la validación falla, el formulario conserva los datos y muestra el motivo; la contraseña anterior no se modifica.
 - Una reasignación válida marca must_change_password y obliga al usuario a definir su clave definitiva al ingresar.
+- La contraseña definitiva exige al menos 8 caracteres, mayúscula, minúscula, número y carácter especial.
 - La creación sin clave manual conserva la generación segura del servidor y muestra la credencial una sola vez.
 - Se agregaron pruebas del ciclo reasignación, login y cambio obligatorio, y del rechazo por confirmación diferente.

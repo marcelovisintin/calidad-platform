@@ -60,7 +60,7 @@ const emptyForm: UserFormState = {
   password_confirmation: "",
 };
 
-const temporaryPasswordAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%*-_";
+const temporaryPasswordDigits = "0123456789";
 
 function secureRandomIndex(maximum: number) {
   const values = new Uint32Array(1);
@@ -69,20 +69,9 @@ function secureRandomIndex(maximum: number) {
 }
 
 function generateSecureTemporaryPassword() {
-  const characters = [
-    "ABCDEFGHJKLMNPQRSTUVWXYZ"[secureRandomIndex(24)],
-    "abcdefghijkmnopqrstuvwxyz"[secureRandomIndex(25)],
-    "23456789"[secureRandomIndex(8)],
-    "!@#$%*-_"[secureRandomIndex(8)],
-  ];
-
-  while (characters.length < 16) {
-    characters.push(temporaryPasswordAlphabet[secureRandomIndex(temporaryPasswordAlphabet.length)]);
-  }
-
-  for (let index = characters.length - 1; index > 0; index -= 1) {
-    const swapIndex = secureRandomIndex(index + 1);
-    [characters[index], characters[swapIndex]] = [characters[swapIndex], characters[index]];
+  const characters: string[] = [];
+  while (characters.length < 8) {
+    characters.push(temporaryPasswordDigits[secureRandomIndex(temporaryPasswordDigits.length)]);
   }
 
   return characters.join("");
@@ -474,7 +463,7 @@ export function UserManagementPage() {
                     </small>
                   </div>
                   <button className="button button-secondary" onClick={handleGenerateTemporaryPassword} type="button">
-                    Generar segura
+                    Generar numérica
                   </button>
                 </div>
                 <div className="temporary-password-grid">
@@ -485,7 +474,7 @@ export function UserManagementPage() {
                       minLength={8}
                       name="password"
                       onChange={handleInputChange}
-                      placeholder="Mínimo 8 caracteres"
+                      placeholder="8 caracteres o más"
                       type={showTemporaryPassword ? "text" : "password"}
                       value={form.password}
                     />
@@ -504,7 +493,7 @@ export function UserManagementPage() {
                   </label>
                 </div>
                 <div className="temporary-password-help">
-                  <small>Mínimo 8 caracteres; no puede ser común ni estar formada solamente por números.</small>
+                  <small>Puede ser sencilla y solamente numérica, por ejemplo 123456789. El usuario deberá reemplazarla al ingresar.</small>
                   <label className="checkbox-inline">
                     <input
                       checked={showTemporaryPassword}
