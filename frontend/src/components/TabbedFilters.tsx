@@ -18,6 +18,7 @@ export function TabbedFilters({ actions, ariaLabel = "Filtros", items, onClear }
   const componentId = useId().replace(/:/g, "");
   const [selectedId, setSelectedId] = useState(items[0]?.id ?? "");
   const panelRef = useRef<HTMLDivElement>(null);
+  const shouldFocusPanelRef = useRef(false);
 
   useEffect(() => {
     if (!items.some((item) => item.id === selectedId)) {
@@ -26,8 +27,23 @@ export function TabbedFilters({ actions, ariaLabel = "Filtros", items, onClear }
   }, [items, selectedId]);
 
   useEffect(() => {
+    if (!shouldFocusPanelRef.current) {
+      return;
+    }
+
+    shouldFocusPanelRef.current = false;
     panelRef.current?.querySelector<HTMLElement>("input, select, textarea")?.focus();
   }, [selectedId]);
+
+  const selectItem = (itemId: string) => {
+    if (itemId === selectedId) {
+      panelRef.current?.querySelector<HTMLElement>("input, select, textarea")?.focus();
+      return;
+    }
+
+    shouldFocusPanelRef.current = true;
+    setSelectedId(itemId);
+  };
 
   const selectedItem = items.find((item) => item.id === selectedId) ?? items[0];
   const activeCount = useMemo(() => items.filter((item) => item.active).length, [items]);
@@ -50,7 +66,7 @@ export function TabbedFilters({ actions, ariaLabel = "Filtros", items, onClear }
         ? tabs.length - 1
         : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
     tabs[nextIndex].focus();
-    tabs[nextIndex].click();
+    selectItem(tabs[nextIndex].dataset.filterId ?? "");
   };
 
   if (!selectedItem) {
@@ -68,9 +84,10 @@ export function TabbedFilters({ actions, ariaLabel = "Filtros", items, onClear }
               aria-label={`${item.label}${item.active ? " (filtro activo)" : ""}`}
               aria-selected={selected}
               className={`tabbed-filter-tab${item.active ? " has-value" : ""}`}
+              data-filter-id={item.id}
               id={`${componentId}-${item.id}-tab`}
               key={item.id}
-              onClick={() => setSelectedId(item.id)}
+              onClick={() => selectItem(item.id)}
               onKeyDown={handleTabKeyDown}
               role="tab"
               tabIndex={selected ? 0 : -1}
