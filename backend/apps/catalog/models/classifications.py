@@ -39,3 +39,10 @@ class ActionType(ActiveCatalogModel):
         verbose_name = "Tipo de accion"
         verbose_name_plural = "Tipos de accion"
         constraints = [models.UniqueConstraint(fields=["code"], name="catalog_unique_action_type_code")]
+
+
+class OrderType(ActiveCatalogModel):
+    class Meta(ActiveCatalogModel.Meta):
+        verbose_name = "Tipo de orden afectada"
+        verbose_name_plural = "Tipos de ordenes afectadas"
+        constraints = [models.UniqueConstraint(fields=["code"], name="catalog_unique_order_type_code")]

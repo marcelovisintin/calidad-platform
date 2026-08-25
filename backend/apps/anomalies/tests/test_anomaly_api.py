@@ -10,6 +10,7 @@ from apps.accounts.constants import PERMISSION_CLASSIFY_ANOMALY, PERMISSION_EDIT
 from apps.accounts.models import User
 from apps.accounts.services.role_setup import ensure_required_permissions
 from apps.anomalies.models import (
+    AffectedOrder,
     Anomaly,
     AnomalyClassification,
     AnomalyCodeReservation,
@@ -21,7 +22,7 @@ from apps.anomalies.models import (
     ObservationResolutionPath,
     ParticipantRole,
 )
-from apps.catalog.models import AnomalyOrigin, AnomalyType, Area, Priority, Severity, Site
+from apps.catalog.models import AnomalyOrigin, AnomalyType, Area, OrderType, Priority, Severity, Site
 from apps.notifications.models import (
     DeliveryStatus,
     Notification,
@@ -131,7 +132,122 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertIsNone(response.data["current_responsible"])
         self.assertEqual(response.data["manufacturing_order_number"], "OF-001")
         self.assertEqual(response.data["affected_quantity"], 12)
+        self.assertEqual(len(response.data["affected_orders"]), 1)
+        self.assertEqual(response.data["affected_orders"][0]["order_type"]["code"], "OF")
+        self.assertEqual(response.data["affected_orders"][0]["number"], "OF-001")
         self.assertRegex(response.data["code"], rf"^{timezone.localdate().year}\d{{4}}$")
+
+    def test_create_anomaly_accepts_multiple_affected_orders(self):
+        payload = self._build_payload("MULTI")
+        payload.pop("manufacturing_order_number")
+        payload.pop("affected_quantity")
+        op = OrderType.objects.get(code="OP")
+        om = OrderType.objects.get(code="OM")
+        payload["affected_orders"] = [
+            {"order_type": str(op.pk), "number": "1001", "quantity": 12},
+            {"order_type": str(om.pk), "number": "M-44", "quantity": 2},
+        ]
+
+        response = self.client.post("/api/v1/anomalies/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(response.data["affected_orders"]), 2)
+        self.assertEqual(
+            {(item["order_type"]["code"], item["number"], item["quantity"]) for item in response.data["affected_orders"]},
+            {("OP", "1001", 12), ("OM", "M-44", 2)},
+        )
+        self.assertEqual(AffectedOrder.objects.filter(anomaly_id=response.data["id"]).count(), 2)
+
+    def test_create_anomaly_rejects_duplicate_affected_order(self):
+        payload = self._build_payload("DUP")
+        order_type = OrderType.objects.get(code="OP")
+        payload["affected_orders"] = [
+            {"order_type": str(order_type.pk), "number": "ABC-1", "quantity": 5},
+            {"order_type": str(order_type.pk), "number": "abc-1", "quantity": 7},
+        ]
+
+        response = self.client.post("/api/v1/anomalies/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("affected_orders", response.data)
+
+    def test_affected_orders_panel_filters_and_totalizes_all_filtered_rows(self):
+        payload = self._build_payload("PANEL")
+        op = OrderType.objects.get(code="OP")
+        of = OrderType.objects.get(code="OF")
+        payload["affected_orders"] = [
+            {"order_type": str(op.pk), "number": "OP-200", "quantity": 10},
+            {"order_type": str(of.pk), "number": "OF-300", "quantity": 4},
+        ]
+        created = self.client.post("/api/v1/anomalies/", payload, format="json")
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+
+        response = self.client.get(
+            "/api/v1/anomalies/affected-orders/",
+            {"order_type": str(op.pk), "quantity_min": "5"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["number"], "OP-200")
+        self.assertEqual(response.data["totals"]["records"], 1)
+        self.assertEqual(response.data["totals"]["unique_orders"], 1)
+        self.assertEqual(response.data["totals"]["anomalies"], 1)
+        self.assertEqual(response.data["totals"]["total_quantity"], 10)
+
+    def test_affected_orders_panel_exports_csv(self):
+        created = self.client.post("/api/v1/anomalies/", self._build_payload("CSV"), format="json")
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+
+        response = self.client.get("/api/v1/anomalies/affected-orders/", {"export": "csv"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
+        content = response.content.decode("utf-8-sig")
+        self.assertIn("Tipo;Numero;Cantidad;Anomalia", content)
+        self.assertIn("OF;OF-CSV;12", content)
+
+    def test_affected_orders_panel_respects_anomaly_visibility(self):
+        admin_created = self.client.post("/api/v1/anomalies/", self._build_payload("ADMIN"), format="json")
+        self.assertEqual(admin_created.status_code, status.HTTP_201_CREATED)
+
+        operator = User.objects.create_user(
+            username="order_operator",
+            email="order_operator@example.com",
+            password="secret123",
+            access_level=User.AccessLevel.USUARIO_ACTIVO,
+            primary_sector=self.area,
+        )
+        own_anomaly = Anomaly.objects.create(
+            code="OWN-ORDER-1",
+            title="Anomalia visible del operador",
+            description="Caso propio",
+            site=self.site,
+            area=self.area,
+            reporter=operator,
+            anomaly_type=self.anomaly_type,
+            anomaly_origin=self.anomaly_origin,
+            priority=self.priority,
+            detected_at=timezone.now(),
+            created_by=operator,
+            updated_by=operator,
+        )
+        AffectedOrder.objects.create(
+            anomaly=own_anomaly,
+            order_type=OrderType.objects.get(code="OP"),
+            number="OWN-100",
+            quantity=3,
+            created_by=operator,
+            updated_by=operator,
+        )
+        self.client.force_authenticate(user=operator)
+
+        response = self.client.get("/api/v1/anomalies/affected-orders/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["number"], "OWN-100")
+        self.assertEqual(response.data["totals"]["anomalies"], 1)
 
     def test_create_anomaly_does_not_require_affected_process(self):
         payload = self._build_payload("010")

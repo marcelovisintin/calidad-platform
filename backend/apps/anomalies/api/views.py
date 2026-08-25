@@ -1,14 +1,17 @@
+import csv
+
 from django.db.models import Q
 from datetime import date, datetime, time
 import unicodedata
 
-from django.db.models import Case, Count, IntegerField, Value, When
-from django.db.models.functions import Coalesce
-from django.http import FileResponse, Http404
+from django.db.models import Case, Count, IntegerField, Sum, Value, When
+from django.db.models.functions import Coalesce, Lower
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -17,6 +20,7 @@ from apps.accounts.permissions import CanCreateAnomaly, CanEditAnomaly
 from apps.anomalies.api.serializers import (
     AnomalyAttachmentSerializer,
     AnomalyAttachmentWriteSerializer,
+    AffectedOrderListSerializer,
     AnomalyCauseAnalysisSerializer,
     AnomalyCodeReservationSerializer,
     AnomalyCauseAnalysisWriteSerializer,
@@ -46,7 +50,9 @@ from apps.anomalies.api.serializers import (
     WorkflowMetadataSerializer,
 )
 from apps.anomalies.models import (
+    AffectedOrder,
     AnalysisMethod,
+    Anomaly,
     AnomalyAttachment,
     AnomalyCommentType,
     AnomalyStage,
@@ -76,6 +82,7 @@ from apps.anomalies.services import (
     verify_observation_effectiveness,
 )
 from apps.anomalies.services.classification_rules import immediate_action_q
+from common.pagination import DefaultPageNumberPagination
 
 
 STATUS_SEARCH_LABELS = {
@@ -126,6 +133,8 @@ def build_tracking_search_query(term: str) -> Q:
         | Q(title__icontains=term)
         | Q(area__code__icontains=term)
         | Q(area__name__icontains=term)
+        | Q(affected_orders__number__icontains=term)
+        | Q(affected_orders__order_type__code__icontains=term)
     )
     if status_values := matching_anomaly_status_values(term):
         query |= Q(current_status__in=status_values)
@@ -306,6 +315,159 @@ class AnomalyRepetitionStudyAPIView(APIView):
         )
 
 
+class AffectedOrderListAPIView(APIView):
+    ordering_fields = {
+        "detected_at": "anomaly__detected_at",
+        "type": "order_type__display_order",
+        "number": "number",
+        "quantity": "quantity",
+        "anomaly": "anomaly__code",
+        "process": "anomaly__area__name",
+    }
+
+    def _parse_quantity(self, raw_value: str | None, field_name: str):
+        if raw_value in {None, ""}:
+            return None
+        try:
+            value = int(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError({field_name: "Debe ser un numero entero."}) from exc
+        if value < 0:
+            raise ValidationError({field_name: "No puede ser negativo."})
+        return value
+
+    def _parse_date(self, raw_value: str | None, field_name: str):
+        if not raw_value:
+            return None
+        try:
+            return date.fromisoformat(raw_value)
+        except ValueError as exc:
+            raise ValidationError({field_name: "Use el formato AAAA-MM-DD."}) from exc
+
+    def _filtered_queryset(self, request):
+        visible_anomalies = filter_anomaly_queryset_for_user(Anomaly.objects.all(), request.user)
+        queryset = AffectedOrder.objects.filter(anomaly__in=visible_anomalies).select_related(
+            "order_type",
+            "anomaly",
+            "anomaly__area",
+            "anomaly__area__site",
+        )
+        params = request.query_params
+
+        if order_type_id := params.get("order_type"):
+            queryset = queryset.filter(order_type_id=order_type_id)
+        if number := (params.get("number") or "").strip():
+            queryset = queryset.filter(number__icontains=number)
+        if anomaly_term := (params.get("anomaly") or "").strip():
+            queryset = queryset.filter(
+                Q(anomaly__code__icontains=anomaly_term) | Q(anomaly__title__icontains=anomaly_term)
+            )
+        if area_id := params.get("area"):
+            queryset = queryset.filter(anomaly__area_id=area_id)
+        if status_value := params.get("status"):
+            queryset = queryset.filter(anomaly__current_status=status_value)
+
+        quantity_min = self._parse_quantity(params.get("quantity_min"), "quantity_min")
+        quantity_max = self._parse_quantity(params.get("quantity_max"), "quantity_max")
+        if quantity_min is not None:
+            queryset = queryset.filter(quantity__gte=quantity_min)
+        if quantity_max is not None:
+            queryset = queryset.filter(quantity__lte=quantity_max)
+        if quantity_min is not None and quantity_max is not None and quantity_min > quantity_max:
+            raise ValidationError({"quantity_max": "Debe ser mayor o igual que la cantidad minima."})
+
+        date_from = self._parse_date(params.get("date_from"), "date_from")
+        date_to = self._parse_date(params.get("date_to"), "date_to")
+        if date_from:
+            queryset = queryset.filter(anomaly__detected_at__date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(anomaly__detected_at__date__lte=date_to)
+        if date_from and date_to and date_from > date_to:
+            raise ValidationError({"date_to": "Debe ser posterior o igual a la fecha desde."})
+
+        if search := (params.get("search") or "").strip():
+            queryset = queryset.filter(
+                Q(number__icontains=search)
+                | Q(order_type__code__icontains=search)
+                | Q(order_type__name__icontains=search)
+                | Q(anomaly__code__icontains=search)
+                | Q(anomaly__title__icontains=search)
+                | Q(anomaly__area__code__icontains=search)
+                | Q(anomaly__area__name__icontains=search)
+            )
+
+        ordering_param = (params.get("ordering") or "-detected_at").strip()
+        descending = ordering_param.startswith("-")
+        ordering_key = ordering_param[1:] if descending else ordering_param
+        ordering_field = self.ordering_fields.get(ordering_key, "anomaly__detected_at")
+        if descending:
+            ordering_field = f"-{ordering_field}"
+        return queryset.order_by(ordering_field, "order_type__display_order", "number", "id")
+
+    def _totals(self, queryset):
+        aggregate = queryset.aggregate(total_quantity=Sum("quantity"))
+        by_type = list(
+            queryset.values("order_type_id", "order_type__code", "order_type__name")
+            .annotate(records=Count("id"), total_quantity=Sum("quantity"))
+            .order_by("order_type__display_order", "order_type__name")
+        )
+        return {
+            "records": queryset.count(),
+            "unique_orders": queryset.annotate(normalized_number=Lower("number"))
+            .values("order_type_id", "normalized_number")
+            .distinct()
+            .count(),
+            "anomalies": queryset.values("anomaly_id").distinct().count(),
+            "total_quantity": aggregate["total_quantity"] or 0,
+            "by_type": [
+                {
+                    "order_type_id": str(item["order_type_id"]),
+                    "code": item["order_type__code"],
+                    "name": item["order_type__name"],
+                    "records": item["records"],
+                    "total_quantity": item["total_quantity"] or 0,
+                }
+                for item in by_type
+            ],
+        }
+
+    def _csv_response(self, queryset):
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="ordenes-afectadas.csv"'
+        response.write("\ufeff")
+        writer = csv.writer(response, delimiter=";")
+        writer.writerow(
+            ["Tipo", "Numero", "Cantidad", "Anomalia", "Titulo", "Proceso", "Fecha", "Estado"]
+        )
+        for item in queryset.iterator():
+            writer.writerow(
+                [
+                    item.order_type.code,
+                    item.number,
+                    item.quantity,
+                    item.anomaly.code,
+                    item.anomaly.title,
+                    item.anomaly.area.name,
+                    item.anomaly.detected_at.isoformat(),
+                    item.anomaly.current_status,
+                ]
+            )
+        return response
+
+    def get(self, request):
+        queryset = self._filtered_queryset(request)
+        if (request.query_params.get("export") or "").strip().lower() == "csv":
+            return self._csv_response(queryset)
+
+        totals = self._totals(queryset)
+        paginator = DefaultPageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        serializer = AffectedOrderListSerializer(page, many=True)
+        response = paginator.get_paginated_response(serializer.data)
+        response.data["totals"] = totals
+        return response
+
+
 class AnomalyViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "put", "patch", "head", "options"]
 
@@ -349,7 +511,7 @@ class AnomalyViewSet(viewsets.ModelViewSet):
         if reporter_id := params.get("reporter"):
             queryset = queryset.filter(reporter_id=reporter_id)
         if term := params.get("search"):
-            queryset = queryset.filter(build_tracking_search_query(term))
+            queryset = queryset.filter(build_tracking_search_query(term)).distinct()
         if self.action == "list" and not has_active_tracking_filter(params):
             queryset = apply_default_tracking_order(queryset)
 
@@ -466,6 +628,8 @@ class AnomalyViewSet(viewsets.ModelViewSet):
                 | Q(title__icontains=term)
                 | Q(description__icontains=term)
                 | Q(manufacturing_order_number__icontains=term)
+                | Q(affected_orders__number__icontains=term)
+                | Q(affected_orders__order_type__code__icontains=term)
                 | Q(affected_process__icontains=term)
                 | Q(reporter__username__icontains=term)
                 | Q(reporter__email__icontains=term)

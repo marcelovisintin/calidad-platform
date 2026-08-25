@@ -9,6 +9,7 @@ from apps.catalog.api.views import (
     CatalogApiRootView,
     CatalogBootstrapAPIView,
     LineManagementViewSet,
+    OrderTypeManagementViewSet,
     PriorityManagementViewSet,
     SeverityManagementViewSet,
     SiteManagementViewSet,
@@ -25,6 +26,7 @@ router.register("anomaly-origins", AnomalyOriginManagementViewSet, basename="cat
 router.register("severities", SeverityManagementViewSet, basename="catalog-severity")
 router.register("priorities", PriorityManagementViewSet, basename="catalog-priority")
 router.register("action-types", ActionTypeManagementViewSet, basename="catalog-action-type")
+router.register("order-types", OrderTypeManagementViewSet, basename="catalog-order-type")
 
 urlpatterns = [
     path("", CatalogApiRootView.as_view(), name="catalog-root"),

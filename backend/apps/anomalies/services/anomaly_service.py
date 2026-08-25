@@ -24,6 +24,7 @@ from apps.notifications.services import (
     notify_participation_request,
 )
 from apps.anomalies.models import (
+    AffectedOrder,
     Anomaly,
     AnomalyAttachment,
     AnomalyCauseAnalysis,
@@ -53,7 +54,7 @@ from apps.anomalies.services.workflow import (
     resolve_status_for_stage,
     validate_transition,
 )
-from apps.catalog.models import Priority
+from apps.catalog.models import OrderType, Priority
 from common.upload_validation import normalized_upload_content_type, validate_evidence_file
 
 
@@ -169,6 +170,14 @@ def snapshot_anomaly(anomaly: Anomaly) -> dict:
         "detected_at": anomaly.detected_at,
         "manufacturing_order_number": anomaly.manufacturing_order_number,
         "affected_quantity": anomaly.affected_quantity,
+        "affected_orders": [
+            {
+                "order_type_id": str(item.order_type_id),
+                "number": item.number,
+                "quantity": item.quantity,
+            }
+            for item in anomaly.affected_orders.select_related("order_type").all()
+        ],
         "affected_process": anomaly.affected_process,
         "last_transition_at": anomaly.last_transition_at,
         "observation_resolution_path": anomaly.observation_resolution_path,
@@ -176,6 +185,41 @@ def snapshot_anomaly(anomaly: Anomaly) -> dict:
         "classification_change_unlocked": anomaly.classification_change_unlocked,
         "closed_at": anomaly.closed_at,
     }
+
+
+def _legacy_affected_orders(number: str, quantity: int | None):
+    normalized_number = (number or "").strip()
+    if not normalized_number:
+        return []
+    order_type = OrderType.objects.filter(code__iexact="OF", is_active=True).first()
+    if order_type is None:
+        raise ValidationError({"affected_orders": "Debe existir un tipo de orden OF activo para migrar el dato anterior."})
+    return [{"order_type": order_type, "number": normalized_number, "quantity": quantity or 1}]
+
+
+def _sync_legacy_order_fields(data: dict, affected_orders: list[dict]) -> None:
+    if affected_orders:
+        first = affected_orders[0]
+        data["manufacturing_order_number"] = first["number"].strip()
+        data["affected_quantity"] = first["quantity"]
+        return
+    data["manufacturing_order_number"] = ""
+    data["affected_quantity"] = None
+
+
+def _replace_affected_orders(*, anomaly: Anomaly, affected_orders: list[dict], user) -> None:
+    anomaly.affected_orders.all().delete()
+    for item in affected_orders:
+        affected_order = AffectedOrder(
+            anomaly=anomaly,
+            order_type=item["order_type"],
+            number=item["number"].strip(),
+            quantity=item["quantity"],
+            created_by=user,
+            updated_by=user,
+        )
+        affected_order.full_clean()
+        affected_order.save()
 
 
 
@@ -388,6 +432,13 @@ def create_anomaly(*, user, data: dict, request_id: str = "") -> Anomaly:
     registration_comment = data.pop("registration_comment", "Registro inicial de la anomalia.") or "Registro inicial de la anomalia."
     reservation_id = data.pop("code_reservation_id", None)
     requested_code = (data.pop("code", "") or "").strip()
+    affected_orders = data.pop("affected_orders", None)
+    if affected_orders is None:
+        affected_orders = _legacy_affected_orders(
+            data.get("manufacturing_order_number", ""),
+            data.get("affected_quantity"),
+        )
+    _sync_legacy_order_fields(data, affected_orders)
 
     reservation = None
     if reservation_id:
@@ -443,6 +494,7 @@ def create_anomaly(*, user, data: dict, request_id: str = "") -> Anomaly:
     )
     anomaly.full_clean()
     anomaly.save()
+    _replace_affected_orders(anomaly=anomaly, affected_orders=affected_orders, user=user)
 
     if reservation is not None:
         reservation.anomaly = anomaly
@@ -482,6 +534,10 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     before = snapshot_anomaly(locked)
     classification_responsible = data.pop("classification_responsible", None)
     classification_reason = (data.pop("classification_reason", "") or "").strip()
+    affected_orders = data.pop("affected_orders", None)
+    legacy_order_changed = "manufacturing_order_number" in data or "affected_quantity" in data
+    if affected_orders is not None:
+        _sync_legacy_order_fields(data, affected_orders)
 
     next_site = data.get("site", locked.site)
     next_area = data.get("area", locked.area)
@@ -559,6 +615,11 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     _bump_version(locked)
     locked.full_clean()
     locked.save()
+    if affected_orders is not None:
+        _replace_affected_orders(anomaly=locked, affected_orders=affected_orders, user=user)
+    elif legacy_order_changed:
+        legacy_orders = _legacy_affected_orders(locked.manufacturing_order_number, locked.affected_quantity)
+        _replace_affected_orders(anomaly=locked, affected_orders=legacy_orders, user=user)
     _ensure_default_participants(locked, user)
 
     if should_sync_classification:

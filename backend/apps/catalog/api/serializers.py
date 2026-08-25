@@ -1,6 +1,6 @@
 ﻿from rest_framework import serializers
 
-from apps.catalog.models import ActionType, AnomalyOrigin, AnomalyType, Area, Line, Priority, Severity, Site
+from apps.catalog.models import ActionType, AnomalyOrigin, AnomalyType, Area, Line, OrderType, Priority, Severity, Site
 
 
 class SiteSummarySerializer(serializers.ModelSerializer):
@@ -48,6 +48,7 @@ class CatalogBootstrapSerializer(serializers.Serializer):
     severities = CatalogSummarySerializer(many=True)
     priorities = CatalogSummarySerializer(many=True)
     actionTypes = CatalogSummarySerializer(many=True)
+    orderTypes = CatalogSummarySerializer(many=True)
 
 
 class CatalogManagementSerializer(serializers.ModelSerializer):
@@ -122,3 +123,8 @@ class PriorityManagementSerializer(CatalogManagementSerializer):
 class ActionTypeManagementSerializer(CatalogManagementSerializer):
     class Meta(CatalogManagementSerializer.Meta):
         model = ActionType
+
+
+class OrderTypeManagementSerializer(CatalogManagementSerializer):
+    class Meta(CatalogManagementSerializer.Meta):
+        model = OrderType

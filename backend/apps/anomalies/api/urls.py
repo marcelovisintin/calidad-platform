@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from apps.anomalies.api.views import (
     AnomalyAttachmentDownloadAPIView,
+    AffectedOrderListAPIView,
     AnomalyRepetitionStudyAPIView,
     AnomalyViewSet,
     AnomalyWorkflowMetadataAPIView,
@@ -16,6 +17,7 @@ router.register("", AnomalyViewSet, basename="anomaly")
 urlpatterns = [
     path("workflow-metadata/", AnomalyWorkflowMetadataAPIView.as_view(), name="workflow-metadata"),
     path("repetition-study/", AnomalyRepetitionStudyAPIView.as_view(), name="repetition-study"),
+    path("affected-orders/", AffectedOrderListAPIView.as_view(), name="affected-orders"),
     path("attachments/<uuid:attachment_id>/download/", AnomalyAttachmentDownloadAPIView.as_view(), name="attachment-download"),
     path("", include(router.urls)),
 ]

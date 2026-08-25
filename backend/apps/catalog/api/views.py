@@ -15,11 +15,12 @@ from apps.catalog.api.serializers import (
     CatalogApiRootSerializer,
     CatalogBootstrapSerializer,
     LineManagementSerializer,
+    OrderTypeManagementSerializer,
     PriorityManagementSerializer,
     SeverityManagementSerializer,
     SiteManagementSerializer,
 )
-from apps.catalog.models import ActionType, AnomalyOrigin, AnomalyType, Area, Line, Priority, Severity, Site
+from apps.catalog.models import ActionType, AnomalyOrigin, AnomalyType, Area, Line, OrderType, Priority, Severity, Site
 
 
 class CatalogManagementPermission(BasePermission):
@@ -117,6 +118,11 @@ class ActionTypeManagementViewSet(CatalogManagementViewSet):
     queryset = ActionType.objects.all().order_by("display_order", "name")
 
 
+class OrderTypeManagementViewSet(CatalogManagementViewSet):
+    serializer_class = OrderTypeManagementSerializer
+    queryset = OrderType.objects.all().order_by("display_order", "name")
+
+
 class CatalogApiRootView(APIView):
     permission_classes = [AllowAny]
 
@@ -133,6 +139,7 @@ class CatalogApiRootView(APIView):
                     "severities": "/api/v1/catalog/severities/",
                     "priorities": "/api/v1/catalog/priorities/",
                     "action_types": "/api/v1/catalog/action-types/",
+                    "order_types": "/api/v1/catalog/order-types/",
                 },
             }
         )
@@ -157,6 +164,7 @@ class CatalogBootstrapAPIView(APIView):
             "severities": list(Severity.objects.filter(is_active=True).order_by("display_order", "name")),
             "priorities": list(Priority.objects.filter(is_active=True).order_by("display_order", "name")),
             "actionTypes": list(ActionType.objects.filter(is_active=True).order_by("display_order", "name")),
+            "orderTypes": list(OrderType.objects.filter(is_active=True).order_by("display_order", "name")),
         }
         serializer = CatalogBootstrapSerializer(payload)
         return Response(serializer.data)

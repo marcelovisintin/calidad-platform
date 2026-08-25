@@ -14,6 +14,7 @@ from apps.anomalies.models import (
     AnomalyParticipant,
     AnomalyProposal,
     AnomalyStatusHistory,
+    AffectedOrder,
 )
 
 
@@ -47,6 +48,11 @@ class AnomalyStatusHistoryInline(admin.TabularInline):
     readonly_fields = ("from_status", "to_status", "from_stage", "to_stage", "comment", "changed_by", "changed_at")
 
 
+class AffectedOrderInline(admin.TabularInline):
+    model = AffectedOrder
+    extra = 0
+
+
 @admin.register(Anomaly)
 class AnomalyAdmin(admin.ModelAdmin):
     list_display = (
@@ -76,15 +82,32 @@ class AnomalyAdmin(admin.ModelAdmin):
         "anomaly_type",
         "anomaly_origin",
     )
-    search_fields = ("code", "title", "description", "manufacturing_order_number", "affected_process")
+    search_fields = (
+        "code",
+        "title",
+        "description",
+        "manufacturing_order_number",
+        "affected_orders__number",
+        "affected_orders__order_type__code",
+        "affected_process",
+    )
     readonly_fields = ("code", "current_status", "current_stage", "closed_at", "last_transition_at", "reopened_count")
     inlines = [
         AnomalyCommentInline,
         AnomalyAttachmentInline,
         AnomalyParticipantInline,
         AnomalyProposalInline,
+        AffectedOrderInline,
         AnomalyStatusHistoryInline,
     ]
+
+
+@admin.register(AffectedOrder)
+class AffectedOrderAdmin(admin.ModelAdmin):
+    list_display = ("order_type", "number", "quantity", "anomaly", "created_at")
+    list_filter = ("order_type", "anomaly__area", "anomaly__current_status")
+    list_select_related = ("order_type", "anomaly", "anomaly__area")
+    search_fields = ("number", "anomaly__code", "anomaly__title")
 
 
 @admin.register(AnomalyInitialVerification)

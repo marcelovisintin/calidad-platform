@@ -1,5 +1,6 @@
 ﻿from .anomaly import (
     AnalysisMethod,
+    AffectedOrder,
     Anomaly,
     AnomalyAttachment,
     AnomalyCauseAnalysis,
@@ -23,6 +24,7 @@
 
 __all__ = [
     "AnalysisMethod",
+    "AffectedOrder",
     "Anomaly",
     "AnomalyAttachment",
     "AnomalyCauseAnalysis",

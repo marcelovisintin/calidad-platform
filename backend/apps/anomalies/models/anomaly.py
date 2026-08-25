@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from apps.core.models import AuditBaseModel
@@ -192,6 +193,43 @@ class Anomaly(AuditBaseModel):
 
     def __str__(self) -> str:
         return f"{self.code} - {self.title}"
+
+
+class AffectedOrder(AuditBaseModel):
+    anomaly = models.ForeignKey(
+        "anomalies.Anomaly",
+        on_delete=models.CASCADE,
+        related_name="affected_orders",
+    )
+    order_type = models.ForeignKey(
+        "catalog.OrderType",
+        on_delete=models.PROTECT,
+        related_name="affected_orders",
+    )
+    number = models.CharField(max_length=50)
+    quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+
+    class Meta:
+        ordering = ("order_type__display_order", "order_type__name", "number")
+        indexes = [
+            models.Index(fields=["order_type", "number"], name="aff_order_type_number_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["anomaly", "order_type", "number"],
+                name="aff_order_unique_per_anomaly",
+            ),
+        ]
+        verbose_name = "Orden afectada"
+        verbose_name_plural = "Ordenes afectadas"
+
+    def clean(self):
+        self.number = (self.number or "").strip()
+        if not self.number:
+            raise ValidationError({"number": "Debe indicar el numero de orden."})
+
+    def __str__(self) -> str:
+        return f"{self.order_type.code} {self.number} - {self.quantity}"
 
 
 class AnomalyCodeReservation(AuditBaseModel):

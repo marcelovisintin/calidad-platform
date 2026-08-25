@@ -5,6 +5,7 @@ from django.db import models
 from apps.accounts.services.access_policy import has_global_access
 from apps.actions.models import ActionItem, ActionPlan
 from apps.anomalies.models import (
+    AffectedOrder,
     Anomaly,
     AnomalyAttachment,
     AnomalyComment,
@@ -27,6 +28,13 @@ def build_anomaly_queryset(*, detailed: bool = False):
         "severity",
         "priority",
         "duplicate_of",
+    ).prefetch_related(
+        Prefetch(
+            "affected_orders",
+            queryset=AffectedOrder.objects.select_related("order_type").order_by(
+                "order_type__display_order", "order_type__name", "number"
+            ),
+        )
     )
 
     if detailed:

@@ -1,4 +1,4 @@
-from .classifications import ActionType, AnomalyOrigin, AnomalyType, Priority, Severity
+from .classifications import ActionType, AnomalyOrigin, AnomalyType, OrderType, Priority, Severity
 from .organization import Area, Line, Site
 
 __all__ = [
@@ -7,6 +7,7 @@ __all__ = [
     "AnomalyType",
     "Area",
     "Line",
+    "OrderType",
     "Priority",
     "Severity",
     "Site",

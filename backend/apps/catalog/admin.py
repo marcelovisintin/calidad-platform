@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.catalog.models import ActionType, AnomalyOrigin, AnomalyType, Area, Line, Priority, Severity, Site
+from apps.catalog.models import ActionType, AnomalyOrigin, AnomalyType, Area, Line, OrderType, Priority, Severity, Site
 
 
 @admin.register(Site)
@@ -31,6 +31,7 @@ class LineAdmin(admin.ModelAdmin):
 @admin.register(Severity)
 @admin.register(Priority)
 @admin.register(ActionType)
+@admin.register(OrderType)
 class CatalogLookupAdmin(admin.ModelAdmin):
     list_display = ("code", "name", "display_order", "is_active")
     list_filter = ("is_active",)

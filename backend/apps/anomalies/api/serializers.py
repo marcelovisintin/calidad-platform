@@ -12,6 +12,7 @@ from apps.actions.models import (
     TreatmentTask,
 )
 from apps.anomalies.models import (
+    AffectedOrder,
     Anomaly,
     AnomalyAttachment,
     AnomalyCauseAnalysis,
@@ -30,7 +31,7 @@ from apps.anomalies.models import (
     AnomalyStatusHistory,
     ParticipantRole,
 )
-from apps.catalog.models import Area, Line, Site
+from apps.catalog.models import Area, Line, OrderType, Site
 from apps.anomalies.services.classification_rules import can_modify_classification, can_unlock_classification_change
 from common.upload_validation import validate_evidence_file
 
@@ -119,6 +120,58 @@ class CatalogSummarySerializer(serializers.Serializer):
     id = serializers.UUIDField(read_only=True)
     code = serializers.CharField(read_only=True)
     name = serializers.CharField(read_only=True)
+
+
+class AffectedOrderSerializer(serializers.ModelSerializer):
+    order_type = CatalogSummarySerializer(read_only=True)
+
+    class Meta:
+        model = AffectedOrder
+        fields = ("id", "order_type", "number", "quantity", "created_at", "updated_at")
+
+
+class AffectedOrderListSerializer(serializers.ModelSerializer):
+    order_type = CatalogSummarySerializer(read_only=True)
+    anomaly_id = serializers.UUIDField(source="anomaly.id", read_only=True)
+    anomaly_code = serializers.CharField(source="anomaly.code", read_only=True)
+    anomaly_title = serializers.CharField(source="anomaly.title", read_only=True)
+    anomaly_status = serializers.CharField(source="anomaly.current_status", read_only=True)
+    detected_at = serializers.DateTimeField(source="anomaly.detected_at", read_only=True)
+    process = AreaSummarySerializer(source="anomaly.area", read_only=True)
+
+    class Meta:
+        model = AffectedOrder
+        fields = (
+            "id",
+            "order_type",
+            "number",
+            "quantity",
+            "anomaly_id",
+            "anomaly_code",
+            "anomaly_title",
+            "anomaly_status",
+            "detected_at",
+            "process",
+        )
+
+
+class AffectedOrderWriteSerializer(serializers.Serializer):
+    order_type = serializers.PrimaryKeyRelatedField(queryset=OrderType.objects.filter(is_active=True))
+    number = serializers.CharField(max_length=50, trim_whitespace=True)
+    quantity = serializers.IntegerField(min_value=1)
+
+
+class AffectedOrdersWriteMixin:
+    def validate_affected_orders(self, value):
+        seen = set()
+        for index, item in enumerate(value):
+            key = (str(item["order_type"].pk), item["number"].strip().casefold())
+            if key in seen:
+                raise serializers.ValidationError(
+                    f"La orden de la fila {index + 1} esta repetida para el mismo tipo."
+                )
+            seen.add(key)
+        return value
 
 
 class ActionItemSummarySerializer(serializers.ModelSerializer):
@@ -433,6 +486,7 @@ class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin
     can_modify_classification = serializers.SerializerMethodField()
     can_unlock_classification = serializers.SerializerMethodField()
     is_locked_by_effective_treatment = serializers.SerializerMethodField()
+    affected_orders = AffectedOrderSerializer(many=True, read_only=True)
 
     def get_is_locked_by_effective_treatment(self, obj):
         from apps.anomalies.services.anomaly_service import is_anomaly_locked_by_effective_treatment
@@ -464,6 +518,7 @@ class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin
             "is_locked_by_effective_treatment",
             "classification_change_count",
             "classification_change_unlocked",
+            "affected_orders",
             "manufacturing_order_number",
             "affected_quantity",
             "affected_process",
@@ -504,6 +559,7 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
     action_plans = ActionPlanSummarySerializer(many=True, read_only=True)
     treatment_tasks = serializers.SerializerMethodField()
     learned_lessons = serializers.SerializerMethodField()
+    affected_orders = AffectedOrderSerializer(many=True, read_only=True)
 
     def get_is_locked_by_effective_treatment(self, obj):
         from apps.anomalies.services.anomaly_service import is_anomaly_locked_by_effective_treatment
@@ -564,6 +620,7 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
             "is_locked_by_effective_treatment",
             "classification_change_count",
             "classification_change_unlocked",
+            "affected_orders",
             "manufacturing_order_number",
             "affected_quantity",
             "affected_process",
@@ -600,11 +657,12 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
         )
 
 
-class AnomalyCreateSerializer(serializers.ModelSerializer):
+class AnomalyCreateSerializer(AffectedOrdersWriteMixin, serializers.ModelSerializer):
     detected_at = serializers.DateTimeField(style=DATETIME_INPUT_STYLE)
     due_at = serializers.DateTimeField(required=False, allow_null=True, style=DATETIME_INPUT_STYLE)
     registration_comment = serializers.CharField(write_only=True, required=False, allow_blank=True)
     code_reservation_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
+    affected_orders = AffectedOrderWriteSerializer(many=True, required=False)
 
     class Meta:
         model = Anomaly
@@ -623,6 +681,7 @@ class AnomalyCreateSerializer(serializers.ModelSerializer):
             "priority",
             "duplicate_of",
             "detected_at",
+            "affected_orders",
             "manufacturing_order_number",
             "affected_quantity",
             "affected_process",
@@ -651,7 +710,7 @@ class AnomalyCreateSerializer(serializers.ModelSerializer):
         }
 
 
-class AnomalyUpdateSerializer(serializers.ModelSerializer):
+class AnomalyUpdateSerializer(AffectedOrdersWriteMixin, serializers.ModelSerializer):
     detected_at = serializers.DateTimeField(required=False, style=DATETIME_INPUT_STYLE)
     due_at = serializers.DateTimeField(required=False, allow_null=True, style=DATETIME_INPUT_STYLE)
     classification_responsible = serializers.PrimaryKeyRelatedField(
@@ -668,6 +727,7 @@ class AnomalyUpdateSerializer(serializers.ModelSerializer):
         write_only=True,
     )
     classification_reason = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    affected_orders = AffectedOrderWriteSerializer(many=True, required=False)
 
     class Meta:
         model = Anomaly
@@ -685,6 +745,7 @@ class AnomalyUpdateSerializer(serializers.ModelSerializer):
             "priority",
             "duplicate_of",
             "detected_at",
+            "affected_orders",
             "manufacturing_order_number",
             "affected_quantity",
             "affected_process",

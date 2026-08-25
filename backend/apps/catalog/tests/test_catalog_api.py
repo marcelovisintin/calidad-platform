@@ -18,3 +18,7 @@ class CatalogBootstrapApiTests(APITestCase):
         self.assertTrue(any(item["code"] == "alta" for item in response.data["severities"]))
         self.assertTrue(any(item["code"] == "alta" for item in response.data["priorities"]))
         self.assertTrue(any(item["code"] == "CORR" for item in response.data["actionTypes"]))
+        self.assertEqual(
+            {item["code"] for item in response.data["orderTypes"]},
+            {"OP", "OF", "OM"},
+        )
