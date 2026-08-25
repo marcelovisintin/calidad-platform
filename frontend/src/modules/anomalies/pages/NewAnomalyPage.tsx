@@ -237,7 +237,7 @@ export function NewAnomalyPage() {
 
           <div className="form-grid compact-form-grid">
             <label className="field">
-              <span>Proceso / area afectada</span>
+              <span>Elaborado por:</span>
               <select autoFocus disabled={!catalogsReady} name="area" onChange={handleChange} required value={form.area}>
                 <option value="">Seleccionar</option>
                 {availableAreas.map((item) => (
