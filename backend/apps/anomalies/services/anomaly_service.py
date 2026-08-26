@@ -47,6 +47,7 @@ from apps.anomalies.services.classification_rules import (
     can_modify_classification,
     can_unlock_classification_change,
     is_immediate_action_anomaly,
+    is_immediate_action_value,
     stage_allows_classification_change,
 )
 from apps.anomalies.services.workflow import (
@@ -114,6 +115,19 @@ def _require_anomaly_editor(anomaly: Anomaly, user) -> None:
 
 def _bump_version(instance) -> None:
     instance.row_version = (instance.row_version or 0) + 1
+
+
+OBSERVATION_CODE_SUFFIX = "-OBS"
+
+
+def _ensure_observation_code(anomaly: Anomaly) -> None:
+    if anomaly.code.upper().endswith(OBSERVATION_CODE_SUFFIX):
+        return
+
+    observation_code = f"{anomaly.code}{OBSERVATION_CODE_SUFFIX}"
+    if Anomaly.objects.exclude(pk=anomaly.pk).filter(code__iexact=observation_code).exists():
+        raise ValidationError({"code": f"Ya existe una anomalia con el codigo {observation_code}."})
+    anomaly.code = observation_code
 
 
 
@@ -586,6 +600,8 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
                 {"classification_responsible": "El responsable debe tener nivel Mando medio, Administrador o Desarrollador."}
             )
         locked.classification_summary = f"Criterio de Revisión de hallazgos aplicado: {severity_name}."
+        if is_immediate_action_value(locked.severity.code) or is_immediate_action_value(severity_name):
+            _ensure_observation_code(locked)
 
         if closes_as_invalid:
             transition_from_status = locked.current_status
@@ -1072,6 +1088,8 @@ def save_learning(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -
 def _ensure_observation_path_available(locked: Anomaly) -> None:
     if not is_immediate_action_anomaly(locked):
         raise ValidationError({"anomaly": "La anomalia no tiene Revision de hallazgos como Observacion."})
+    if locked.observation_resolution_path == ObservationResolutionPath.TREATMENT_PENDING:
+        raise ValidationError({"anomaly": "La Observacion ya fue marcada como TRT y debe gestionarse desde Tratamientos."})
     if locked.observation_resolution_path == ObservationResolutionPath.TREATMENT:
         raise ValidationError({"anomaly": "La anomalia ya fue derivada a Tratamiento y no puede gestionarse como Observacion."})
 
@@ -1105,6 +1123,7 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
 
     before = snapshot_anomaly(locked)
     previous_resolution_path = locked.observation_resolution_path
+    requires_treatment = bool(data.get("requires_treatment", False))
 
     immediate_action.observation = data["observation"].strip()
     immediate_action.responsible = data["responsible"]
@@ -1134,7 +1153,25 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
     previous_status = locked.current_status
     previous_stage = locked.current_stage
     locked.owner = immediate_action.responsible
-    locked.observation_resolution_path = ObservationResolutionPath.OBSERVATION
+    locked.observation_resolution_path = (
+        ObservationResolutionPath.TREATMENT_PENDING
+        if requires_treatment
+        else ObservationResolutionPath.OBSERVATION
+    )
+    _ensure_observation_code(locked)
+    if requires_treatment:
+        locked.classification_summary = "Criterio de Revision de hallazgos aplicado: Observacion TRT (con tratamiento)."
+        classification = _get_related_or_none(locked, "classification")
+        if classification is not None:
+            classification.summary = locked.classification_summary
+            classification.requires_action_plan = True
+            classification.requires_effectiveness_verification = True
+            classification.updated_by = user
+            classification.full_clean()
+            classification.save()
+        locked.current_stage = AnomalyStage.CLASSIFICATION
+        locked.current_status = AnomalyStatus.IN_EVALUATION
+        locked.last_transition_at = now
     locked.containment_summary = immediate_action.observation
     locked.closed_at = None
     locked.updated_by = user
@@ -1148,10 +1185,14 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
         to_status=locked.current_status,
         from_stage=previous_stage,
         to_stage=locked.current_stage,
-        comment="Carga de Observacion confirmada.",
+        comment=(
+            "Observacion TRT confirmada: pendiente de asociacion a Tratamiento."
+            if requires_treatment
+            else "Carga de Observacion confirmada."
+        ),
         evidence_note="\n".join(
             [
-                f"Camino elegido: {ObservationResolutionPath.OBSERVATION}",
+                f"Camino elegido: {locked.observation_resolution_path}",
                 f"Camino anterior: {previous_resolution_path or 'sin definir'}",
                 f"Responsable: {_user_label(immediate_action.responsible)}",
                 f"Fecha limite de ejecucion: {immediate_action.action_date.isoformat()}",
@@ -1169,10 +1210,22 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
         before_data=before,
         after_data=snapshot_anomaly(locked) | {
             "immediate_action_id": str(immediate_action.pk),
-            "observation_resolution_path": ObservationResolutionPath.OBSERVATION,
+            "observation_resolution_path": locked.observation_resolution_path,
         },
         request_id=_request_id(request_id),
     )
+    if requires_treatment:
+        complete_observation_effectiveness_assignment(
+            anomaly=locked,
+            actor=user,
+            request_id=request_id,
+        )
+        notify_finding_management_assigned(
+            anomaly=locked,
+            responsible=immediate_action.responsible,
+            actor=user,
+            request_id=request_id,
+        )
     return immediate_action
 
 

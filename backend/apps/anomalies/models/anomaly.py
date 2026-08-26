@@ -21,6 +21,7 @@ class AnomalyStatus(models.TextChoices):
 
 class ObservationResolutionPath(models.TextChoices):
     OBSERVATION = "OBSERVATION", "Observacion"
+    TREATMENT_PENDING = "TREATMENT_PENDING", "Observacion TRT (con tratamiento)"
     TREATMENT = "TREATMENT", "Tratamiento"
 
 

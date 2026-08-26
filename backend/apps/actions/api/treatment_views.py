@@ -66,7 +66,7 @@ from apps.actions.services import (
     update_treatment_task,
     validate_treatment_effectiveness,
 )
-from apps.anomalies.models import AnomalyAttachment, AnomalyStatus
+from apps.anomalies.models import AnomalyAttachment, AnomalyStatus, ObservationResolutionPath
 from apps.anomalies.selectors import build_anomaly_queryset, filter_anomaly_queryset_for_user
 from apps.anomalies.services.classification_rules import immediate_action_q
 from common.query_params import parse_iso_date_parameter
@@ -136,7 +136,10 @@ def _treatment_candidate_queryset(visible):
             initial_verification__isnull=False,
             classification__requires_action_plan=True,
         )
-        .filter(~immediate_action_q() | Q(observation_resolution_path__isnull=True))
+        .filter(
+            ~immediate_action_q()
+            | Q(observation_resolution_path=ObservationResolutionPath.TREATMENT_PENDING)
+        )
         .exclude(current_status__in=[AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED])
     )
 

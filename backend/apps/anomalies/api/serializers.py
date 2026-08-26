@@ -910,6 +910,7 @@ class AnomalyObservationLoadWriteSerializer(serializers.Serializer):
     responsible = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True))
     action_date = serializers.DateField()
     observation = serializers.CharField()
+    requires_treatment = serializers.BooleanField(required=False, default=False)
 
 
 class AnomalyObservationActionWriteSerializer(serializers.Serializer):

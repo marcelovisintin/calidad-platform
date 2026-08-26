@@ -228,10 +228,17 @@ def is_open_treatment_for_association(treatment: Treatment) -> bool:
 def ensure_anomaly_available_for_treatment(anomaly, field: str = "anomaly") -> None:
     if anomaly.current_status in {AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED}:
         raise ValidationError({field: "La anomalia esta cerrada o anulada y no puede vincularse a tratamiento."})
-    if is_immediate_action_anomaly(anomaly) and anomaly.observation_resolution_path:
-        if anomaly.observation_resolution_path == ObservationResolutionPath.OBSERVATION:
+    if is_immediate_action_anomaly(anomaly):
+        if anomaly.observation_resolution_path == ObservationResolutionPath.TREATMENT_PENDING:
+            pass
+        elif anomaly.observation_resolution_path == ObservationResolutionPath.OBSERVATION:
             raise ValidationError({field: "La anomalia ya fue tomada por Observacion y no puede vincularse a tratamiento."})
-        raise ValidationError({field: "La anomalia ya fue derivada a Tratamiento."})
+        elif anomaly.observation_resolution_path == ObservationResolutionPath.TREATMENT:
+            raise ValidationError({field: "La anomalia ya fue derivada a Tratamiento."})
+        else:
+            raise ValidationError(
+                {field: "La Observacion debe marcarse como Observacion TRT antes de vincularla a tratamiento."}
+            )
     if anomaly.severity_id is None:
         raise ValidationError({field: "La anomalia no tiene Revisión de hallazgos clasificada para tratamiento."})
     if not hasattr(anomaly, "initial_verification"):

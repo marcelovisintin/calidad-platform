@@ -634,6 +634,35 @@ class AnomalyCreateApiTests(APITestCase):
             any("Anomalia cerrada" in item["comment"] for item in effective_response.data["status_history"])
         )
 
+    def test_observation_can_be_marked_as_treatment_pending(self):
+        anomaly = self._immediate_anomaly("AI-TRT-001")
+        anomaly.severity = self.severity_observation
+        anomaly.save(update_fields=["severity", "updated_at"])
+
+        response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": (timezone.localdate() + timedelta(days=3)).isoformat(),
+                "observation": "La observacion requiere analisis de causa y tratamiento.",
+                "requires_treatment": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["observation_resolution_path"], ObservationResolutionPath.TREATMENT_PENDING)
+        self.assertEqual(response.data["severity"]["id"], str(self.severity_observation.pk))
+        self.assertTrue(response.data["code"].endswith("-OBS"))
+        self.assertIn("Observacion TRT", response.data["classification_summary"])
+        self.assertTrue(
+            any("Observacion TRT confirmada" in item["comment"] for item in response.data["status_history"])
+        )
+
+        observation_list = self.client.get("/api/v1/anomalies/immediate-actions/")
+        observation_ids = {item["id"] for item in observation_list.data["results"]}
+        self.assertNotIn(str(anomaly.pk), observation_ids)
+
     @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
     def test_observation_action_assigns_effectiveness_verification_without_duplicates(self):
         self.user.email_notifications_enabled = True

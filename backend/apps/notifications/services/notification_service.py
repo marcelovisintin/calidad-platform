@@ -670,6 +670,17 @@ def notify_finding_management_assigned(*, anomaly, responsible, actor=None, requ
     from apps.anomalies.services.classification_rules import is_immediate_action_anomaly
 
     severity_id = str(anomaly.severity_id or "")
+    is_observation = is_immediate_action_anomaly(anomaly)
+    is_observation_treatment = bool(
+        is_observation and anomaly.observation_resolution_path == "TREATMENT_PENDING"
+    )
+    management_path = (
+        "observation_treatment"
+        if is_observation_treatment
+        else "observation_or_treatment"
+        if is_observation
+        else "treatment"
+    )
     matching_recipient = None
     if responsible:
         active_recipients = (
@@ -691,6 +702,7 @@ def notify_finding_management_assigned(*, anomaly, responsible, actor=None, requ
                 recipient
                 for recipient in active_recipients
                 if recipient.notification.context_data.get("severity_id") == severity_id
+                and recipient.notification.context_data.get("management_path") == management_path
             ),
             None,
         )
@@ -706,8 +718,11 @@ def notify_finding_management_assigned(*, anomaly, responsible, actor=None, requ
     if not responsible:
         return None
 
-    is_observation = is_immediate_action_anomaly(anomaly)
-    if is_observation:
+    if is_observation_treatment:
+        title = f"Tratamiento requerido para la observación TRT {anomaly.code}"
+        instruction = "La observación fue marcada como plausible de tratamiento. Debes crear o coordinar su tratamiento."
+        action_url = f"/treatments?anomaly={anomaly.pk}"
+    elif is_observation:
         title = f"Gestión requerida para la observación {anomaly.code}"
         instruction = (
             "Debes revisar el hallazgo y definir si corresponde gestionarlo como observación directa "
@@ -745,7 +760,7 @@ def notify_finding_management_assigned(*, anomaly, responsible, actor=None, requ
             "severity_id": severity_id,
             "severity_code": anomaly.severity.code,
             "responsible_id": str(responsible.pk),
-            "management_path": "observation_or_treatment" if is_observation else "treatment",
+            "management_path": management_path,
         },
         request_id=request_id,
         email_enabled=True,

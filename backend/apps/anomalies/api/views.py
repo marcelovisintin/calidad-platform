@@ -611,7 +611,12 @@ class AnomalyViewSet(viewsets.ModelViewSet):
         queryset = (
             filter_anomaly_queryset_for_user(build_anomaly_queryset(detailed=False), request.user)
             .filter(immediate_action_q())
-            .exclude(observation_resolution_path=ObservationResolutionPath.TREATMENT)
+            .exclude(
+                observation_resolution_path__in=[
+                    ObservationResolutionPath.TREATMENT_PENDING,
+                    ObservationResolutionPath.TREATMENT,
+                ]
+            )
             .distinct()
             .order_by("-detected_at", "-created_at")
         )
