@@ -1,5 +1,5 @@
 export type UUID = string;
-export type ObservationResolutionPath = "OBSERVATION" | "TREATMENT";
+export type ObservationResolutionPath = "OBSERVATION" | "TREATMENT_PENDING" | "TREATMENT";
 
 export interface SiteSummary {
   id: UUID;
@@ -907,6 +907,7 @@ export interface ObservationLoadPayload {
   responsible: UUID;
   action_date: string;
   observation: string;
+  requires_treatment?: boolean;
 }
 
 export interface ObservationActionPayload {

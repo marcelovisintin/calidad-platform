@@ -60,6 +60,7 @@ export function ImmediateActionsPage() {
   const [responsibleId, setResponsibleId] = useState("");
   const [actionDate, setActionDate] = useState(nowAsDate());
   const [observation, setObservation] = useState("");
+  const [requiresTreatment, setRequiresTreatment] = useState(false);
   const [actionCompletedAt, setActionCompletedAt] = useState(nowAsDate());
   const [actionsTaken, setActionsTaken] = useState("");
   const [effectivenessDueAt, setEffectivenessDueAt] = useState(nowAsDate());
@@ -124,6 +125,7 @@ export function ImmediateActionsPage() {
     setResponsibleId(existing?.responsible?.id || selectedAnomaly.owner?.id || selectedAnomaly.current_responsible?.id || "");
     setActionDate(existing?.action_date || nowAsDate());
     setObservation(existing?.observation || selectedAnomaly.containment_summary || "");
+    setRequiresTreatment(selectedAnomaly.observation_resolution_path === "TREATMENT_PENDING");
     setActionCompletedAt(existing?.action_completed_at || nowAsDate());
     setActionsTaken(existing?.actions_taken || selectedAnomaly.resolution_summary || "");
     setEffectivenessDueAt(existing?.effectiveness_due_at || nowAsDate());
@@ -168,9 +170,14 @@ export function ImmediateActionsPage() {
         responsible: responsibleId,
         action_date: actionDate,
         observation: observation.trim(),
+        requires_treatment: requiresTreatment,
       });
 
-      setMessage("Observacion cargada. Ahora registra las acciones tomadas.");
+      setMessage(
+        requiresTreatment
+          ? "Observacion TRT registrada. Ya esta disponible para crear o asociar a un tratamiento."
+          : "Observacion cargada. Ahora registra las acciones tomadas.",
+      );
       await Promise.all([reload(), reloadDetail()]);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "No se pudo cargar la Observacion.");
@@ -279,7 +286,7 @@ export function ImmediateActionsPage() {
     <section className="page-shell">
       <PageHeader
         title="Observacion"
-      description="Gestion directa para anomalias con Revisión de hallazgos como Observacion. No generan tratamiento: se ejecuta, verifica eficacia y se cierra en este flujo."
+      description="Gestion directa para anomalias con Revisión de hallazgos como Observacion. Si el caso lo requiere, puede marcarse como Observacion TRT para derivarlo a tratamiento."
       />
 
       <TabbedFilters
@@ -385,6 +392,22 @@ export function ImmediateActionsPage() {
                     </div>
 
                     <div className="form-grid">
+                      <label className="checkbox-inline field-span-2">
+                        <input
+                          checked={requiresTreatment}
+                          disabled={submitting || selectedAnomaly.current_status === "closed"}
+                          onChange={(event) => setRequiresTreatment(event.target.checked)}
+                          type="checkbox"
+                        />
+                        <span>Clasificar como Observacion TRT (con tratamiento)</span>
+                      </label>
+
+                      {requiresTreatment ? (
+                        <p className="muted-copy field-span-2">
+                          La anomalia seguira siendo una Observacion, saldra de este circuito y quedara disponible para crear o asociar a un tratamiento.
+                        </p>
+                      ) : null}
+
                       <label className="field">
                         <span>Responsable</span>
                         <input readOnly value={buildResponsibleLabel(assignedResponsible)} />
@@ -396,14 +419,14 @@ export function ImmediateActionsPage() {
                       </label>
 
                       <label className="field field-span-2">
-                        <span>Observacion</span>
+                        <span>{requiresTreatment ? "Motivo para derivar a tratamiento" : "Observacion"}</span>
                         <textarea onChange={(event) => setObservation(event.target.value)} required rows={3} value={observation} />
                       </label>
                     </div>
 
                     <div className="form-actions">
                       <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed"} type="submit">
-                        {submitting ? "Guardando..." : "Cargar observacion"}
+                        {submitting ? "Guardando..." : requiresTreatment ? "Confirmar Observacion TRT" : "Cargar observacion"}
                       </button>
                     </div>
                   </form>

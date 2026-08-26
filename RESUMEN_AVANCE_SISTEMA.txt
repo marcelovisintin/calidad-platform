@@ -1447,3 +1447,16 @@ ____25/8 - ORDENES AFECTADAS____________________________________________________
 - Los campos anteriores de OF y cantidad se conservan internamente por compatibilidad y se migran como tipo OF sin
   perdida de datos. La nueva relacion admite multiples ordenes por anomalia.
 - Estado: implementado y validado en el entorno local de pruebas. Produccion pendiente de aprobacion.
+
+____25/8 - OBSERVACION TRT Y CODIGO OBS____________________________________________________________________________
+
+- Las anomalias clasificadas como Observacion incorporan el sufijo -OBS sin alterar el numero correlativo original.
+- La migracion actualiza tambien las Observaciones existentes; las relaciones internas continúan usando el identificador UUID.
+- Carga de Observacion incorpora la casilla Observacion TRT (con tratamiento).
+- Una Observacion comun no aparece ni puede vincularse desde Tratamientos.
+- Al confirmar Observacion TRT conserva su clasificacion como Observacion, sale del circuito de ejecucion directa y queda
+  disponible para crear un tratamiento o asociarla a uno abierto.
+- Al vincularla efectivamente, el camino cambia de Observacion TRT pendiente a Tratamiento sin perder datos ni historial.
+- La notificacion pendiente anterior se reemplaza por una tarea especifica con acceso a Tratamientos.
+- Se validaron migraciones, frontend y las 135 pruebas del backend en el entorno local.
+- Estado: implementado en rama de prueba y disponible en el puerto 8091. Produccion pendiente de prueba y aprobacion.
