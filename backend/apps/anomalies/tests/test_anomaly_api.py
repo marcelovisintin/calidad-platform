@@ -356,6 +356,30 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(str(reservation.anomaly_id), create_response.data["id"])
         self.assertIsNotNone(reservation.consumed_at)
 
+    def test_reserve_code_continues_after_consumed_observation_code(self):
+        first_reservation = self.client.post("/api/v1/anomalies/reserve-code/", {}, format="json")
+        self.assertEqual(first_reservation.status_code, status.HTTP_201_CREATED)
+
+        payload = self._build_payload("OBS-RESERVA")
+        payload["code_reservation_id"] = first_reservation.data["id"]
+        create_response = self.client.post("/api/v1/anomalies/", payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        classification_response = self.client.patch(
+            f"/api/v1/anomalies/{create_response.data['id']}/",
+            self._classification_payload(self.severity_observation),
+            format="json",
+        )
+        self.assertEqual(classification_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(classification_response.data["code"], f"{first_reservation.data['code']}-OBS")
+
+        second_reservation = self.client.post("/api/v1/anomalies/reserve-code/", {}, format="json")
+        self.assertEqual(second_reservation.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            second_reservation.data["sequence"],
+            first_reservation.data["sequence"] + 1,
+        )
+
     def test_create_anomaly_allows_missing_severity(self):
         payload = self._build_payload("003", include_severity=False)
 

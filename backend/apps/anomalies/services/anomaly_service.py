@@ -244,10 +244,13 @@ def _build_visible_code(year: int, sequence: int) -> str:
 def _extract_sequence_from_code(code: str | None, *, year: int) -> int:
     if not code:
         return 0
+    normalized_code = code
+    if code.upper().endswith(OBSERVATION_CODE_SUFFIX):
+        normalized_code = code[:-len(OBSERVATION_CODE_SUFFIX)]
     prefix = str(year)
-    if not code.startswith(prefix):
+    if not normalized_code.startswith(prefix):
         return 0
-    suffix = code[len(prefix):]
+    suffix = normalized_code[len(prefix):]
     if len(suffix) != 4 or not suffix.isdigit():
         return 0
     return int(suffix)
@@ -274,12 +277,11 @@ def _next_sequence_for_year(year: int) -> int:
     prefix = str(year)
     used_sequences = {
         _extract_sequence_from_code(code, year=year)
-        for code in Anomaly.objects.filter(code__startswith=prefix, code__regex=rf"^{year}\\d{{4}}$")
+        for code in Anomaly.objects.filter(code__startswith=prefix, code__regex=rf"^{year}\\d{{4}}(-OBS)?$")
         .values_list("code", flat=True)
     }
     reserved_sequences = set(
-        AnomalyCodeReservation.objects.filter(year=year, anomaly__isnull=True, consumed_at__isnull=True)
-        .values_list("sequence", flat=True)
+        AnomalyCodeReservation.objects.filter(year=year).values_list("sequence", flat=True)
     )
     unavailable_sequences = used_sequences | reserved_sequences
 
@@ -339,14 +341,15 @@ def reserve_anomaly_code(*, user) -> AnomalyCodeReservation:
             continue
 
         try:
-            return AnomalyCodeReservation.objects.create(
-                code=candidate,
-                year=year,
-                sequence=sequence,
-                reserved_by=user,
-                created_by=user,
-                updated_by=user,
-            )
+            with transaction.atomic():
+                return AnomalyCodeReservation.objects.create(
+                    code=candidate,
+                    year=year,
+                    sequence=sequence,
+                    reserved_by=user,
+                    created_by=user,
+                    updated_by=user,
+                )
         except IntegrityError:
             sequence += 1
 
