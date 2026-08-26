@@ -687,6 +687,52 @@ class AnomalyCreateApiTests(APITestCase):
         observation_ids = {item["id"] for item in observation_list.data["results"]}
         self.assertNotIn(str(anomaly.pk), observation_ids)
 
+    def test_observation_cannot_be_marked_as_trt_after_actions_are_confirmed(self):
+        anomaly = self._immediate_anomaly("AI-TRT-BLOCKED")
+        anomaly.severity = self.severity_observation
+        anomaly.owner = self.user
+        anomaly.save(update_fields=["severity", "owner", "updated_at"])
+        action_date = (timezone.localdate() + timedelta(days=3)).isoformat()
+
+        load_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": action_date,
+                "observation": "Observacion gestionada sin tratamiento.",
+            },
+            format="json",
+        )
+        self.assertEqual(load_response.status_code, status.HTTP_200_OK)
+
+        actions_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions-taken/",
+            {
+                "action_completed_at": timezone.localdate().isoformat(),
+                "actions_taken": "Acciones directas confirmadas.",
+                "effectiveness_due_at": (timezone.localdate() + timedelta(days=7)).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(actions_response.status_code, status.HTTP_200_OK)
+
+        trt_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": action_date,
+                "observation": "Intento posterior de derivacion.",
+                "requires_treatment": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(trt_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("requires_treatment", trt_response.data)
+        anomaly.refresh_from_db()
+        self.assertEqual(anomaly.observation_resolution_path, ObservationResolutionPath.OBSERVATION)
+        self.assertEqual(anomaly.immediate_action.actions_taken, "Acciones directas confirmadas.")
+
     @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
     def test_observation_action_assigns_effectiveness_verification_without_duplicates(self):
         self.user.email_notifications_enabled = True

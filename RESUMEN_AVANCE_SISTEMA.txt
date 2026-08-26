@@ -1456,6 +1456,8 @@ ____25/8 - OBSERVACION TRT Y CODIGO OBS_________________________________________
 - Una Observacion comun no aparece ni puede vincularse desde Tratamientos.
 - Al confirmar Observacion TRT conserva su clasificacion como Observacion, sale del circuito de ejecucion directa y queda
   disponible para crear un tratamiento o asociarla a uno abierto.
+- Al seleccionar TRT se ocultan Acciones tomadas y Verificacion de eficacia; no corresponde cargar datos de ejecucion directa.
+- Si las Acciones tomadas se confirman sin TRT, la casilla TRT queda bloqueada de forma definitiva para ese circuito.
 - Al vincularla efectivamente, el camino cambia de Observacion TRT pendiente a Tratamiento sin perder datos ni historial.
 - La notificacion pendiente anterior se reemplaza por una tarea especifica con acceso a Tratamientos.
 - Se validaron migraciones, frontend y las 135 pruebas del backend en el entorno local.

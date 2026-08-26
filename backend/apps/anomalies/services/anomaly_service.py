@@ -1118,15 +1118,19 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
     _ensure_observation_path_available(locked)
     immediate_action = _get_observation_record(locked)
+    requires_treatment = bool(data.get("requires_treatment", False))
     _require_observation_manager(locked, user, immediate_action if immediate_action.pk else None)
     if locked.owner_id and data["responsible"].pk != locked.owner_id:
         raise ValidationError({"responsible": "La Observacion debe gestionarla el responsable asignado en Revision de hallazgos."})
     if immediate_action.pk and immediate_action.responsible_id and data["responsible"].pk != immediate_action.responsible_id:
         raise ValidationError({"responsible": "No se puede cambiar el responsable de una Observacion ya cargada."})
+    if requires_treatment and immediate_action.pk and (immediate_action.actions_taken or "").strip():
+        raise ValidationError(
+            {"requires_treatment": "No se puede marcar como Observacion TRT porque las acciones tomadas ya fueron confirmadas."}
+        )
 
     before = snapshot_anomaly(locked)
     previous_resolution_path = locked.observation_resolution_path
-    requires_treatment = bool(data.get("requires_treatment", False))
 
     immediate_action.observation = data["observation"].strip()
     immediate_action.responsible = data["responsible"]

@@ -395,7 +395,7 @@ export function ImmediateActionsPage() {
                       <label className="checkbox-inline field-span-2">
                         <input
                           checked={requiresTreatment}
-                          disabled={submitting || selectedAnomaly.current_status === "closed"}
+                          disabled={submitting || selectedAnomaly.current_status === "closed" || hasConfirmedActions}
                           onChange={(event) => setRequiresTreatment(event.target.checked)}
                           type="checkbox"
                         />
@@ -405,6 +405,12 @@ export function ImmediateActionsPage() {
                       {requiresTreatment ? (
                         <p className="muted-copy field-span-2">
                           La anomalia seguira siendo una Observacion, saldra de este circuito y quedara disponible para crear o asociar a un tratamiento.
+                        </p>
+                      ) : null}
+
+                      {hasConfirmedActions ? (
+                        <p className="muted-copy field-span-2">
+                          La opcion TRT esta bloqueada porque las acciones tomadas ya fueron confirmadas.
                         </p>
                       ) : null}
 
@@ -434,7 +440,7 @@ export function ImmediateActionsPage() {
                   {!hasLoadedAction && formError ? <div className="panel danger">{formError}</div> : null}
                   {!hasLoadedAction && message ? <div className="panel success">{message}</div> : null}
 
-                  {hasLoadedAction ? (
+                  {requiresTreatment ? null : hasLoadedAction ? (
                     <form className="form-section" onSubmit={handleSaveActionsTaken}>
                       <div className="section-head compact">
                         <h3>Acciones tomadas</h3>
@@ -493,7 +499,7 @@ export function ImmediateActionsPage() {
                     </div>
                   )}
 
-                  {hasConfirmedActions ? (
+                  {requiresTreatment ? null : hasConfirmedActions ? (
                     <form className="form-section" onSubmit={handleVerifyEffectiveness}>
                       <div className="section-head compact">
                         <h3>Verificacion de eficacia</h3>
