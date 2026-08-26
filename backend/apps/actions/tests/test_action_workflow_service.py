@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from django.contrib.auth.models import Permission
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
@@ -11,7 +11,7 @@ from apps.actions.selectors import my_action_items_queryset
 from apps.actions.services import create_action_item, create_action_plan, transition_action_item
 from apps.anomalies.models import Anomaly, AnomalyStage, AnomalyStatus
 from apps.catalog.models import ActionType, AnomalyOrigin, AnomalyType, Area, Priority, Severity, Site
-from apps.notifications.models import NotificationRecipient, NotificationTaskType, RecipientTaskStatus
+from apps.notifications.models import NotificationChannel, NotificationRecipient, NotificationTaskType, RecipientTaskStatus
 
 
 class ActionWorkflowServiceTests(TestCase):
@@ -60,7 +60,10 @@ class ActionWorkflowServiceTests(TestCase):
             updated_by=self.admin,
         )
 
+    @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
     def test_create_and_transition_action_item_updates_history_and_task_queue(self):
+        self.assignee.email_notifications_enabled = True
+        self.assignee.save(update_fields=["email_notifications_enabled", "updated_at"])
         action_plan = create_action_plan(
             anomaly=self.anomaly,
             user=self.admin,
@@ -94,10 +97,18 @@ class ActionWorkflowServiceTests(TestCase):
             notification__source_type="actions.actionitem",
             notification__source_id=item.pk,
             user=self.assignee,
+            channel=NotificationChannel.IN_APP,
         )
         self.assertTrue(recipient.notification.is_task)
         self.assertEqual(recipient.notification.task_type, NotificationTaskType.ACTION_ASSIGNMENT)
         self.assertEqual(recipient.task_status, RecipientTaskStatus.PENDING)
+        self.assertTrue(
+            NotificationRecipient.objects.filter(
+                notification=recipient.notification,
+                user=self.assignee,
+                channel=NotificationChannel.EMAIL,
+            ).exists()
+        )
         self.assertTrue(my_action_items_queryset(self.assignee, pending_only=True).filter(pk=item.pk).exists())
 
         transition_action_item(

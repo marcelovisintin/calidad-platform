@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { fetchUsers } from "../../../api/accounts";
 import { classifyAnomalyBySeverity, fetchMyAnomalies, unlockAnomalyClassificationChange } from "../../../api/anomalies";
 import { fetchCatalogBootstrap } from "../../../api/catalog";
-import type { CatalogSummary, UserDirectoryItem } from "../../../api/types";
+import { fetchTreatmentCandidates } from "../../../api/treatments";
+import type { CatalogSummary, TreatmentCandidate, UserDirectoryItem } from "../../../api/types";
 import { isAdminUser } from "../../../app/access";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { formatDateTime } from "../../../app/utils";
@@ -23,6 +24,8 @@ type PendingClassification = {
   closesAsInvalid: boolean;
   responsibleId: string;
   reason: string;
+  isNonconformity: boolean;
+  relatedAnomalyIds: string[];
 };
 
 function buildUserLabel(user: UserDirectoryItem) {
@@ -39,6 +42,14 @@ function criterionClosesAsInvalid(criterion: CatalogSummary) {
   return Boolean(criterion.closes_anomaly_as_invalid) || normalized.includes("invalida") || normalized.includes("invalid");
 }
 
+function criterionIsNonconformity(criterion: CatalogSummary) {
+  const normalized = `${criterion.code} ${criterion.name}`
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return criterion.code.trim().toUpperCase() === "NC" || normalized.includes("no conformidad");
+}
+
 export function MyAnomaliesPage() {
   usePageTitle("Seguimiento de anomalias");
   const { user } = useAuth();
@@ -50,6 +61,11 @@ export function MyAnomaliesPage() {
   const [classificationMessage, setClassificationMessage] = useState<string | null>(null);
   const [updatingAnomalyId, setUpdatingAnomalyId] = useState<string | null>(null);
   const [pendingClassification, setPendingClassification] = useState<PendingClassification | null>(null);
+  const [classificationCandidates, setClassificationCandidates] = useState<TreatmentCandidate[]>([]);
+  const [candidateSearch, setCandidateSearch] = useState("");
+  const [candidateView, setCandidateView] = useState<"suggested" | "all">("suggested");
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const [candidatesError, setCandidatesError] = useState<string | null>(null);
 
   const { data, loading, error, reload } = useAsyncTask(async () => {
     if (!user) {
@@ -74,6 +90,39 @@ export function MyAnomaliesPage() {
   const criteria: CatalogSummary[] = data?.criteria ?? [];
   const users: UserDirectoryItem[] = data?.users ?? [];
   const totalCount = data?.anomalies.count ?? 0;
+  const visibleClassificationCandidates = useMemo(() => {
+    const normalizedSearch = candidateSearch.trim().toLowerCase();
+    return classificationCandidates.filter((candidate) => {
+      if (candidateView === "suggested" && !candidate.suggested_by_repetition) {
+        return false;
+      }
+      if (!normalizedSearch) {
+        return true;
+      }
+      return [
+        candidate.code,
+        candidate.title,
+        candidate.area?.name,
+        candidate.imputed_area?.name,
+        candidate.severity?.name,
+      ].some((value) => (value || "").toLowerCase().includes(normalizedSearch));
+    });
+  }, [candidateSearch, candidateView, classificationCandidates]);
+
+  const toggleRelatedAnomaly = (anomalyId: string) => {
+    setPendingClassification((current) => {
+      if (!current) {
+        return current;
+      }
+      const selected = current.relatedAnomalyIds.includes(anomalyId);
+      return {
+        ...current,
+        relatedAnomalyIds: selected
+          ? current.relatedAnomalyIds.filter((value) => value !== anomalyId)
+          : [...current.relatedAnomalyIds, anomalyId],
+      };
+    });
+  };
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
     setSearch(event.target.value);
@@ -99,6 +148,7 @@ export function MyAnomaliesPage() {
     }
 
     const closesAsInvalid = criterionClosesAsInvalid(criterion);
+    const isNonconformity = criterionIsNonconformity(criterion);
     setClassificationError(null);
     setClassificationMessage(null);
     setPendingClassification({
@@ -109,7 +159,22 @@ export function MyAnomaliesPage() {
       requiresResponsible: !closesAsInvalid && (criterion.requires_classification_responsible ?? true),
       responsibleId: "",
       reason: "",
+      isNonconformity,
+      relatedAnomalyIds: [],
     });
+    setClassificationCandidates([]);
+    setCandidateSearch("");
+    setCandidateView("suggested");
+    setCandidatesError(null);
+    if (isNonconformity) {
+      setCandidatesLoading(true);
+      void fetchTreatmentCandidates({ anchorId: anomalyId, pageSize: 200 })
+        .then((response) => setClassificationCandidates(response.results))
+        .catch((candidateError) => {
+          setCandidatesError(candidateError instanceof Error ? candidateError.message : "No se pudieron consultar las anomalias elegibles.");
+        })
+        .finally(() => setCandidatesLoading(false));
+    }
   };
 
   const handleConfirmClassification = async (event: FormEvent<HTMLFormElement>) => {
@@ -137,6 +202,9 @@ export function MyAnomaliesPage() {
         severity: pendingClassification.severityId,
         classification_responsible: pendingClassification.closesAsInvalid ? undefined : pendingClassification.responsibleId || undefined,
         classification_reason: pendingClassification.closesAsInvalid ? pendingClassification.reason.trim() : undefined,
+        treatment_related_anomalies: pendingClassification.isNonconformity
+          ? pendingClassification.relatedAnomalyIds
+          : undefined,
       });
       setClassificationMessage("Revision de hallazgos actualizada.");
       setPendingClassification(null);
@@ -262,25 +330,95 @@ export function MyAnomaliesPage() {
                                 value={pendingForItem.reason}
                               />
                             </label>
-                          ) : pendingForItem.requiresResponsible ? (
-                            <label className="field">
-                              <span>Responsable</span>
-                              <select
-                                onChange={(event) =>
-                                  setPendingClassification((current) => current && current.anomalyId === item.id ? { ...current, responsibleId: event.target.value } : current)
-                                }
-                                required
-                                value={pendingForItem.responsibleId}
-                              >
-                                <option value="">Seleccionar responsable...</option>
-                                {users.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {buildUserLabel(option)}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          ) : null}
+                          ) : (
+                            <>
+                              {pendingForItem.requiresResponsible ? (
+                                <label className="field">
+                                  <span>Responsable único del tratamiento</span>
+                                  <select
+                                    onChange={(event) =>
+                                      setPendingClassification((current) => current && current.anomalyId === item.id ? { ...current, responsibleId: event.target.value } : current)
+                                    }
+                                    required
+                                    value={pendingForItem.responsibleId}
+                                  >
+                                    <option value="">Seleccionar responsable...</option>
+                                    {users.map((option) => (
+                                      <option key={option.id} value={option.id}>
+                                        {buildUserLabel(option)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              ) : null}
+
+                              {pendingForItem.isNonconformity ? (
+                                <section className="classification-treatment-composition">
+                                  <div className="section-head compact">
+                                    <div>
+                                      <h4>Anomalías relacionadas</h4>
+                                      <small>Opcional. La composición quedará bloqueada para el responsable.</small>
+                                    </div>
+                                    <span className="status-badge info compact">
+                                      {pendingForItem.relatedAnomalyIds.length} seleccionadas
+                                    </span>
+                                  </div>
+                                  <div className="segmented-control" aria-label="Vista de anomalías elegibles">
+                                    <button
+                                      className={candidateView === "suggested" ? "active" : ""}
+                                      onClick={() => setCandidateView("suggested")}
+                                      type="button"
+                                    >
+                                      Sugeridas por repitencia
+                                    </button>
+                                    <button
+                                      className={candidateView === "all" ? "active" : ""}
+                                      onClick={() => setCandidateView("all")}
+                                      type="button"
+                                    >
+                                      Todas las elegibles
+                                    </button>
+                                  </div>
+                                  <input
+                                    aria-label="Buscar anomalías relacionadas"
+                                    onChange={(event) => setCandidateSearch(event.target.value)}
+                                    placeholder="Buscar por código, título, proceso o clasificación"
+                                    type="search"
+                                    value={candidateSearch}
+                                  />
+                                  {candidatesLoading ? <p className="muted-copy">Consultando anomalías elegibles...</p> : null}
+                                  {candidatesError ? <div className="panel warning">{candidatesError}</div> : null}
+                                  {!candidatesLoading && !candidatesError ? (
+                                    <div className="stack-list compact classification-candidate-list">
+                                      {visibleClassificationCandidates.map((candidate) => (
+                                        <label className="list-card compact classification-candidate" key={candidate.id}>
+                                          <input
+                                            checked={pendingForItem.relatedAnomalyIds.includes(candidate.id)}
+                                            onChange={() => toggleRelatedAnomaly(candidate.id)}
+                                            type="checkbox"
+                                          />
+                                          <span>
+                                            <strong>{candidate.code}</strong>
+                                            <small>{candidate.title}</small>
+                                            <small>
+                                              {candidate.severity?.name || "Sin clasificación"} | {candidate.imputed_area?.name || candidate.area?.name || "Sin proceso"}
+                                            </small>
+                                          </span>
+                                        </label>
+                                      ))}
+                                      {!visibleClassificationCandidates.length ? (
+                                        <p className="muted-copy">
+                                          {candidateView === "suggested"
+                                            ? "No hay coincidencias por repitencia. Puedes revisar todas las elegibles."
+                                            : "No hay anomalías elegibles para conformar el tratamiento."}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
+                                </section>
+                              ) : null}
+                            </>
+                          )}
 
                           <div className="form-actions">
                             <button className="button button-primary" disabled={updatingAnomalyId === item.id} type="submit">

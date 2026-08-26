@@ -51,9 +51,24 @@ class Treatment(AuditBaseModel):
         on_delete=models.PROTECT,
         related_name="primary_treatments",
     )
+    responsible = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="responsible_treatments",
+        null=True,
+        blank=True,
+    )
     status = models.CharField(max_length=20, choices=TreatmentStatus.choices, default=TreatmentStatus.PENDING)
     scheduled_for = models.DateTimeField(null=True, blank=True)
     treatment_location = models.CharField(max_length=200, blank=True, default="")
+    convocation_confirmed_at = models.DateTimeField(null=True, blank=True)
+    convocation_confirmed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="confirmed_treatment_convocations",
+        null=True,
+        blank=True,
+    )
     method_used = models.CharField(max_length=20, choices=TreatmentMethod.choices, blank=True, default="")
     observations = models.TextField(blank=True)
     effectiveness_evaluation_date = models.DateField(null=True, blank=True)
@@ -91,6 +106,17 @@ class Treatment(AuditBaseModel):
 
     def __str__(self) -> str:
         return f"{self.code} - {self.primary_anomaly.code}"
+
+
+class TreatmentCodeSequence(models.Model):
+    year = models.PositiveIntegerField(unique=True)
+    last_sequence = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-year",)
+        verbose_name = "Secuencia de codigo de tratamiento"
+        verbose_name_plural = "Secuencias de codigos de tratamiento"
 
 
 class TreatmentAnomaly(AuditBaseModel):

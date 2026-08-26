@@ -3,6 +3,7 @@ from unittest.mock import patch
 from django.core import mail
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
@@ -10,6 +11,9 @@ from apps.actions.models import Treatment, TreatmentParticipantRole, TreatmentRo
 from apps.actions.services.treatment_service import (
     add_treatment_participant,
     add_treatment_task,
+    confirm_treatment_convocation,
+    reconfigure_treatment,
+    save_treatment_learned_lesson,
     update_treatment,
     update_treatment_task,
 )
@@ -28,7 +32,12 @@ from apps.notifications.models import (
 )
 from apps.notifications.selectors import notification_summary_for_user
 from apps.notifications.services.email_delivery import dispatch_pending_email_notifications
-from apps.notifications.services.notification_service import create_internal_notification, resolve_notification_task
+from apps.notifications.services.digest_service import create_due_notification_digests
+from apps.notifications.services.notification_service import (
+    create_internal_notification,
+    notify_finding_management_assigned,
+    resolve_notification_task,
+)
 
 
 class NotificationServiceTests(TestCase):
@@ -410,6 +419,20 @@ class NotificationServiceTests(TestCase):
             user=self.admin,
             request_id="req-treatment-participant",
         )
+        self.assertFalse(
+            NotificationRecipient.objects.filter(
+                notification__source_type="actions.treatment",
+                notification__source_id=treatment.pk,
+                user=self.analyst,
+            ).exists()
+        )
+        confirm_treatment_convocation(
+            treatment=treatment,
+            scheduled_for=treatment.scheduled_for,
+            treatment_location=treatment.treatment_location,
+            user=self.admin,
+            request_id="req-confirm-treatment-convocation",
+        )
 
         recipients = NotificationRecipient.objects.filter(
             notification__source_type="actions.treatment",
@@ -457,13 +480,19 @@ class NotificationServiceTests(TestCase):
         updated_participant = add_treatment_participant(
             treatment=treatment,
             participant_user=self.analyst,
-            role=TreatmentParticipantRole.OWNER,
-            note="Se actualiza el rol.",
+            role=TreatmentParticipantRole.CONVOKED,
+            note="Se actualiza la nota antes de confirmar.",
+            user=self.admin,
+        )
+        confirm_treatment_convocation(
+            treatment=treatment,
+            scheduled_for=treatment.scheduled_for,
+            treatment_location=treatment.treatment_location,
             user=self.admin,
         )
 
         self.assertEqual(updated_participant.pk, participant.pk)
-        self.assertEqual(updated_participant.role, TreatmentParticipantRole.OWNER)
+        self.assertEqual(updated_participant.role, TreatmentParticipantRole.CONVOKED)
         notifications = NotificationRecipient.objects.filter(
             notification__source_type="actions.treatment",
             notification__source_id=treatment.pk,
@@ -482,6 +511,12 @@ class NotificationServiceTests(TestCase):
             participant_user=self.analyst,
             role=TreatmentParticipantRole.CONVOKED,
             note="Convocatoria sin correo.",
+            user=self.admin,
+        )
+        confirm_treatment_convocation(
+            treatment=treatment,
+            scheduled_for=treatment.scheduled_for,
+            treatment_location=treatment.treatment_location,
             user=self.admin,
         )
 
@@ -521,16 +556,17 @@ class NotificationServiceTests(TestCase):
         self.assertEqual(recipients.count(), 2)
         self.assertEqual(email_recipient.delivery_status, DeliveryStatus.PENDING)
         self.assertEqual(notification.task_type, NotificationTaskType.FINDING_MANAGEMENT)
-        self.assertEqual(notification.action_url, f"/treatments?anomaly={anomaly.pk}")
-        self.assertIn("crear y coordinar el tratamiento", notification.body)
-        self.assertEqual(notification.context_data["management_path"], "treatment")
+        treatment = Treatment.objects.get(primary_anomaly=anomaly)
+        self.assertEqual(notification.action_url, f"/treatments?treatment={treatment.pk}")
+        self.assertIn("Calidad conformó el tratamiento", notification.body)
+        self.assertEqual(notification.context_data["management_path"], "configured_treatment")
 
     @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
     def test_observation_responsible_is_asked_to_choose_management_path(self):
         observation = Severity.objects.create(code="OBS", name="Observación")
         anomaly = self._create_unclassified_anomaly(title="Orden y limpieza")
 
-        update_anomaly(
+        anomaly = update_anomaly(
             anomaly=anomaly,
             user=self.admin,
             data={
@@ -623,7 +659,7 @@ class NotificationServiceTests(TestCase):
         self.reporter.save(update_fields=["email_notifications_enabled", "access_level", "updated_at"])
         nonconformity = Severity.objects.create(code="NC", name="No Conformidad")
         anomaly = self._create_unclassified_anomaly()
-        update_anomaly(
+        anomaly = update_anomaly(
             anomaly=anomaly,
             user=self.admin,
             data={"severity": nonconformity, "classification_responsible": self.analyst},
@@ -633,10 +669,19 @@ class NotificationServiceTests(TestCase):
             source_id=anomaly.pk,
         )
 
-        update_anomaly(
-            anomaly=anomaly,
+        treatment = Treatment.objects.get(primary_anomaly=anomaly)
+        reconfigure_treatment(
+            treatment=treatment,
+            related_anomalies=[],
+            responsible=self.reporter,
+            reason="Corrección del responsable asignado.",
             user=self.admin,
-            data={"severity": nonconformity, "classification_responsible": self.reporter},
+        )
+        notify_finding_management_assigned(
+            anomaly=anomaly,
+            responsible=self.reporter,
+            actor=self.admin,
+            treatment=treatment,
         )
 
         previous_in_app = previous_notification.recipients.get(channel=NotificationChannel.IN_APP)
@@ -662,8 +707,14 @@ class NotificationServiceTests(TestCase):
             "classification_responsible": self.analyst,
         }
 
-        update_anomaly(anomaly=anomaly, user=self.admin, data=classification_data.copy())
-        update_anomaly(anomaly=anomaly, user=self.admin, data=classification_data.copy())
+        anomaly = update_anomaly(anomaly=anomaly, user=self.admin, data=classification_data.copy())
+        treatment = Treatment.objects.get(primary_anomaly=anomaly)
+        notify_finding_management_assigned(
+            anomaly=anomaly,
+            responsible=self.analyst,
+            actor=self.admin,
+            treatment=treatment,
+        )
 
         self.assertEqual(
             Notification.objects.filter(
@@ -674,7 +725,7 @@ class NotificationServiceTests(TestCase):
         )
 
     @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
-    def test_invalid_reclassification_dismisses_task_without_new_notification(self):
+    def test_invalid_reclassification_is_blocked_after_treatment_is_conformed(self):
         self.analyst.email_notifications_enabled = True
         self.analyst.save(update_fields=["email_notifications_enabled", "updated_at"])
         nonconformity = Severity.objects.create(code="NC", name="No Conformidad")
@@ -691,14 +742,15 @@ class NotificationServiceTests(TestCase):
             data={"severity": nonconformity, "classification_responsible": self.analyst},
         )
 
-        update_anomaly(
-            anomaly=anomaly,
-            user=self.admin,
-            data={
-                "severity": invalid,
-                "classification_reason": "No corresponde gestionar el hallazgo.",
-            },
-        )
+        with self.assertRaises(ValidationError):
+            update_anomaly(
+                anomaly=anomaly,
+                user=self.admin,
+                data={
+                    "severity": invalid,
+                    "classification_reason": "No corresponde gestionar el hallazgo.",
+                },
+            )
 
         self.assertEqual(
             Notification.objects.filter(
@@ -711,11 +763,7 @@ class NotificationServiceTests(TestCase):
             notification__template_code="finding_management_assigned",
             notification__source_id=anomaly.pk,
         )
-        self.assertFalse(recipients.filter(task_status=RecipientTaskStatus.PENDING).exists())
-        self.assertEqual(
-            recipients.get(channel=NotificationChannel.EMAIL).delivery_status,
-            DeliveryStatus.SKIPPED,
-        )
+        self.assertTrue(recipients.filter(task_status=RecipientTaskStatus.PENDING).exists())
 
     @override_settings(
         EMAIL_NOTIFICATIONS_ENABLED=True,
@@ -747,7 +795,7 @@ class NotificationServiceTests(TestCase):
 
         result = dispatch_pending_email_notifications()
 
-        self.assertEqual(result["delivered"], 2)
+        self.assertEqual(result["delivered"], 1)
         task_email = next(message for message in mail.outbox if message.subject == notification.title)
         self.assertNotIn("Abrir en el sistema", task_email.body)
         self.assertNotIn("/actions/mine", task_email.body)
@@ -1027,3 +1075,78 @@ class NotificationServiceTests(TestCase):
         )
         self.assertEqual(recipients.count(), 1)
         self.assertTrue(recipients.filter(channel=NotificationChannel.IN_APP).exists())
+
+    @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
+    def test_learned_lesson_notifies_involved_users_only_on_first_publication(self):
+        self.analyst.email_notifications_enabled = True
+        self.analyst.save(update_fields=["email_notifications_enabled", "updated_at"])
+        treatment = self._create_treatment()
+        add_treatment_participant(
+            treatment=treatment,
+            participant_user=self.analyst,
+            role=TreatmentParticipantRole.CONVOKED,
+            note="Participante del tratamiento.",
+            user=self.admin,
+        )
+        treatment.responsible = self.analyst
+        treatment.status = "completed"
+        treatment.effectiveness_validation_result = "effective"
+        treatment.save(update_fields=["responsible", "status", "effectiveness_validation_result", "updated_at"])
+        payload = {
+            "has_learning": True,
+            "learned_text": "Verificar el ajuste antes de liberar la orden.",
+            "procedure_modified": False,
+            "procedure_modification_notes": "",
+        }
+
+        lesson = save_treatment_learned_lesson(
+            treatment=treatment,
+            user=self.admin,
+            data=payload,
+            request_id="req-first-lesson",
+        )
+        save_treatment_learned_lesson(
+            treatment=treatment,
+            user=self.admin,
+            data={**payload, "learned_text": "Texto actualizado sin nuevo correo."},
+            request_id="req-updated-lesson",
+        )
+
+        notifications = Notification.objects.filter(
+            source_id=lesson.pk,
+            template_code="treatment_learned_lesson_published",
+        )
+        self.assertEqual(notifications.count(), 1)
+        self.assertEqual(
+            NotificationRecipient.objects.filter(
+                notification=notifications.get(),
+                user=self.analyst,
+            ).count(),
+            2,
+        )
+
+    @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True, EMAIL_DUE_REMINDER_DAYS=2)
+    def test_daily_due_digest_is_consolidated_and_idempotent(self):
+        self.analyst.email_notifications_enabled = True
+        self.analyst.save(update_fields=["email_notifications_enabled", "updated_at"])
+        _treatment, _root_cause, task = self._prepare_treatment_task()
+
+        first_result = create_due_notification_digests(reminder_days=5)
+        second_result = create_due_notification_digests(reminder_days=5)
+
+        digest = Notification.objects.get(
+            source_type="notifications.daily_due_digest",
+            source_id=self.analyst.pk,
+            template_code="daily_due_digest",
+        )
+        self.assertEqual(first_result["created"], 1)
+        self.assertEqual(second_result["created"], 0)
+        self.assertIn(task.code, digest.body)
+        self.assertEqual(digest.context_data["upcoming_count"], 1)
+        self.assertEqual(
+            NotificationRecipient.objects.filter(
+                notification=digest,
+                user=self.analyst,
+            ).count(),
+            2,
+        )

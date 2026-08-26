@@ -38,6 +38,11 @@ El envio de correos utiliza `calidad-email-dispatch.timer`. El timer consulta la
 cola una vez por minuto, pero no envia nada mientras
 `EMAIL_NOTIFICATIONS_ENABLED=False` en el archivo de configuracion secreta.
 
+El mismo despachador genera, desde las `EMAIL_DUE_DIGEST_HOUR` (07:00 por
+defecto), un resumen diario que agrupa por usuario los pendientes vencidos y los
+que vencen en los proximos `EMAIL_DUE_REMINDER_DAYS` dias. El proceso es
+idempotente y evita repetir el resumen del mismo dia.
+
 Para Google Workspace se usa `smtp.gmail.com`, puerto `587` y TLS. La cuenta
 remitente debe ser una cuenta tecnica `@schneider.ar` con verificacion en dos
 pasos y una contrasena de aplicacion. Esa contrasena se guarda unicamente en

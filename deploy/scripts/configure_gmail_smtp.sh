@@ -29,6 +29,8 @@ write_setting() {
     case "$key" in
         APP_PUBLIC_URL) printf '%s=%s\n' "$key" "$APP_PUBLIC_URL_VALUE" ;;
         EMAIL_NOTIFICATIONS_ENABLED) printf '%s=False\n' "$key" ;;
+        EMAIL_DUE_REMINDER_DAYS) printf '%s=2\n' "$key" ;;
+        EMAIL_DUE_DIGEST_HOUR) printf '%s=7\n' "$key" ;;
         EMAIL_BACKEND) printf '%s=django.core.mail.backends.smtp.EmailBackend\n' "$key" ;;
         EMAIL_HOST) printf '%s=smtp.gmail.com\n' "$key" ;;
         EMAIL_PORT) printf '%s=587\n' "$key" ;;
@@ -47,6 +49,8 @@ write_setting() {
 settings=(
     APP_PUBLIC_URL
     EMAIL_NOTIFICATIONS_ENABLED
+    EMAIL_DUE_REMINDER_DAYS
+    EMAIL_DUE_DIGEST_HOUR
     EMAIL_BACKEND
     EMAIL_HOST
     EMAIL_PORT

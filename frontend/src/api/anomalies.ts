@@ -184,6 +184,7 @@ export function classifyAnomalyBySeverity(
     severity: string;
     classification_responsible?: string;
     classification_reason?: string;
+    treatment_related_anomalies?: string[];
   },
 ) {
   return apiRequest<AnomalyDetail>(`/anomalies/${anomalyId}/`, {

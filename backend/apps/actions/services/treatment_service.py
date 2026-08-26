@@ -14,6 +14,7 @@ from apps.accounts.services.access_policy import (
 from apps.actions.models import (
     Treatment,
     TreatmentAnomaly,
+    TreatmentCodeSequence,
     TreatmentEffectivenessValidationResult,
     TreatmentEvidence,
     TreatmentLearnedLesson,
@@ -39,7 +40,10 @@ from apps.anomalies.services.classification_rules import is_immediate_action_ano
 from apps.notifications.services import (
     complete_treatment_effectiveness_assignment,
     dismiss_treatment_task_assignment_tasks,
+    notify_treatment_closed,
     notify_treatment_effectiveness_assigned,
+    notify_treatment_learned_lesson_published,
+    notify_treatment_not_effective,
     notify_treatment_participant_invited,
     notify_treatment_task_assigned,
     sync_treatment_task_assignment_status,
@@ -66,7 +70,7 @@ def has_global_treatment_management_access(user) -> bool:
 
 
 def can_create_treatment_for_anomaly(user, anomaly: Anomaly) -> bool:
-    return can_manage_assigned_process(user, anomaly.owner_id)
+    return has_global_treatment_management_access(user)
 
 
 def can_manage_treatment(user, treatment: Treatment) -> bool:
@@ -77,15 +81,8 @@ def can_manage_treatment(user, treatment: Treatment) -> bool:
         return False
     if not is_management_user(user):
         return False
-    if treatment.created_by_id == user_id or treatment.primary_anomaly.owner_id == user_id:
-        return True
-    prefetched_participants = getattr(treatment, "_prefetched_objects_cache", {}).get("participants")
-    if prefetched_participants is not None:
-        return any(
-            participant.user_id == user_id and participant.role == TreatmentParticipantRole.OWNER
-            for participant in prefetched_participants
-        )
-    return treatment.participants.filter(user_id=user_id, role=TreatmentParticipantRole.OWNER).exists()
+    responsible_id = treatment.responsible_id or treatment.primary_anomaly.owner_id
+    return responsible_id == user_id
 
 
 def can_update_treatment_task(user, treatment_task: TreatmentTask) -> bool:
@@ -134,6 +131,33 @@ def _ensure_anomaly_owner_is_treatment_participant(*, treatment: Treatment, anom
     participant.save(update_fields=["role", "updated_by", "updated_at"])
 
 
+def is_mergeable_pending_treatment(treatment: Treatment) -> bool:
+    if treatment.status != TreatmentStatus.PENDING:
+        return False
+    responsible_id = treatment.responsible_id or treatment.primary_anomaly.owner_id
+    has_work_data = bool(
+        treatment.scheduled_for
+        or (treatment.treatment_location or "").strip()
+        or (treatment.method_used or "").strip()
+        or (treatment.observations or "").strip()
+        or treatment.effectiveness_evaluation_date
+        or treatment.effectiveness_responsible_id
+        or treatment.root_causes.exists()
+        or treatment.tasks.exists()
+        or treatment.evidences.exists()
+        or hasattr(treatment, "learned_lesson")
+        or treatment.participants.exclude(
+            user_id=responsible_id,
+            role=TreatmentParticipantRole.OWNER,
+        ).exists()
+    )
+    return not has_work_data
+
+
+def can_reconfigure_treatment(user, treatment: Treatment) -> bool:
+    return has_global_treatment_management_access(user) and is_mergeable_pending_treatment(treatment)
+
+
 
 def _bump_version(instance) -> None:
     instance.row_version = (instance.row_version or 0) + 1
@@ -143,22 +167,20 @@ def _bump_version(instance) -> None:
 def _next_treatment_code() -> str:
     year = timezone.localdate().year
     prefix = f"TRT-{year}-"
-    last = (
-        Treatment.objects.filter(code__startswith=prefix)
-        .order_by("-code")
-        .values_list("code", flat=True)
-        .first()
-    )
-    sequence = 1
-    if last:
+    sequence_row, _ = TreatmentCodeSequence.objects.select_for_update().get_or_create(year=year)
+    existing_sequences = []
+    for existing_code in Treatment.objects.filter(code__startswith=prefix).values_list("code", flat=True):
         try:
-            sequence = int(last.split("-")[-1]) + 1
+            existing_sequences.append(int(existing_code.removeprefix(prefix)))
         except (TypeError, ValueError):
-            sequence = Treatment.objects.filter(code__startswith=prefix).count() + 1
+            continue
 
+    sequence = max([sequence_row.last_sequence, *existing_sequences], default=0) + 1
     while True:
         code = f"{prefix}{sequence:04d}"
         if not Treatment.objects.filter(code=code).exists():
+            sequence_row.last_sequence = sequence
+            sequence_row.save(update_fields=["last_sequence", "updated_at"])
             return code
         sequence += 1
 
@@ -181,9 +203,14 @@ def snapshot_treatment(treatment: Treatment) -> dict:
         "id": str(treatment.pk),
         "code": treatment.code,
         "primary_anomaly_id": str(treatment.primary_anomaly_id),
+        "responsible_id": str(treatment.responsible_id or ""),
         "status": treatment.status,
         "scheduled_for": treatment.scheduled_for.isoformat() if treatment.scheduled_for else "",
         "treatment_location": treatment.treatment_location,
+        "convocation_confirmed_at": (
+            treatment.convocation_confirmed_at.isoformat() if treatment.convocation_confirmed_at else ""
+        ),
+        "convocation_confirmed_by_id": str(treatment.convocation_confirmed_by_id or ""),
         "method_used": treatment.method_used,
         "observations": treatment.observations,
         "effectiveness_evaluation_date": treatment.effectiveness_evaluation_date.isoformat() if treatment.effectiveness_evaluation_date else "",
@@ -347,6 +374,7 @@ def save_treatment_learned_lesson(*, treatment: Treatment, user, data: dict, fil
         raise ValidationError({"treatment": "Solo se pueden registrar lecciones aprendidas en tratamientos validados como eficaces."})
 
     lesson = TreatmentLearnedLesson.objects.select_for_update().filter(treatment=locked).first()
+    is_first_publication = lesson is None
     before = snapshot_learned_lesson(lesson) if lesson else {}
     if not lesson:
         lesson = TreatmentLearnedLesson(treatment=locked, created_by=user)
@@ -388,6 +416,12 @@ def save_treatment_learned_lesson(*, treatment: Treatment, user, data: dict, fil
         user=user,
         comment=f"Tratamiento {locked.code}: se registra o actualiza la leccion aprendida.",
     )
+    if is_first_publication:
+        notify_treatment_learned_lesson_published(
+            lesson=lesson,
+            actor=user,
+            request_id=request_id,
+        )
     return lesson
 
 
@@ -435,7 +469,7 @@ def _register_history_for_treatment(*, treatment: Treatment, user, comment: str,
         )
 
 
-def _close_anomalies_for_effective_treatment(*, treatment: Treatment, user, changed_at) -> None:
+def _close_anomalies_for_effective_treatment(*, treatment: Treatment, user, changed_at, request_id: str = "") -> None:
     links = TreatmentAnomaly.objects.filter(treatment=treatment).select_related("anomaly")
     anomalies_by_id = {link.anomaly_id: link.anomaly for link in links}
     if treatment.primary_anomaly_id and treatment.primary_anomaly_id not in anomalies_by_id:
@@ -445,6 +479,7 @@ def _close_anomalies_for_effective_treatment(*, treatment: Treatment, user, chan
         "Tratamiento validado como eficaz. "
         "Anomalia cerrada automaticamente por cierre efectivo del tratamiento."
     )
+    newly_closed_anomalies = []
     for anomaly in anomalies_by_id.values():
         if anomaly.current_status == AnomalyStatus.CLOSED:
             _register_anomaly_history_event(
@@ -479,6 +514,7 @@ def _close_anomalies_for_effective_treatment(*, treatment: Treatment, user, chan
                 "updated_at",
             ]
         )
+        newly_closed_anomalies.append(anomaly)
         AnomalyStatusHistory.objects.create(
             anomaly=anomaly,
             from_status=previous_status,
@@ -491,6 +527,13 @@ def _close_anomalies_for_effective_treatment(*, treatment: Treatment, user, chan
             created_by=user,
             updated_by=user,
         )
+    notify_treatment_closed(
+        treatment=treatment,
+        anomalies=list(anomalies_by_id.values()),
+        newly_closed_anomalies=newly_closed_anomalies,
+        actor=user,
+        request_id=request_id,
+    )
 
 
 def _sync_treatment_analysis_to_anomalies(*, treatment: Treatment, user) -> None:
@@ -647,10 +690,20 @@ def _ensure_treatment_in_progress(*, treatment: Treatment, user, reason: str) ->
 
 
 @transaction.atomic
-def create_treatment(*, primary_anomaly, user, data: dict, request_id: str = "") -> Treatment:
+def create_treatment(
+    *,
+    primary_anomaly,
+    user,
+    data: dict,
+    request_id: str = "",
+    responsible=None,
+) -> Treatment:
     _require_treatment_creation(user, "No tiene permisos para crear tratamientos.", primary_anomaly)
 
     ensure_anomaly_available_for_treatment(primary_anomaly, field="primary_anomaly")
+
+    if TreatmentAnomaly.objects.select_for_update().filter(anomaly=primary_anomaly).exists():
+        raise ValidationError({"primary_anomaly": "La anomalia ya esta asociada a un tratamiento."})
 
     if Treatment.objects.filter(primary_anomaly=primary_anomaly).exists():
         raise ValidationError({"primary_anomaly": "La anomalia ya tiene un tratamiento principal asociado."})
@@ -658,6 +711,7 @@ def create_treatment(*, primary_anomaly, user, data: dict, request_id: str = "")
     treatment = Treatment(
         code=_next_treatment_code(),
         primary_anomaly=primary_anomaly,
+        responsible=responsible or primary_anomaly.owner,
         status=data.get("status") or TreatmentStatus.PENDING,
         scheduled_for=data.get("scheduled_for"),
         treatment_location=(data.get("treatment_location") or "").strip(),
@@ -711,12 +765,193 @@ def create_treatment(*, primary_anomaly, user, data: dict, request_id: str = "")
     return treatment
 
 
+@transaction.atomic
+def create_configured_treatment(
+    *,
+    primary_anomaly,
+    related_anomalies,
+    responsible,
+    user,
+    request_id: str = "",
+) -> Treatment:
+    if not has_global_treatment_management_access(user):
+        raise PermissionDenied("Solo Calidad puede conformar un tratamiento.")
+    if not responsible or not is_management_user(responsible):
+        raise ValidationError({"classification_responsible": "Debe seleccionar un responsable de tratamiento valido."})
+
+    related_by_id = {
+        anomaly.pk: anomaly
+        for anomaly in related_anomalies
+        if anomaly.pk != primary_anomaly.pk
+    }
+    linked_rows = list(
+        TreatmentAnomaly.objects.select_for_update()
+        .filter(anomaly_id__in=related_by_id)
+        .values_list("treatment_id", flat=True)
+    )
+    linked_treatment_ids = set(linked_rows)
+    if linked_treatment_ids:
+        locked_treatments = list(
+            Treatment.objects.select_for_update()
+            .select_related("primary_anomaly")
+            .filter(pk__in=linked_treatment_ids)
+            .order_by("pk")
+        )
+        unavailable = [item.code for item in locked_treatments if not is_mergeable_pending_treatment(item)]
+        if unavailable:
+            raise ValidationError(
+                {
+                    "treatment_related_anomalies": (
+                        "Una o mas anomalias ya pertenecen a tratamientos iniciados o con datos cargados: "
+                        + ", ".join(unavailable)
+                    )
+                }
+            )
+
+        treatment = min(locked_treatments, key=lambda item: (item.code, item.created_at, str(item.pk)))
+        for source in locked_treatments:
+            if source.pk == treatment.pk:
+                continue
+            _merge_pending_treatment_into(
+                source=source,
+                target=treatment,
+                user=user,
+                request_id=request_id,
+            )
+
+        current_related = list(
+            Anomaly.objects.filter(treatment_links__treatment=treatment)
+            .exclude(pk=treatment.primary_anomaly_id)
+            .distinct()
+        )
+        desired_related = {
+            anomaly.pk: anomaly
+            for anomaly in [*current_related, primary_anomaly, *related_by_id.values()]
+            if anomaly.pk != treatment.primary_anomaly_id
+        }
+        treatment = reconfigure_treatment(
+            treatment=treatment,
+            related_anomalies=list(desired_related.values()),
+            responsible=responsible,
+            reason=(
+                f"Revision de hallazgos de {primary_anomaly.code}: se incorpora la anomalia "
+                "sin generar un nuevo numero de tratamiento."
+            ),
+            user=user,
+            request_id=request_id,
+        )
+        record_audit_event(
+            entity=treatment,
+            action="treatment.composition_confirmed",
+            actor=user,
+            after_data={
+                "responsible_id": str(responsible.pk),
+                "primary_anomaly_id": str(treatment.primary_anomaly_id),
+                "classification_anomaly_id": str(primary_anomaly.pk),
+                "related_anomaly_ids": [str(value) for value in desired_related],
+                "reused_treatment_code": treatment.code,
+            },
+            request_id=_request_id(request_id),
+        )
+        return treatment
+
+    treatment = create_treatment(
+        primary_anomaly=primary_anomaly,
+        responsible=responsible,
+        user=user,
+        data={"status": TreatmentStatus.PENDING},
+        request_id=request_id,
+    )
+    for anomaly in related_anomalies:
+        if anomaly.pk == primary_anomaly.pk:
+            continue
+        add_treatment_anomaly(
+            treatment=treatment,
+            anomaly=anomaly,
+            user=user,
+            request_id=request_id,
+        )
+
+    record_audit_event(
+        entity=treatment,
+        action="treatment.composition_confirmed",
+        actor=user,
+        after_data={
+            "responsible_id": str(responsible.pk),
+            "primary_anomaly_id": str(primary_anomaly.pk),
+            "related_anomaly_ids": [str(anomaly.pk) for anomaly in related_anomalies],
+        },
+        request_id=_request_id(request_id),
+    )
+    return treatment
+
+
+def _merge_pending_treatment_into(
+    *,
+    source: Treatment,
+    target: Treatment,
+    user,
+    request_id: str = "",
+) -> None:
+    if source.pk == target.pk:
+        return
+    if not is_mergeable_pending_treatment(source) or not is_mergeable_pending_treatment(target):
+        raise ValidationError(
+            {"treatment_related_anomalies": "Solo pueden consolidarse tratamientos pendientes sin actividad cargada."}
+        )
+
+    before = snapshot_treatment(source)
+    source_links = list(
+        TreatmentAnomaly.objects.select_for_update()
+        .filter(treatment=source)
+        .select_related("anomaly")
+    )
+    target_anomaly_ids = set(
+        TreatmentAnomaly.objects.select_for_update()
+        .filter(treatment=target)
+        .values_list("anomaly_id", flat=True)
+    )
+    for link in source_links:
+        if link.anomaly_id in target_anomaly_ids:
+            link.delete()
+            continue
+        link.treatment = target
+        link.is_primary = False
+        link.updated_by = user
+        link.save(update_fields=["treatment", "is_primary", "updated_by", "updated_at"])
+        target_anomaly_ids.add(link.anomaly_id)
+
+    source.status = TreatmentStatus.CANCELLED
+    source.observations = f"Tratamiento consolidado administrativamente en {target.code}; codigo conservado para trazabilidad."
+    source.updated_by = user
+    _bump_version(source)
+    source.full_clean()
+    source.save(update_fields=["status", "observations", "updated_by", "row_version", "updated_at"])
+    record_audit_event(
+        entity=source,
+        action="treatment.merged",
+        actor=user,
+        before_data=before,
+        after_data={**snapshot_treatment(source), "merged_into_id": str(target.pk), "merged_into_code": target.code},
+        request_id=_request_id(request_id),
+    )
+    _register_history_for_treatment(
+        treatment=source,
+        user=user,
+        comment=f"El tratamiento {source.code} se consolida en {target.code}. El codigo anterior se conserva para auditoria.",
+    )
+
+
 
 @transaction.atomic
 def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str = "") -> Treatment:
     _require_treatment_management(user, "No tiene permisos para actualizar tratamientos.", treatment)
     locked = Treatment.objects.select_for_update().get(pk=treatment.pk)
     ensure_treatment_is_editable(locked)
+    if locked.convocation_confirmed_at and ({"scheduled_for", "treatment_location"} & data.keys()):
+        raise ValidationError(
+            {"scheduled_for": "La convocatoria ya fue confirmada y su agenda no puede modificarse."}
+        )
     before = snapshot_treatment(locked)
 
     status_changed = False
@@ -861,37 +1096,60 @@ def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str,
         request_id=request_id,
     )
     if result == TreatmentEffectivenessValidationResult.EFFECTIVE:
-        _close_anomalies_for_effective_treatment(treatment=locked, user=user, changed_at=timezone.now())
+        _close_anomalies_for_effective_treatment(
+            treatment=locked,
+            user=user,
+            changed_at=timezone.now(),
+            request_id=request_id,
+        )
+    else:
+        notify_treatment_not_effective(
+            treatment=locked,
+            actor=user,
+            request_id=request_id,
+        )
     return locked
 
 
 @transaction.atomic
 def add_treatment_anomaly(*, treatment: Treatment, anomaly, user, request_id: str = "") -> TreatmentAnomaly:
-    _require_treatment_management(user, "No tiene permisos para asociar anomalias al tratamiento.", treatment)
-    ensure_treatment_is_editable(treatment)
-    if not is_open_treatment_for_association(treatment):
-        raise ValidationError({"treatment": "Solo se pueden asociar anomalias a tratamientos abiertos y no validados."})
+    if not has_global_treatment_management_access(user):
+        raise PermissionDenied("Solo Calidad puede conformar las anomalias de un tratamiento.")
+    locked_treatment = Treatment.objects.select_for_update().get(pk=treatment.pk)
+    if not can_reconfigure_treatment(user, locked_treatment):
+        raise ValidationError(
+            {"treatment": "La conformacion solo puede corregirse antes de iniciar el tratamiento."}
+        )
+    anomaly = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
     ensure_anomaly_available_for_treatment(anomaly)
+    if TreatmentAnomaly.objects.filter(anomaly=anomaly).exists():
+        raise ValidationError({"anomaly": "La anomalia ya esta asociada a un tratamiento."})
     _mark_observation_path_for_treatment(
         anomaly=anomaly,
         user=user,
-        treatment_code=treatment.code,
+        treatment_code=locked_treatment.code,
     )
     link, created = TreatmentAnomaly.objects.get_or_create(
-        treatment=treatment,
+        treatment=locked_treatment,
         anomaly=anomaly,
         defaults={"created_by": user, "updated_by": user},
     )
     if not created:
         raise ValidationError({"anomaly": "La anomalia ya esta asociada a este tratamiento."})
-    _ensure_anomaly_owner_is_treatment_participant(
-        treatment=treatment,
+    previous_owner_id = anomaly.owner_id
+    if locked_treatment.responsible_id and anomaly.owner_id != locked_treatment.responsible_id:
+        anomaly.owner_id = locked_treatment.responsible_id
+        anomaly.updated_by = user
+        _bump_version(anomaly)
+        anomaly.save(update_fields=["owner", "updated_by", "row_version", "updated_at"])
+    _move_anomaly_to_treatment_created(
         anomaly=anomaly,
-        actor=user,
+        user=user,
+        comment=f"Tratamiento {locked_treatment.code}: Calidad incorpora la anomalia al tratamiento conformado.",
     )
 
     record_audit_event(
-        entity=treatment,
+        entity=locked_treatment,
         action="treatment.anomaly_added",
         actor=user,
         after_data={"anomaly_id": str(anomaly.pk)},
@@ -900,18 +1158,241 @@ def add_treatment_anomaly(*, treatment: Treatment, anomaly, user, request_id: st
     _register_anomaly_history_event(
         anomaly=anomaly,
         user=user,
-        comment=f"La anomalia se vincula al tratamiento {treatment.code}.",
+        comment=(
+            f"La anomalia se vincula al tratamiento {locked_treatment.code} por decision de Calidad. "
+            "La coordinacion activa queda a cargo del responsable unico del tratamiento."
+        ),
+    )
+    if previous_owner_id and previous_owner_id != anomaly.owner_id:
+        record_audit_event(
+            entity=anomaly,
+            action="anomaly.treatment_responsibility_transferred",
+            actor=user,
+            before_data={"owner_id": str(previous_owner_id)},
+            after_data={"owner_id": str(anomaly.owner_id), "treatment_id": str(locked_treatment.pk)},
+            request_id=_request_id(request_id),
+        )
+    from apps.notifications.services import notify_finding_management_assigned
+
+    notify_finding_management_assigned(
+        anomaly=anomaly,
+        responsible=None,
+        actor=user,
+        request_id=request_id,
     )
     return link
 
+
+def _restore_anomaly_after_treatment_removal(*, anomaly: Anomaly, treatment: Treatment, user) -> None:
+    locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
+    previous_stage = locked.current_stage
+    previous_status = locked.current_status
+    previous_path = locked.observation_resolution_path
+    locked.current_stage = AnomalyStage.CLASSIFICATION
+    locked.current_status = AnomalyStatus.IN_EVALUATION
+    if previous_path == ObservationResolutionPath.TREATMENT and is_immediate_action_anomaly(locked):
+        locked.observation_resolution_path = ObservationResolutionPath.TREATMENT_PENDING
+    locked.last_transition_at = timezone.now()
+    locked.updated_by = user
+    _bump_version(locked)
+    locked.full_clean()
+    locked.save()
+    _register_anomaly_history_event(
+        anomaly=locked,
+        user=user,
+        comment=f"Calidad retira la anomalia del tratamiento {treatment.code} antes de iniciar su ejecucion.",
+        evidence_note=(
+            f"Etapa anterior: {previous_stage}\nEtapa nueva: {locked.current_stage}\n"
+            f"Estado anterior: {previous_status}\nEstado nuevo: {locked.current_status}\n"
+            f"Camino anterior: {previous_path or 'sin definir'}\n"
+            f"Camino nuevo: {locked.observation_resolution_path or 'sin definir'}"
+        ),
+    )
+
+
+@transaction.atomic
+def reconfigure_treatment(
+    *,
+    treatment: Treatment,
+    related_anomalies,
+    responsible,
+    reason: str,
+    user,
+    request_id: str = "",
+) -> Treatment:
+    reason = (reason or "").strip()
+    if not reason:
+        raise ValidationError({"reason": "Debe indicar el motivo de la correccion."})
+
+    locked = Treatment.objects.select_for_update().select_related("primary_anomaly").get(pk=treatment.pk)
+    if not can_reconfigure_treatment(user, locked):
+        raise ValidationError(
+            {"treatment": "La conformacion solo puede corregirse antes de iniciar el tratamiento."}
+        )
+    if not responsible or not is_management_user(responsible):
+        raise ValidationError({"responsible": "Debe seleccionar un responsable de tratamiento valido."})
+
+    related_by_id = {anomaly.pk: anomaly for anomaly in related_anomalies}
+    if locked.primary_anomaly_id in related_by_id:
+        related_by_id.pop(locked.primary_anomaly_id)
+
+    current_links = list(
+        TreatmentAnomaly.objects.select_for_update().filter(treatment=locked, is_primary=False).select_related("anomaly")
+    )
+    current_by_id = {link.anomaly_id: link for link in current_links}
+
+    for anomaly_id, link in current_by_id.items():
+        if anomaly_id not in related_by_id:
+            anomaly = link.anomaly
+            link.delete()
+            _restore_anomaly_after_treatment_removal(anomaly=anomaly, treatment=locked, user=user)
+
+    for anomaly_id, anomaly in related_by_id.items():
+        if anomaly_id not in current_by_id:
+            add_treatment_anomaly(
+                treatment=locked,
+                anomaly=anomaly,
+                user=user,
+                request_id=request_id,
+            )
+
+    if locked.responsible_id != responsible.pk:
+        previous_responsible_id = locked.responsible_id
+        locked.responsible = responsible
+        locked.save(update_fields=["responsible", "updated_at"])
+        linked_anomalies = list(
+            Anomaly.objects.select_for_update().filter(
+                pk__in=TreatmentAnomaly.objects.filter(treatment=locked).values("anomaly_id")
+            )
+        )
+        for linked_anomaly in linked_anomalies:
+            previous_owner_id = linked_anomaly.owner_id
+            if previous_owner_id == responsible.pk:
+                continue
+            linked_anomaly.owner = responsible
+            linked_anomaly.updated_by = user
+            _bump_version(linked_anomaly)
+            linked_anomaly.save(update_fields=["owner", "updated_by", "row_version", "updated_at"])
+            record_audit_event(
+                entity=linked_anomaly,
+                action="anomaly.treatment_responsibility_transferred",
+                actor=user,
+                before_data={"owner_id": str(previous_owner_id or "")},
+                after_data={"owner_id": str(responsible.pk), "treatment_id": str(locked.pk)},
+                request_id=_request_id(request_id),
+            )
+        locked.primary_anomaly = next(
+            (item for item in linked_anomalies if item.pk == locked.primary_anomaly_id),
+            locked.primary_anomaly,
+        )
+        if previous_responsible_id:
+            locked.participants.filter(
+                user_id=previous_responsible_id,
+                role=TreatmentParticipantRole.OWNER,
+            ).delete()
+        _ensure_anomaly_owner_is_treatment_participant(
+            treatment=locked,
+            anomaly=locked.primary_anomaly,
+            actor=user,
+        )
+
+    record_audit_event(
+        entity=locked,
+        action="treatment.composition_corrected",
+        actor=user,
+        after_data={
+            "reason": reason,
+            "responsible_id": str(responsible.pk),
+            "related_anomaly_ids": [str(value) for value in related_by_id],
+        },
+        request_id=_request_id(request_id),
+    )
+    _register_history_for_treatment(
+        treatment=locked,
+        user=user,
+        comment=f"Calidad corrige la conformacion del tratamiento. Motivo: {reason}",
+    )
+    return locked
+
+
+
+@transaction.atomic
+def confirm_treatment_convocation(
+    *,
+    treatment: Treatment,
+    scheduled_for,
+    treatment_location: str,
+    user,
+    request_id: str = "",
+) -> Treatment:
+    _require_treatment_management(user, "No tiene permisos para confirmar la convocatoria.", treatment)
+    locked = Treatment.objects.select_for_update().get(pk=treatment.pk)
+    ensure_treatment_is_editable(locked)
+    if locked.convocation_confirmed_at:
+        raise ValidationError({"convocation": "La convocatoria ya fue confirmada."})
+    if locked.status not in {TreatmentStatus.PENDING, TreatmentStatus.SCHEDULED}:
+        raise ValidationError(
+            {"convocation": "La convocatoria debe confirmarse antes de iniciar el analisis del tratamiento."}
+        )
+    if not scheduled_for:
+        raise ValidationError({"scheduled_for": "Debe indicar la fecha y hora programada."})
+
+    before = snapshot_treatment(locked)
+    locked.scheduled_for = scheduled_for
+    locked.treatment_location = (treatment_location or "").strip()
+    locked.convocation_confirmed_at = timezone.now()
+    locked.convocation_confirmed_by = user
+    if locked.status == TreatmentStatus.PENDING:
+        locked.status = TreatmentStatus.SCHEDULED
+    locked.updated_by = user
+    _bump_version(locked)
+    locked.full_clean()
+    locked.save()
+
+    participants = list(
+        locked.participants.select_related("user").exclude(role=TreatmentParticipantRole.OWNER)
+    )
+    for participant in participants:
+        notify_treatment_participant_invited(
+            treatment=locked,
+            participant=participant,
+            actor=user,
+            request_id=request_id,
+        )
+
+    record_audit_event(
+        entity=locked,
+        action="treatment.convocation_confirmed",
+        actor=user,
+        before_data=before,
+        after_data={
+            **snapshot_treatment(locked),
+            "notified_participant_ids": [str(participant.pk) for participant in participants],
+        },
+        request_id=_request_id(request_id),
+    )
+    _register_history_for_treatment(
+        treatment=locked,
+        user=user,
+        comment=(
+            f"Se confirma la convocatoria del tratamiento {locked.code} y se notifican "
+            f"{len(participants)} usuario(s) convocado(s)."
+        ),
+    )
+    return locked
 
 
 @transaction.atomic
 def add_treatment_participant(*, treatment: Treatment, participant_user, role: str, note: str, user, request_id: str = "") -> TreatmentParticipant:
     _require_treatment_management(user, "No tiene permisos para convocar participantes al tratamiento.", treatment)
-    ensure_treatment_is_editable(treatment)
+    locked_treatment = Treatment.objects.select_for_update().get(pk=treatment.pk)
+    ensure_treatment_is_editable(locked_treatment)
+    if locked_treatment.convocation_confirmed_at:
+        raise ValidationError(
+            {"participant": "La convocatoria ya fue confirmada y no admite nuevos usuarios."}
+        )
     participant, created = TreatmentParticipant.objects.get_or_create(
-        treatment=treatment,
+        treatment=locked_treatment,
         user=participant_user,
         defaults={"role": role, "note": note, "created_by": user, "updated_by": user},
     )
@@ -923,28 +1404,21 @@ def add_treatment_participant(*, treatment: Treatment, participant_user, role: s
         participant.save()
 
     record_audit_event(
-        entity=treatment,
+        entity=locked_treatment,
         action="treatment.participant_added" if created else "treatment.participant_updated",
         actor=user,
         after_data={"user_id": str(participant_user.pk), "role": role},
         request_id=_request_id(request_id),
     )
     _register_history_for_treatment(
-        treatment=treatment,
+        treatment=locked_treatment,
         user=user,
         comment=(
-            f"Se convoca al usuario {participant_user.username} en el tratamiento {treatment.code}."
+            f"Se agrega al usuario {participant_user.username} a la convocatoria de {locked_treatment.code}."
             if created
-            else f"Se actualiza la convocatoria de {participant_user.username} en el tratamiento {treatment.code}."
+            else f"Se actualiza la convocatoria de {participant_user.username} en {locked_treatment.code}."
         ),
     )
-    if created:
-        notify_treatment_participant_invited(
-            treatment=treatment,
-            participant=participant,
-            actor=user,
-            request_id=request_id,
-        )
     return participant
 
 

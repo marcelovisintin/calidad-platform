@@ -7,6 +7,7 @@ from django.db.models import Q
 
 
 IMMEDIATE_TERMS = ("observacion", "inmediata", "immediate")
+NONCONFORMITY_TERMS = ("no conformidad", "no conform", "nonconform")
 CLASSIFICATION_EDITABLE_STAGES = {
     "registration",
     "containment",
@@ -23,6 +24,22 @@ def _normalize(text: str) -> str:
 def is_immediate_action_value(value: str) -> bool:
     normalized = _normalize(value)
     return any(term in normalized for term in IMMEDIATE_TERMS)
+
+
+def is_nonconformity_value(value: str) -> bool:
+    normalized = _normalize(value).strip()
+    return normalized == "nc" or any(term in normalized for term in NONCONFORMITY_TERMS)
+
+
+def is_nonconformity_anomaly(anomaly) -> bool:
+    severity = getattr(anomaly, "severity", None)
+    return bool(
+        severity
+        and (
+            is_nonconformity_value(getattr(severity, "code", ""))
+            or is_nonconformity_value(getattr(severity, "name", ""))
+        )
+    )
 
 
 def is_immediate_action_anomaly(anomaly) -> bool:
@@ -60,6 +77,15 @@ def immediate_action_q(prefix: str = "") -> Q:
         | Q(**{f"{prefix}classification_summary__icontains": "Observación"})
         | Q(**{f"{prefix}classification__summary__icontains": "Observacion"})
         | Q(**{f"{prefix}classification__summary__icontains": "Observación"})
+    )
+
+
+def nonconformity_q(prefix: str = "") -> Q:
+    return (
+        Q(**{f"{prefix}severity__code__iexact": "NC"})
+        | Q(**{f"{prefix}severity__name__icontains": "No Conformidad"})
+        | Q(**{f"{prefix}severity__name__icontains": "No conformidad"})
+        | Q(**{f"{prefix}severity__code__icontains": "NO_CONFORM"})
     )
 
 

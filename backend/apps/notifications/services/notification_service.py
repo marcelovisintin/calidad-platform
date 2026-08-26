@@ -46,6 +46,12 @@ TREATMENT_TASK_STATUS_MAP = {
 FINDING_MANAGEMENT_TEMPLATE = "finding_management_assigned"
 TREATMENT_EFFECTIVENESS_TEMPLATE = "treatment_effectiveness_assigned"
 OBSERVATION_EFFECTIVENESS_TEMPLATE = "observation_effectiveness_assigned"
+ANOMALY_CLOSED_TEMPLATE = "anomaly_closed"
+TREATMENT_CLOSED_TEMPLATE = "treatment_closed"
+TREATMENT_REPORTER_CLOSURE_TEMPLATE = "anomalies_closed_by_treatment"
+TREATMENT_LEARNED_LESSON_TEMPLATE = "treatment_learned_lesson_published"
+TREATMENT_NOT_EFFECTIVE_TEMPLATE = "treatment_not_effective"
+OBSERVATION_NOT_EFFECTIVE_TEMPLATE = "observation_not_effective"
 
 
 def _request_id(value: str | None) -> str:
@@ -69,6 +75,45 @@ def _unique_active_users(users) -> list:
         seen_ids.add(user.pk)
         unique_users.append(user)
     return unique_users
+
+
+def _event_notification_exists(
+    *,
+    source_type: str,
+    source_id,
+    template_code: str,
+    event_key: str,
+    recipient_id=None,
+) -> bool:
+    queryset = Notification.objects.filter(
+        source_type=source_type,
+        source_id=source_id,
+        template_code=template_code,
+    ).order_by("-created_at")
+    if recipient_id:
+        queryset = queryset.filter(
+            recipients__user_id=recipient_id,
+            recipients__channel=NotificationChannel.IN_APP,
+        )
+    return any(
+        notification.context_data.get("event_key") == event_key
+        for notification in queryset[:20]
+    )
+
+
+def _treatment_involved_users(treatment) -> list:
+    users = [getattr(treatment, "responsible", None)]
+    users.extend(
+        participant.user
+        for participant in treatment.participants.select_related("user").all()
+    )
+    users.extend(
+        task.responsible
+        for task in treatment.tasks.select_related("responsible").all()
+        if task.responsible_id
+    )
+    users.append(getattr(treatment, "effectiveness_responsible", None))
+    return _unique_active_users(users)
 
 
 
@@ -666,7 +711,14 @@ def _dismiss_previous_finding_management_tasks(
 
 
 @transaction.atomic
-def notify_finding_management_assigned(*, anomaly, responsible, actor=None, request_id: str = ""):
+def notify_finding_management_assigned(
+    *,
+    anomaly,
+    responsible,
+    actor=None,
+    request_id: str = "",
+    treatment=None,
+):
     from apps.anomalies.services.classification_rules import is_immediate_action_anomaly
 
     severity_id = str(anomaly.severity_id or "")
@@ -675,7 +727,9 @@ def notify_finding_management_assigned(*, anomaly, responsible, actor=None, requ
         is_observation and anomaly.observation_resolution_path == "TREATMENT_PENDING"
     )
     management_path = (
-        "observation_treatment"
+        "configured_treatment"
+        if treatment is not None
+        else "observation_treatment"
         if is_observation_treatment
         else "observation_or_treatment"
         if is_observation
@@ -718,7 +772,15 @@ def notify_finding_management_assigned(*, anomaly, responsible, actor=None, requ
     if not responsible:
         return None
 
-    if is_observation_treatment:
+    if treatment is not None:
+        linked_count = treatment.anomaly_links.count()
+        title = f"Tratamiento {treatment.code} conformado por Calidad"
+        instruction = (
+            f"Calidad conformó el tratamiento con {linked_count} anomalía"
+            f"{'s' if linked_count != 1 else ''}. Debes convocar a los participantes y realizar su gestión."
+        )
+        action_url = f"/treatments?treatment={treatment.pk}"
+    elif is_observation_treatment:
         title = f"Tratamiento requerido para la observación TRT {anomaly.code}"
         instruction = "La observación fue marcada como plausible de tratamiento. Debes crear o coordinar su tratamiento."
         action_url = f"/treatments?anomaly={anomaly.pk}"
@@ -761,6 +823,8 @@ def notify_finding_management_assigned(*, anomaly, responsible, actor=None, requ
             "severity_code": anomaly.severity.code,
             "responsible_id": str(responsible.pk),
             "management_path": management_path,
+            "treatment_id": str(treatment.pk) if treatment is not None else "",
+            "treatment_code": treatment.code if treatment is not None else "",
         },
         request_id=request_id,
         email_enabled=True,
@@ -811,14 +875,22 @@ def notify_action_item_assigned(*, action_item, actor=None, reassigned: bool = F
     return create_internal_notification(
         recipients=[action_item.assigned_to],
         title=f"Accion {action_item.code} {verb}",
-        body=f"{action_item.title}. Fecha compromiso: {due_label}.",
+        body=(
+            f"Hola {action_item.assigned_to.full_name},\n\n"
+            f"Se te asignó la acción {action_item.code or action_item.title}.\n"
+            f"Título: {action_item.title}\n"
+            f"Descripción: {action_item.description or 'Sin descripción'}\n"
+            f"Anomalía: {action_item.action_plan.anomaly.code}\n"
+            f"Fecha compromiso: {due_label}.\n\n"
+            "Ingresá al Sistema de Gestión de Calidad con tu propio usuario para consultar y gestionar la acción."
+        ),
         source_type="actions.actionitem",
         source_id=action_item.pk,
         actor=actor,
         category=NotificationCategory.ACTION,
         is_task=True,
         task_type=NotificationTaskType.ACTION_ASSIGNMENT,
-        action_url=f"/api/v1/actions/items/{action_item.pk}/",
+        action_url="/actions/mine",
         due_at=_action_due_at(action_item),
         context_data={
             "action_item_id": str(action_item.pk),
@@ -826,8 +898,10 @@ def notify_action_item_assigned(*, action_item, actor=None, reassigned: bool = F
             "anomaly_id": str(action_item.action_plan.anomaly_id),
             "anomaly_code": action_item.action_plan.anomaly.code,
             "assigned_to_id": str(action_item.assigned_to_id),
+            "include_action_url_in_email": False,
         },
         request_id=request_id,
+        email_enabled=True,
     )
 
 
@@ -1085,6 +1159,291 @@ def notify_treatment_participant_invited(*, treatment, participant, actor=None, 
             "anomaly_code": anomaly.code,
             "participant_id": str(participant.pk),
             "participant_role": participant.role,
+            "include_action_url_in_email": False,
+        },
+        request_id=request_id,
+        email_enabled=True,
+    )
+
+
+def notify_anomaly_closed(
+    *,
+    anomaly,
+    actor=None,
+    closure_path: str = "administrative",
+    request_id: str = "",
+):
+    if not anomaly.reporter_id or not anomaly.closed_at:
+        return None
+    event_key = anomaly.closed_at.isoformat()
+    if _event_notification_exists(
+        source_type="anomalies.anomaly",
+        source_id=anomaly.pk,
+        template_code=ANOMALY_CLOSED_TEMPLATE,
+        event_key=event_key,
+        recipient_id=anomaly.reporter_id,
+    ):
+        return None
+
+    path_labels = {
+        "invalid": "clasificación como inválida en la Revisión de hallazgos",
+        "observation_effective": "verificación eficaz de la observación",
+        "administrative": "cierre administrativo",
+    }
+    path_label = path_labels.get(closure_path, path_labels["administrative"])
+    summary = (
+        (anomaly.closure_comment or "").strip()
+        or (anomaly.effectiveness_summary or "").strip()
+        or (anomaly.result_summary or "").strip()
+        or "La gestión de la anomalía fue finalizada."
+    )
+    return create_internal_notification(
+        recipients=[anomaly.reporter],
+        title=f"Anomalía {anomaly.code} cerrada",
+        body=(
+            f"Hola {anomaly.reporter.full_name},\n\n"
+            f"La anomalía {anomaly.code} - {anomaly.title} fue cerrada.\n"
+            f"Motivo del cierre: {path_label}.\n"
+            f"Resumen de lo actuado: {summary}"
+        ),
+        source_type="anomalies.anomaly",
+        source_id=anomaly.pk,
+        actor=actor,
+        category=NotificationCategory.ANOMALY,
+        template_code=ANOMALY_CLOSED_TEMPLATE,
+        action_url=f"/anomalies/{anomaly.pk}",
+        context_data={
+            "event_key": event_key,
+            "anomaly_id": str(anomaly.pk),
+            "anomaly_code": anomaly.code,
+            "closure_path": closure_path,
+            "closed_at": anomaly.closed_at.isoformat(),
+            "include_action_url_in_email": False,
+        },
+        request_id=request_id,
+        email_enabled=True,
+    )
+
+
+def notify_treatment_closed(
+    *,
+    treatment,
+    anomalies: list,
+    newly_closed_anomalies: list,
+    actor=None,
+    request_id: str = "",
+) -> list:
+    event_at = treatment.effectiveness_validated_at or timezone.now()
+    event_key = event_at.isoformat()
+    notifications = []
+    involved_users = _treatment_involved_users(treatment)
+    involved_ids = {user.pk for user in involved_users}
+    anomaly_label = ", ".join(anomaly.code for anomaly in anomalies)
+    validation_comment = (treatment.effectiveness_validation_comment or "").strip() or "Resultado eficaz confirmado."
+
+    if involved_users and not _event_notification_exists(
+        source_type="actions.treatment",
+        source_id=treatment.pk,
+        template_code=TREATMENT_CLOSED_TEMPLATE,
+        event_key=event_key,
+    ):
+        notifications.append(
+            create_internal_notification(
+                recipients=involved_users,
+                title=f"Tratamiento {treatment.code} cerrado eficazmente",
+                body=(
+                    f"El tratamiento {treatment.code} fue validado como eficaz y quedó cerrado.\n"
+                    f"Anomalía(s) cerrada(s): {anomaly_label}.\n"
+                    f"Resultado de la verificación: {validation_comment}"
+                ),
+                source_type="actions.treatment",
+                source_id=treatment.pk,
+                actor=actor,
+                category=NotificationCategory.INFO,
+                template_code=TREATMENT_CLOSED_TEMPLATE,
+                action_url=f"/treatments?treatment={treatment.pk}",
+                context_data={
+                    "event_key": event_key,
+                    "treatment_id": str(treatment.pk),
+                    "treatment_code": treatment.code,
+                    "anomaly_codes": [anomaly.code for anomaly in anomalies],
+                    "include_action_url_in_email": False,
+                },
+                request_id=request_id,
+                email_enabled=True,
+            )
+        )
+
+    reporter_anomalies: dict[object, tuple[object, list]] = {}
+    for anomaly in newly_closed_anomalies:
+        if not anomaly.reporter_id or anomaly.reporter_id in involved_ids:
+            continue
+        if anomaly.reporter_id not in reporter_anomalies:
+            reporter_anomalies[anomaly.reporter_id] = (anomaly.reporter, [])
+        reporter_anomalies[anomaly.reporter_id][1].append(anomaly)
+
+    for reporter_id, (reporter, reported_anomalies) in reporter_anomalies.items():
+        if _event_notification_exists(
+            source_type="actions.treatment",
+            source_id=treatment.pk,
+            template_code=TREATMENT_REPORTER_CLOSURE_TEMPLATE,
+            event_key=event_key,
+            recipient_id=reporter_id,
+        ):
+            continue
+        reported_label = ", ".join(
+            f"{anomaly.code} - {anomaly.title}" for anomaly in reported_anomalies
+        )
+        notifications.append(
+            create_internal_notification(
+                recipients=[reporter],
+                title=f"Cierre de anomalía por tratamiento eficaz {treatment.code}",
+                body=(
+                    f"Hola {reporter.full_name},\n\n"
+                    f"La(s) anomalía(s) {reported_label} fue(ron) cerrada(s) porque el tratamiento "
+                    f"{treatment.code} fue validado como eficaz.\n"
+                    f"Resumen de lo actuado: {validation_comment}"
+                ),
+                source_type="actions.treatment",
+                source_id=treatment.pk,
+                actor=actor,
+                category=NotificationCategory.ANOMALY,
+                template_code=TREATMENT_REPORTER_CLOSURE_TEMPLATE,
+                action_url=f"/treatments?treatment={treatment.pk}",
+                context_data={
+                    "event_key": event_key,
+                    "treatment_id": str(treatment.pk),
+                    "treatment_code": treatment.code,
+                    "anomaly_ids": [str(anomaly.pk) for anomaly in reported_anomalies],
+                    "anomaly_codes": [anomaly.code for anomaly in reported_anomalies],
+                    "reporter_id": str(reporter_id),
+                    "include_action_url_in_email": False,
+                },
+                request_id=request_id,
+                email_enabled=True,
+            )
+        )
+    return [notification for notification in notifications if notification is not None]
+
+
+def notify_treatment_learned_lesson_published(*, lesson, actor=None, request_id: str = ""):
+    treatment = lesson.treatment
+    event_key = str(lesson.pk)
+    if _event_notification_exists(
+        source_type="actions.treatmentlearnedlesson",
+        source_id=lesson.pk,
+        template_code=TREATMENT_LEARNED_LESSON_TEMPLATE,
+        event_key=event_key,
+    ):
+        return None
+    recipients = _treatment_involved_users(treatment)
+    if lesson.has_learning:
+        learning_summary = (lesson.learned_text or "").strip() or "Se registró una lección aprendida."
+    else:
+        learning_summary = (
+            (lesson.no_learning_reason or "").strip()
+            or "Se registró que el tratamiento no produjo una nueva lección aprendida."
+        )
+    procedure_summary = (
+        (lesson.procedure_modification_notes or "").strip() or "Se modificó un procedimiento."
+        if lesson.procedure_modified
+        else "No se registraron modificaciones de procedimiento."
+    )
+    return create_internal_notification(
+        recipients=recipients,
+        title=f"Lección aprendida publicada: {treatment.code}",
+        body=(
+            f"Se publicó el registro de lecciones aprendidas del tratamiento {treatment.code}.\n"
+            f"Conclusión: {learning_summary}\n"
+            f"Procedimientos: {procedure_summary}"
+        ),
+        source_type="actions.treatmentlearnedlesson",
+        source_id=lesson.pk,
+        actor=actor,
+        category=NotificationCategory.INFO,
+        template_code=TREATMENT_LEARNED_LESSON_TEMPLATE,
+        action_url=f"/treatments?treatment={treatment.pk}",
+        context_data={
+            "event_key": event_key,
+            "treatment_id": str(treatment.pk),
+            "treatment_code": treatment.code,
+            "lesson_id": str(lesson.pk),
+            "include_action_url_in_email": False,
+        },
+        request_id=request_id,
+        email_enabled=True,
+    )
+
+
+def notify_treatment_not_effective(*, treatment, actor=None, request_id: str = ""):
+    event_at = treatment.effectiveness_validated_at or timezone.now()
+    event_key = event_at.isoformat()
+    if _event_notification_exists(
+        source_type="actions.treatment",
+        source_id=treatment.pk,
+        template_code=TREATMENT_NOT_EFFECTIVE_TEMPLATE,
+        event_key=event_key,
+    ):
+        return None
+    recipients = _treatment_involved_users(treatment)
+    comment = (treatment.effectiveness_validation_comment or "").strip() or "La verificación resultó no eficaz."
+    return create_internal_notification(
+        recipients=recipients,
+        title=f"Tratamiento {treatment.code}: resultado no eficaz",
+        body=(
+            f"La verificación de eficacia del tratamiento {treatment.code} resultó no eficaz.\n"
+            f"Observación: {comment}\n"
+            "El tratamiento permanece abierto y requiere revisar las acciones realizadas."
+        ),
+        source_type="actions.treatment",
+        source_id=treatment.pk,
+        actor=actor,
+        category=NotificationCategory.ACTION,
+        template_code=TREATMENT_NOT_EFFECTIVE_TEMPLATE,
+        action_url=f"/treatments?treatment={treatment.pk}",
+        context_data={
+            "event_key": event_key,
+            "treatment_id": str(treatment.pk),
+            "treatment_code": treatment.code,
+            "include_action_url_in_email": False,
+        },
+        request_id=request_id,
+        email_enabled=True,
+    )
+
+
+def notify_observation_not_effective(
+    *, anomaly, immediate_action, actor=None, request_id: str = ""
+):
+    event_at = immediate_action.effectiveness_verified_at or timezone.now()
+    event_key = event_at.isoformat()
+    if _event_notification_exists(
+        source_type="anomalies.anomaly",
+        source_id=anomaly.pk,
+        template_code=OBSERVATION_NOT_EFFECTIVE_TEMPLATE,
+        event_key=event_key,
+    ):
+        return None
+    responsible = anomaly.owner or immediate_action.responsible
+    comment = (immediate_action.effectiveness_comment or "").strip() or "La verificación resultó no eficaz."
+    return create_internal_notification(
+        recipients=[responsible],
+        title=f"Observación {anomaly.code}: resultado no eficaz",
+        body=(
+            f"La verificación de eficacia de la observación {anomaly.code} resultó no eficaz.\n"
+            f"Observación: {comment}\n"
+            "La anomalía permanece abierta y requiere registrar una nueva acción tomada."
+        ),
+        source_type="anomalies.anomaly",
+        source_id=anomaly.pk,
+        actor=actor,
+        category=NotificationCategory.ACTION,
+        template_code=OBSERVATION_NOT_EFFECTIVE_TEMPLATE,
+        action_url=f"/anomalies/{anomaly.pk}",
+        context_data={
+            "event_key": event_key,
+            "anomaly_id": str(anomaly.pk),
+            "anomaly_code": anomaly.code,
             "include_action_url_in_email": False,
         },
         request_id=request_id,

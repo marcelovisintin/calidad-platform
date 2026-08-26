@@ -44,7 +44,7 @@ class TreatmentParticipantOptionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("id", "username", "email", "first_name", "last_name", "full_name", "sector")
+        fields = ("id", "username", "email", "first_name", "last_name", "full_name", "access_level", "sector")
 
 
 class AnomalyAttachmentSummarySerializer(serializers.ModelSerializer):
@@ -319,6 +319,8 @@ class TreatmentAnomalyLinkSerializer(serializers.ModelSerializer):
 
 class TreatmentListSerializer(serializers.ModelSerializer):
     primary_anomaly = TreatmentAnomalySummarySerializer(read_only=True)
+    responsible = UserSummarySerializer(read_only=True)
+    convocation_confirmed_by = UserSummarySerializer(read_only=True)
     effectiveness_responsible = UserSummarySerializer(read_only=True)
     effectiveness_validated_by = UserSummarySerializer(read_only=True)
     validation_state = serializers.SerializerMethodField()
@@ -326,6 +328,7 @@ class TreatmentListSerializer(serializers.ModelSerializer):
     learned_lesson = TreatmentLearnedLessonSerializer(read_only=True)
     can_manage = serializers.SerializerMethodField()
     can_validate_effectiveness = serializers.SerializerMethodField()
+    can_reconfigure = serializers.SerializerMethodField()
 
     class Meta:
         model = Treatment
@@ -335,6 +338,8 @@ class TreatmentListSerializer(serializers.ModelSerializer):
             "status",
             "scheduled_for",
             "treatment_location",
+            "convocation_confirmed_at",
+            "convocation_confirmed_by",
             "method_used",
             "observations",
             "effectiveness_evaluation_date",
@@ -348,7 +353,9 @@ class TreatmentListSerializer(serializers.ModelSerializer):
             "learned_lesson",
             "can_manage",
             "can_validate_effectiveness",
+            "can_reconfigure",
             "primary_anomaly",
+            "responsible",
             "created_at",
             "updated_at",
         )
@@ -375,9 +382,17 @@ class TreatmentListSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         return can_validate_treatment_effectiveness(getattr(request, "user", None), obj)
 
+    def get_can_reconfigure(self, obj):
+        from apps.actions.services.treatment_service import can_reconfigure_treatment
+
+        request = self.context.get("request")
+        return can_reconfigure_treatment(getattr(request, "user", None), obj)
+
 
 class TreatmentDetailSerializer(serializers.ModelSerializer):
     primary_anomaly = TreatmentAnomalySummarySerializer(read_only=True)
+    responsible = UserSummarySerializer(read_only=True)
+    convocation_confirmed_by = UserSummarySerializer(read_only=True)
     effectiveness_responsible = UserSummarySerializer(read_only=True)
     effectiveness_validated_by = UserSummarySerializer(read_only=True)
     validation_state = serializers.SerializerMethodField()
@@ -391,6 +406,7 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
     learned_lesson = TreatmentLearnedLessonSerializer(read_only=True)
     can_manage = serializers.SerializerMethodField()
     can_validate_effectiveness = serializers.SerializerMethodField()
+    can_reconfigure = serializers.SerializerMethodField()
 
     class Meta:
         model = Treatment
@@ -400,6 +416,8 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
             "status",
             "scheduled_for",
             "treatment_location",
+            "convocation_confirmed_at",
+            "convocation_confirmed_by",
             "method_used",
             "observations",
             "effectiveness_evaluation_date",
@@ -411,6 +429,7 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
             "validation_state",
             "is_locked",
             "primary_anomaly",
+            "responsible",
             "participants",
             "anomaly_links",
             "root_causes",
@@ -420,6 +439,7 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
             "learned_lesson",
             "can_manage",
             "can_validate_effectiveness",
+            "can_reconfigure",
             "created_at",
             "updated_at",
             "row_version",
@@ -446,6 +466,12 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
 
         request = self.context.get("request")
         return can_validate_treatment_effectiveness(getattr(request, "user", None), obj)
+
+    def get_can_reconfigure(self, obj):
+        from apps.actions.services.treatment_service import can_reconfigure_treatment
+
+        request = self.context.get("request")
+        return can_reconfigure_treatment(getattr(request, "user", None), obj)
 
     def get_audit_events(self, obj):
         queryset = AuditEvent.objects.select_related("actor").filter(
@@ -479,8 +505,25 @@ class TreatmentUpdateSerializer(serializers.Serializer):
     )
 
 
+class TreatmentConfirmConvocationSerializer(serializers.Serializer):
+    scheduled_for = serializers.DateTimeField(required=True, allow_null=False)
+    treatment_location = serializers.CharField(required=False, allow_blank=True, max_length=200)
+
+
 class TreatmentAddAnomalySerializer(serializers.Serializer):
     anomaly = serializers.PrimaryKeyRelatedField(queryset=Anomaly.objects.all())
+
+
+class TreatmentReconfigureSerializer(serializers.Serializer):
+    related_anomalies = serializers.PrimaryKeyRelatedField(
+        queryset=Anomaly.objects.all(),
+        many=True,
+        required=False,
+    )
+    responsible = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_active=True),
+    )
+    reason = serializers.CharField(allow_blank=False)
 
 
 class TreatmentAddParticipantSerializer(serializers.Serializer):
@@ -592,7 +635,20 @@ class TreatmentCandidateSerializer(serializers.Serializer):
     area = AnomalySectorSerializer(read_only=True)
     imputed_area = AnomalySectorSerializer(read_only=True)
     anomaly_origin = AnomalySectorSerializer(read_only=True)
+    anomaly_type = AnomalySectorSerializer(read_only=True)
+    severity = AnomalySectorSerializer(read_only=True)
+    observation_resolution_path = serializers.CharField(read_only=True)
+    suggested_by_repetition = serializers.SerializerMethodField()
     detected_at = serializers.DateTimeField(read_only=True)
+
+    def get_suggested_by_repetition(self, obj):
+        anchor = self.context.get("anchor_anomaly")
+        if anchor is None:
+            return False
+        return bool(
+            obj.anomaly_type_id == anchor.anomaly_type_id
+            and (obj.imputed_area_id or obj.area_id) == (anchor.imputed_area_id or anchor.area_id)
+        )
 
 
 class TreatmentsApiRootSerializer(serializers.Serializer):

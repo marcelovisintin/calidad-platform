@@ -132,6 +132,16 @@ export function updateTreatment(treatmentId: string, payload: TreatmentUpdatePay
   });
 }
 
+export function confirmTreatmentConvocation(
+  treatmentId: string,
+  payload: { scheduled_for: string; treatment_location?: string },
+) {
+  return apiRequest<TreatmentDetail>(`/actions/treatments/${treatmentId}/confirm-convocation/`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export function fetchTreatmentParticipantOptions(treatmentId: string) {
   return apiRequest<TreatmentParticipantOption[]>(`/actions/treatments/${treatmentId}/participant-options/`);
 }
@@ -153,6 +163,7 @@ export function fetchTreatmentCandidates(filters: {
   user?: string;
   dateFrom?: string;
   dateTo?: string;
+  anchorId?: string;
 } = {}) {
   const params = new URLSearchParams({
     page: String(filters.page ?? 1),
@@ -180,8 +191,21 @@ export function fetchTreatmentCandidates(filters: {
   if (filters.dateTo?.trim()) {
     params.set("date_to", filters.dateTo.trim());
   }
+  if (filters.anchorId?.trim()) {
+    params.set("anchor", filters.anchorId.trim());
+  }
 
   return apiRequest<PagedResponse<TreatmentCandidate>>(`/actions/treatments/candidates/?${params.toString()}`);
+}
+
+export function reconfigureTreatment(
+  treatmentId: string,
+  payload: { related_anomalies: string[]; responsible: string; reason: string },
+) {
+  return apiRequest<TreatmentDetail>(`/actions/treatments/${treatmentId}/reconfigure/`, {
+    method: "POST",
+    body: payload,
+  });
 }
 
 export function fetchOpenTreatmentOptions(anomalyId: string) {

@@ -18,9 +18,11 @@ from apps.actions.models import Treatment, TreatmentEffectivenessValidationResul
 from apps.audit.services import record_audit_event
 from apps.notifications.services import (
     complete_observation_effectiveness_assignment,
+    notify_anomaly_closed,
     notify_anomaly_created,
     notify_finding_management_assigned,
     notify_observation_effectiveness_assigned,
+    notify_observation_not_effective,
     notify_participation_request,
 )
 from apps.anomalies.models import (
@@ -48,6 +50,7 @@ from apps.anomalies.services.classification_rules import (
     can_unlock_classification_change,
     is_immediate_action_anomaly,
     is_immediate_action_value,
+    is_nonconformity_anomaly,
     stage_allows_classification_change,
 )
 from apps.anomalies.services.workflow import (
@@ -551,6 +554,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     before = snapshot_anomaly(locked)
     classification_responsible = data.pop("classification_responsible", None)
     classification_reason = (data.pop("classification_reason", "") or "").strip()
+    treatment_related_anomalies = list(data.pop("treatment_related_anomalies", []) or [])
     affected_orders = data.pop("affected_orders", None)
     legacy_order_changed = "manufacturing_order_number" in data or "affected_quantity" in data
     if affected_orders is not None:
@@ -562,6 +566,11 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
 
     severity_in_payload = "severity" in data
     previous_severity_id = locked.severity_id
+
+    if severity_in_payload and Treatment.objects.filter(anomaly_links__anomaly=locked).exists():
+        raise ValidationError(
+            {"severity": "La anomalia ya integra un tratamiento. Use la correccion administrativa del tratamiento."}
+        )
 
     if severity_in_payload:
         _require_admin_access_level(user, "Solo usuarios ADMIN pueden realizar Revisión de hallazgos de anomalias.")
@@ -592,6 +601,11 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
         severity_name = locked.severity.name
         closes_as_invalid = bool(getattr(locked.severity, "closes_anomaly_as_invalid", False))
         requires_responsible = bool(getattr(locked.severity, "requires_classification_responsible", True))
+
+        if treatment_related_anomalies and not is_nonconformity_anomaly(locked):
+            raise ValidationError(
+                {"treatment_related_anomalies": "Solo una No Conformidad puede conformar un tratamiento desde esta revision."}
+            )
 
         if closes_as_invalid:
             if not classification_reason:
@@ -744,13 +758,44 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
         after_data=snapshot_anomaly(locked),
         request_id=_request_id(request_id),
     )
+    configured_treatment = None
+    if should_sync_classification and is_nonconformity_anomaly(locked):
+        from apps.actions.services import create_configured_treatment
+
+        related_ids = {item.pk for item in treatment_related_anomalies if item.pk != locked.pk}
+        related_anomalies = list(
+            Anomaly.objects.select_for_update(of=("self",))
+            .select_related("severity")
+            .filter(pk__in=related_ids)
+            .order_by("pk")
+        )
+        if len(related_anomalies) != len(related_ids):
+            raise ValidationError(
+                {"treatment_related_anomalies": "Una o mas anomalias seleccionadas ya no estan disponibles."}
+            )
+        configured_treatment = create_configured_treatment(
+            primary_anomaly=locked,
+            related_anomalies=related_anomalies,
+            responsible=classification_responsible,
+            user=user,
+            request_id=request_id,
+        )
+
     if should_sync_classification:
         notify_finding_management_assigned(
             anomaly=locked,
             responsible=None if closes_as_invalid else classification_responsible,
             actor=user,
             request_id=request_id,
+            treatment=configured_treatment,
         )
+        if closes_as_invalid and transition_from_status != AnomalyStatus.CLOSED:
+            notify_anomaly_closed(
+                anomaly=locked,
+                actor=user,
+                closure_path="invalid",
+                request_id=request_id,
+            )
     return locked
 
 
@@ -1417,6 +1462,20 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
         actor=user,
         request_id=request_id,
     )
+    if is_effective:
+        notify_anomaly_closed(
+            anomaly=locked,
+            actor=user,
+            closure_path="observation_effective",
+            request_id=request_id,
+        )
+    else:
+        notify_observation_not_effective(
+            anomaly=locked,
+            immediate_action=immediate_action,
+            actor=user,
+            request_id=request_id,
+        )
     return immediate_action
 
 
@@ -1497,6 +1556,13 @@ def transition_anomaly(*, anomaly: Anomaly, user, target_stage: str | None = Non
         after_data=snapshot_anomaly(locked) | {"comment": comment},
         request_id=_request_id(request_id),
     )
+    if previous_status != AnomalyStatus.CLOSED and locked.current_status == AnomalyStatus.CLOSED:
+        notify_anomaly_closed(
+            anomaly=locked,
+            actor=user,
+            closure_path="administrative",
+            request_id=request_id,
+        )
     return locked
 
 

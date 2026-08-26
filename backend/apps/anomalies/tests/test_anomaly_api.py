@@ -9,6 +9,7 @@ from rest_framework.test import APITestCase
 from apps.accounts.constants import PERMISSION_CLASSIFY_ANOMALY, PERMISSION_EDIT_ANOMALY
 from apps.accounts.models import User
 from apps.accounts.services.role_setup import ensure_required_permissions
+from apps.actions.models import Treatment
 from apps.anomalies.models import (
     AffectedOrder,
     Anomaly,
@@ -1233,6 +1234,13 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertTrue(
             any("Resultado: Invalida" in item["evidence_note"] for item in response.data["status_history"])
         )
+        self.assertTrue(
+            Notification.objects.filter(
+                source_id=anomaly_id,
+                template_code="anomaly_closed",
+                context_data__closure_path="invalid",
+            ).exists()
+        )
 
 
 
@@ -1305,19 +1313,14 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
 
         anomaly_id = create_response.data["id"]
+        nonconformity = Severity.objects.create(code="NC", name="No Conformidad")
         classify_response = self.client.patch(
             f"/api/v1/anomalies/{anomaly_id}/",
-            self._classification_payload(self.severity),
+            self._classification_payload(nonconformity),
             format="json",
         )
         self.assertEqual(classify_response.status_code, status.HTTP_200_OK)
-
-        treatment_response = self.client.post(
-            "/api/v1/actions/treatments/",
-            {"primary_anomaly": anomaly_id},
-            format="json",
-        )
-        self.assertEqual(treatment_response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(Treatment.objects.filter(primary_anomaly_id=anomaly_id).exists())
 
         detail_response = self.client.get(f"/api/v1/anomalies/{anomaly_id}/")
         self.assertEqual(detail_response.status_code, status.HTTP_200_OK)

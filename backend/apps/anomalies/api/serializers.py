@@ -727,6 +727,12 @@ class AnomalyUpdateSerializer(AffectedOrdersWriteMixin, serializers.ModelSeriali
         write_only=True,
     )
     classification_reason = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    treatment_related_anomalies = serializers.PrimaryKeyRelatedField(
+        queryset=Anomaly.objects.all(),
+        many=True,
+        required=False,
+        write_only=True,
+    )
     affected_orders = AffectedOrderWriteSerializer(many=True, required=False)
 
     class Meta:
@@ -755,6 +761,7 @@ class AnomalyUpdateSerializer(AffectedOrdersWriteMixin, serializers.ModelSeriali
             "result_summary",
             "classification_responsible",
             "classification_reason",
+            "treatment_related_anomalies",
         )
         extra_kwargs = {
             "title": {"required": False},

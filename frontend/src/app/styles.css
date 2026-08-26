@@ -822,6 +822,54 @@ small {
   color: var(--muted);
 }
 
+.classification-treatment-composition {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(35, 116, 102, 0.2);
+}
+
+.segmented-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.segmented-control button {
+  border: 1px solid rgba(35, 116, 102, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0.45rem 0.8rem;
+}
+
+.segmented-control button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.classification-candidate-list {
+  max-height: 19rem;
+  overflow-y: auto;
+}
+
+.classification-candidate {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  cursor: pointer;
+}
+
+.classification-candidate input {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.classification-candidate span,
+.classification-candidate small {
+  display: block;
+}
+
 .data-table-wrap {
   overflow-x: auto;
 }

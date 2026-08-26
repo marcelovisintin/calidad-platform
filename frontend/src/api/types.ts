@@ -55,6 +55,7 @@ export interface UserSummary {
 }
 
 export interface TreatmentParticipantOption extends UserSummary {
+  access_level: "usuario_activo" | "mando_medio_activo" | "administrador" | "desarrollador";
   sector?: AreaSummary | null;
 }
 
@@ -498,6 +499,8 @@ export interface TreatmentSummary {
   status: string;
   scheduled_for?: string | null;
   treatment_location?: string;
+  convocation_confirmed_at?: string | null;
+  convocation_confirmed_by?: UserSummary | null;
   method_used?: string;
   observations?: string;
   effectiveness_evaluation_date?: string | null;
@@ -512,9 +515,11 @@ export interface TreatmentSummary {
   };
   is_locked?: boolean;
   can_manage: boolean;
+  can_reconfigure?: boolean;
   can_validate_effectiveness: boolean;
   learned_lesson?: TreatmentLearnedLesson | null;
   primary_anomaly: TreatmentAnomalySummary;
+  responsible?: UserSummary | null;
   created_at: string;
   updated_at: string;
 }
@@ -541,7 +546,13 @@ export interface TreatmentDetail extends TreatmentSummary {
   row_version: number;
 }
 
-export interface TreatmentCandidate extends TreatmentAnomalySummary {}
+export interface TreatmentCandidate extends TreatmentAnomalySummary {
+  anomaly_type?: CatalogSummary | null;
+  severity?: CatalogSummary | null;
+  observation_resolution_path?: ObservationResolutionPath | null;
+  suggested_by_repetition?: boolean;
+  detected_at?: string;
+}
 
 export interface TreatmentWritePayload {
   primary_anomaly: UUID;
