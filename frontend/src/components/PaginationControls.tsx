@@ -5,10 +5,11 @@ type PaginationControlsProps = {
   totalCount: number;
   pageSize?: number;
   disabled?: boolean;
+  alwaysVisible?: boolean;
   onPageChange: (page: number) => void;
 };
 
-export function PaginationControls({ page, totalCount, pageSize = 10, disabled = false, onPageChange }: PaginationControlsProps) {
+export function PaginationControls({ page, totalCount, pageSize = 10, disabled = false, alwaysVisible = false, onPageChange }: PaginationControlsProps) {
   const safePage = Math.max(1, page);
 
   const state = useMemo(() => {
@@ -23,10 +24,17 @@ export function PaginationControls({ page, totalCount, pageSize = 10, disabled =
       end,
       canPrev: currentPage > 1,
       canNext: currentPage < totalPages,
+      pageNumbers: Array.from(
+        { length: Math.min(5, totalPages) },
+        (_, index) => {
+          const firstPage = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
+          return firstPage + index;
+        },
+      ),
     };
   }, [pageSize, safePage, totalCount]);
 
-  if (totalCount <= pageSize) {
+  if (!alwaysVisible && totalCount <= pageSize) {
     return null;
   }
 
@@ -42,6 +50,20 @@ export function PaginationControls({ page, totalCount, pageSize = 10, disabled =
         >
           Anterior
         </button>
+        <div className="pagination-page-buttons" aria-label={`Pagina ${state.currentPage} de ${state.totalPages}`}>
+          {state.pageNumbers.map((pageNumber) => (
+            <button
+              aria-current={pageNumber === state.currentPage ? "page" : undefined}
+              className={`button pagination-page-button${pageNumber === state.currentPage ? " active" : ""}`}
+              disabled={disabled || pageNumber === state.currentPage}
+              key={pageNumber}
+              onClick={() => onPageChange(pageNumber)}
+              type="button"
+            >
+              {pageNumber}
+            </button>
+          ))}
+        </div>
         <span className="pagination-page">{`Pagina ${state.currentPage} de ${state.totalPages}`}</span>
         <button
           className="button button-secondary"

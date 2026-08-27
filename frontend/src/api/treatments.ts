@@ -248,7 +248,6 @@ export function addTreatmentTask(
     execution_date?: string | null;
     status?: string;
     evidence_note?: string;
-    anomaly_ids?: string[];
   },
 ) {
   return apiRequest<TreatmentTask>(`/actions/treatments/${treatmentId}/tasks/`, {
@@ -269,7 +268,6 @@ export function updateTreatmentTask(
     execution_date?: string | null;
     status?: string;
     evidence_note?: string;
-    anomaly_ids?: string[];
   },
 ) {
   return apiRequest<TreatmentTask>(`/actions/treatments/${treatmentId}/tasks/${taskId}/`, {

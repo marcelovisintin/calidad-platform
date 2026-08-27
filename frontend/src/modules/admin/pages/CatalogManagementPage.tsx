@@ -96,22 +96,14 @@ const EMPTY_FORM: FormState = {
   closes_anomaly_as_invalid: false,
 };
 
+const DIRECTORY_PAGE_SIZE = 30;
+
 function resolveEntity(raw: string | null): CatalogEntity {
   const valid = new Set(ENTITY_META.map((item) => item.key));
   if (raw && valid.has(raw as CatalogEntity)) {
     return raw as CatalogEntity;
   }
   return "sites";
-}
-
-function itemParentLabel(item: CatalogManagementItem) {
-  if (item.site) {
-    return `${item.site.code} - ${item.site.name}`;
-  }
-  if (item.area) {
-    return `${item.area.code} - ${item.area.name}`;
-  }
-  return "";
 }
 
 export function CatalogManagementPage() {
@@ -139,7 +131,7 @@ export function CatalogManagementPage() {
         active: includeInactive ? undefined : true,
         q: search,
         page,
-        pageSize: 10,
+        pageSize: DIRECTORY_PAGE_SIZE,
       }),
       meta.parentEntity
         ? fetchCatalogItems(meta.parentEntity, {
@@ -341,8 +333,8 @@ export function CatalogManagementPage() {
       {submitError ? <div className="panel danger">{submitError}</div> : null}
 
       <DataState loading={loading} error={error} onRetry={reload}>
-        <div className="user-management-grid">
-          <section className="panel">
+        <div className="user-management-grid directory-workspace">
+          <section className="panel directory-form-panel">
             <div className="section-head compact">
               <div>
                 <p className="eyebrow">Formulario</p>
@@ -432,7 +424,7 @@ export function CatalogManagementPage() {
             </form>
           </section>
 
-          <section className="panel">
+          <section className="panel directory-panel">
             <div className="section-head compact">
               <div>
                 <p className="eyebrow">Directorio</p>
@@ -440,28 +432,19 @@ export function CatalogManagementPage() {
               </div>
             </div>
 
-            <div className="stack-list user-list-scroll">
+            <div className="stack-list user-list-scroll directory-list catalog-directory-list">
               {items.length === 0 ? (
                 <p className="muted-copy">No hay registros para los filtros seleccionados.</p>
               ) : (
                 items.map((item) => (
                   <article className="list-card" key={item.id}>
-                    <div>
-                      <div className="catalog-record-title">
+                    <div className="directory-record-copy">
+                      <div className="directory-record-primary catalog-record-title">
                         <strong>{`${item.code} - ${item.name}`}</strong>
-                        <span className="status-badge info compact">Orden {item.display_order}</span>
                       </div>
-                      {itemParentLabel(item) ? <p>{itemParentLabel(item)}</p> : null}
-                      {entity === "severities" ? (
-                        <p>
-                          {item.closes_anomaly_as_invalid
-                            ? "Cierra como Invalida"
-                            : (item.requires_classification_responsible ?? true)
-                              ? "Requiere responsable"
-                              : "No requiere responsable"}
-                        </p>
-                      ) : null}
-                      <small>Actualizado: {formatDateTime(item.updated_at)}</small>
+                      <div className="directory-record-secondary">
+                        <small>Actualizado: {formatDateTime(item.updated_at)}</small>
+                      </div>
                     </div>
                     <div className="badge-stack align-end">
                       <StatusBadge value={item.is_active ? "active" : "inactive"} compact />
@@ -484,7 +467,9 @@ export function CatalogManagementPage() {
               )}
             </div>
             <PaginationControls
+              alwaysVisible
               page={page}
+              pageSize={DIRECTORY_PAGE_SIZE}
               totalCount={data?.total || 0}
               onPageChange={setPage}
               disabled={loading}

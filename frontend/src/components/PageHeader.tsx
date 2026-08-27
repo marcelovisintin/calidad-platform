@@ -8,7 +8,7 @@ type PageHeaderProps = {
   compact?: boolean;
 };
 
-export function PageHeader({ title, description, actionLabel, actionTo, compact = false }: PageHeaderProps) {
+export function PageHeader({ title, description, actionLabel, actionTo, compact = true }: PageHeaderProps) {
   return (
     <header className={`page-header${compact ? " compact" : ""}`}>
       <div>

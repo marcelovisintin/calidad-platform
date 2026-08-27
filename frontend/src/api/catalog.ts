@@ -13,18 +13,26 @@ const EMPTY_BOOTSTRAP: CatalogBootstrap = {
   orderTypes: [],
 };
 
+function sortByName<T extends { code: string; name: string }>(items: T[] | undefined): T[] {
+  return [...(items ?? [])].sort((left, right) => left.name.localeCompare(
+    right.name,
+    "es",
+    { sensitivity: "base" },
+  ) || left.code.localeCompare(right.code, "es", { numeric: true, sensitivity: "base" }));
+}
+
 function normalizeBootstrap(payload: Partial<CatalogBootstrap>): CatalogBootstrap {
   return {
     ...EMPTY_BOOTSTRAP,
     ...payload,
-    sites: payload.sites ?? [],
-    areas: payload.areas ?? [],
-    anomalyTypes: payload.anomalyTypes ?? [],
-    anomalyOrigins: payload.anomalyOrigins ?? [],
-    severities: payload.severities ?? [],
-    priorities: payload.priorities ?? [],
-    actionTypes: payload.actionTypes ?? [],
-    orderTypes: payload.orderTypes ?? [],
+    sites: sortByName(payload.sites),
+    areas: sortByName(payload.areas),
+    anomalyTypes: sortByName(payload.anomalyTypes),
+    anomalyOrigins: sortByName(payload.anomalyOrigins),
+    severities: sortByName(payload.severities),
+    priorities: sortByName(payload.priorities),
+    actionTypes: sortByName(payload.actionTypes),
+    orderTypes: sortByName(payload.orderTypes),
   };
 }
 

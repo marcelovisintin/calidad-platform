@@ -35,7 +35,6 @@ type TaskDraft = {
   responsible: string;
   execution_date: string;
   status: "pending" | "in_progress" | "completed" | "cancelled";
-  anomaly_ids: string[];
 };
 
 const METHOD_OPTIONS = [
@@ -64,7 +63,6 @@ const EMPTY_TASK_DRAFT: TaskDraft = {
   responsible: "",
   execution_date: "",
   status: "pending",
-  anomaly_ids: [],
 };
 
 function buildUsersLabel(user: TreatmentParticipantOption) {
@@ -293,11 +291,27 @@ export function TreatmentsPage() {
   }, [selectedTreatment]);
 
   const rootCauseOptions = selectedTreatment?.root_causes ?? [];
-  const anomalyOptions = selectedTreatment?.anomaly_links ?? [];
   const participantOptions = useMemo(
     () => (selectedTreatment?.participants ?? []).filter((participant) => participant.user),
     [selectedTreatment?.participants],
   );
+  const effectivenessResponsibleOptions = useMemo(() => {
+    const participantUserIds = new Set(
+      participantOptions
+        .map((participant) => participant.user?.id)
+        .filter((userId): userId is string => Boolean(userId)),
+    );
+
+    return (supportData?.users ?? [])
+      .filter(
+        (user) =>
+          participantUserIds.has(user.id) || user.access_level === "mando_medio_activo",
+      )
+      .map((user) => ({
+        ...user,
+        isParticipant: participantUserIds.has(user.id),
+      }));
+  }, [participantOptions, supportData?.users]);
   const participantAreaOptions = useMemo(() => {
     const areaMap = new Map<string, { id: string; name: string }>();
     for (const user of supportData?.users ?? []) {
@@ -342,8 +356,7 @@ export function TreatmentsPage() {
     Boolean(taskDraft.description.trim()) &&
     taskDraft.root_cause_ids.length > 0 &&
     Boolean(taskDraft.responsible) &&
-    Boolean(taskDraft.execution_date) &&
-    taskDraft.anomaly_ids.length > 0;
+    Boolean(taskDraft.execution_date);
   const selectedTask: TreatmentTask | null = useMemo(
     () => selectedTreatment?.tasks.find((task) => task.id === selectedTaskId) ?? null,
     [selectedTaskId, selectedTreatment?.tasks],
@@ -371,7 +384,6 @@ export function TreatmentsPage() {
       responsible: selectedTask.responsible?.id || "",
       execution_date: selectedTask.execution_date || "",
       status: selectedTask.status as TaskDraft["status"],
-      anomaly_ids: selectedTask.anomaly_links.map((item) => item.anomaly.id),
     });
     setTaskEvidenceFile(null);
     setTaskEvidenceNote("");
@@ -594,7 +606,7 @@ export function TreatmentsPage() {
     }
     const freshTreatment = await fetchTreatmentDetail(selectedTreatment.id);
     if (getTreatmentTaskCount(freshTreatment) === 0) {
-      setFormError("Debes registrar al menos una tarea surgida del tratamiento antes de guardar el analisis.");
+      setFormError("Debes registrar al menos una accion surgida del tratamiento antes de guardar el analisis.");
       return;
     }
     if (!effectivenessEvaluationDate) {
@@ -640,7 +652,7 @@ export function TreatmentsPage() {
     }, "Causa raiz registrada.");
   };
 
-  const handleTaskDraftChange = (field: Exclude<keyof TaskDraft, "root_cause_ids" | "anomaly_ids">, value: string) => {
+  const handleTaskDraftChange = (field: Exclude<keyof TaskDraft, "root_cause_ids">, value: string) => {
     setTaskDraft((current) => ({ ...current, [field]: value }));
   };
 
@@ -666,18 +678,6 @@ export function TreatmentsPage() {
     setTaskEvidenceFile(file);
   };
 
-  const toggleTaskAnomaly = (anomalyId: string) => {
-    setTaskDraft((current) => {
-      const exists = current.anomaly_ids.includes(anomalyId);
-      return {
-        ...current,
-        anomaly_ids: exists
-          ? current.anomaly_ids.filter((id) => id !== anomalyId)
-          : [...current.anomaly_ids, anomalyId],
-      };
-    });
-  };
-
   const handleAddTask = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (busy) {
@@ -692,11 +692,11 @@ export function TreatmentsPage() {
     }
 
     if (!taskDraft.title.trim()) {
-      setFormError("La tarea es obligatoria.");
+      setFormError("La accion es obligatoria.");
       return;
     }
     if (!taskDraft.description.trim()) {
-      setFormError("La descripcion de la tarea es obligatoria.");
+      setFormError("La descripcion de la accion es obligatoria.");
       return;
     }
     if (!taskDraft.root_cause_ids.length) {
@@ -711,11 +711,6 @@ export function TreatmentsPage() {
       setFormError("Debes indicar la fecha de ejecucion.");
       return;
     }
-    if (!taskDraft.anomaly_ids.length) {
-      setFormError("Debes vincular al menos una anomalia a la tarea.");
-      return;
-    }
-
     await runMutation(async () => {
       await addTreatmentTask(selectedTreatment.id, {
         title: taskDraft.title.trim(),
@@ -724,10 +719,9 @@ export function TreatmentsPage() {
         responsible: taskDraft.responsible || null,
         execution_date: taskDraft.execution_date || null,
         status: taskDraft.status,
-        anomaly_ids: taskDraft.anomaly_ids,
       });
       setTaskDraft(EMPTY_TASK_DRAFT);
-    }, "Tarea de tratamiento creada.");
+    }, "Accion de tratamiento creada.");
   };
 
   const handleSelectTask = (task: TreatmentTask) => {
@@ -743,7 +737,6 @@ export function TreatmentsPage() {
       responsible: task.responsible?.id || "",
       execution_date: task.execution_date || "",
       status: task.status as TaskDraft["status"],
-      anomaly_ids: task.anomaly_links.map((item) => item.anomaly.id),
     });
   };
 
@@ -766,10 +759,9 @@ export function TreatmentsPage() {
           responsible: taskDraft.responsible || null,
           execution_date: taskDraft.execution_date || null,
           status: taskDraft.status,
-          anomaly_ids: taskDraft.anomaly_ids,
         });
       },
-      "Tarea actualizada.",
+      "Accion actualizada.",
       true,
     );
   };
@@ -809,7 +801,7 @@ export function TreatmentsPage() {
       return;
     }
     if (!taskEvidenceFile) {
-      setFormError("Debes seleccionar una evidencia (imagen o PDF) para cargar en la tarea.");
+      setFormError("Debes seleccionar una evidencia (imagen o PDF) para cargar en la accion.");
       return;
     }
 
@@ -823,7 +815,7 @@ export function TreatmentsPage() {
         setTaskEvidenceNote("");
         setTaskEvidenceInputKey((current) => current + 1);
       },
-      "Evidencia cargada en la tarea.",
+      "Evidencia cargada en la accion.",
       true,
     );
   };
@@ -831,7 +823,7 @@ return (
     <section className="page-shell">
       <PageHeader
         title="Tratamientos"
-      description="Gestion de tratamientos por anomalia con Revisión de hallazgos: convocatoria, analisis de causa y tareas asociadas."
+      description="Gestion de tratamientos por anomalia con Revisión de hallazgos: convocatoria, analisis de causa y acciones asociadas."
       />
 
       <TabbedFilters
@@ -1262,15 +1254,15 @@ return (
 
                       <form className="form-section" onSubmit={handleAddTask}>
                         <div className="section-head compact">
-                          <h3>Tareas surgidas del tratamiento</h3>
+                          <h3>Acciones surgidas del tratamiento</h3>
                           <button className="button button-primary" disabled={busy || treatmentLocked || !canCreateTask} type="submit">
-                            Crear tarea
+                            Crear accion
                           </button>
                         </div>
 
                         <div className="form-grid">
                           <label className="field">
-                            <span>Tarea</span>
+                            <span>Accion</span>
                             <input
                               name="task_title"
                               disabled={treatmentLocked}
@@ -1300,19 +1292,19 @@ return (
                           <label className="field">
                             <span>Responsable</span>
                             <select
-                              disabled={treatmentLocked || !participantOptions.length}
+                              disabled={treatmentLocked || !(supportData?.users.length)}
                               onChange={(event) => handleTaskDraftChange("responsible", event.target.value)}
                               required
                               value={taskDraft.responsible}
                             >
                               <option value="">Seleccionar responsable...</option>
-                              {participantOptions.map((participant) => (
-                                <option key={participant.id} value={participant.user?.id}>
-                                  {participant.user?.full_name || participant.user?.username}
+                              {(supportData?.users ?? []).map((user) => (
+                                <option key={user.id} value={user.id}>
+                                  {user.full_name || user.username}
                                 </option>
                               ))}
                             </select>
-                            {!participantOptions.length ? <small className="muted-copy">Primero convoca usuarios al tratamiento.</small> : null}
+                            {!(supportData?.users.length) ? <small className="muted-copy">No hay usuarios activos disponibles.</small> : null}
                           </label>
 
                           <label className="field">
@@ -1356,27 +1348,11 @@ return (
                           </label>
                         </div>
 
-                        <div className="treatment-checkbox-grid">
-                          {anomalyOptions.map((link) => {
-                            const checked = taskDraft.anomaly_ids.includes(link.anomaly.id);
-                            return (
-                              <label className="checkbox-inline" key={link.id}>
-                                <input
-                                  checked={checked}
-                                  disabled={treatmentLocked}
-                                  onChange={() => toggleTaskAnomaly(link.anomaly.id)}
-                                  type="checkbox"
-                                />
-                                <span>{`${link.anomaly.code} - ${link.anomaly.title}`}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
                       </form>
 
                       <div className="form-section">
                         <div className="section-head compact">
-                          <h3>Detalle de tareas</h3>
+                          <h3>Detalle de acciones</h3>
                         </div>
 
                         <div className="stack-list compact">
@@ -1400,11 +1376,11 @@ return (
                               <StatusBadge compact value={task.status} />
                             </div>
                           ))}
-                          {!selectedTreatment.tasks.length ? <p className="muted-copy">No hay tareas registradas para este tratamiento.</p> : null}
+                          {!selectedTreatment.tasks.length ? <p className="muted-copy">No hay acciones registradas para este tratamiento.</p> : null}
                         </div>
 
                         <p className="muted-copy">
-                          La edicion de tareas y carga de evidencias ahora se realiza desde la pagina Acciones.
+                          La edicion y carga de evidencias se realiza desde la pagina Acciones.
                         </p>
                       </div>
 
@@ -1438,9 +1414,9 @@ return (
                             </p>
                           )}
                         </div>
-                        {!participantOptions.length ? (
+                        {!effectivenessResponsibleOptions.length ? (
                           <div className="panel warning compact-inline-panel">
-                            <p>Primero deben convocarse responsables al tratamiento antes de asignar el responsable de evaluacion de eficacia.</p>
+                            <p>No hay usuarios convocados ni usuarios con nivel Mando medio activo disponibles.</p>
                           </div>
                         ) : (
                           <div className="form-grid">
@@ -1462,10 +1438,11 @@ return (
                                 required
                                 value={effectivenessResponsibleId}
                               >
-                                <option value="">Seleccionar convocado...</option>
-                                {participantOptions.map((participant) => (
-                                  <option key={participant.id} value={participant.user?.id}>
-                                    {participant.user?.full_name || participant.user?.username}
+                                <option value="">Seleccionar responsable...</option>
+                                {effectivenessResponsibleOptions.map((user) => (
+                                  <option key={user.id} value={user.id}>
+                                    {user.full_name || user.username}
+                                    {user.isParticipant ? " - Convocado" : " - Mando medio"}
                                   </option>
                                 ))}
                               </select>
@@ -1473,9 +1450,9 @@ return (
                           </div>
                         )}
                         {hasTreatmentTasks ? (
-                          <p className="muted-copy">{`Tareas registradas para este tratamiento: ${treatmentTaskCount}.`}</p>
+                          <p className="muted-copy">{`Acciones registradas para este tratamiento: ${treatmentTaskCount}.`}</p>
                         ) : (
-                          <p className="muted-copy">Registra al menos una tarea antes de guardar el analisis.</p>
+                          <p className="muted-copy">Registra al menos una accion antes de guardar el analisis.</p>
                         )}
                       </form>
                     </div>
@@ -1484,7 +1461,7 @@ return (
               ) : (
                 <div className="panel muted">
                   <h2>Sin tratamiento seleccionado</h2>
-                  <p>Selecciona un tratamiento del listado para gestionar convocatoria, analisis, causas y tareas.</p>
+                  <p>Selecciona un tratamiento del listado para gestionar convocatoria, analisis, causas y acciones.</p>
                 </div>
               )}
             </DataState>

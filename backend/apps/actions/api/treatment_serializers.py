@@ -552,7 +552,6 @@ class TreatmentAddTaskSerializer(serializers.Serializer):
     responsible = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True))
     execution_date = serializers.DateField()
     status = serializers.ChoiceField(choices=TreatmentTaskStatus.choices, required=False, default=TreatmentTaskStatus.PENDING)
-    anomaly_ids = serializers.ListField(child=serializers.UUIDField(), required=True, allow_empty=False)
 
 
 class TreatmentUpdateTaskSerializer(serializers.Serializer):
@@ -568,7 +567,6 @@ class TreatmentUpdateTaskSerializer(serializers.Serializer):
     execution_date = serializers.DateField(required=False, allow_null=True)
     status = serializers.ChoiceField(choices=TreatmentTaskStatus.choices, required=False)
     evidence_note = serializers.CharField(required=False, allow_blank=True)
-    anomaly_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
 
 
 class TreatmentValidateSerializer(serializers.Serializer):

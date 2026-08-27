@@ -24,7 +24,6 @@ from apps.actions.models import (
     TreatmentRootCause,
     TreatmentStatus,
     TreatmentTask,
-    TreatmentTaskAnomaly,
     TreatmentTaskEvidence,
 )
 from apps.audit.services import record_audit_event
@@ -230,15 +229,25 @@ def _validate_effectiveness_assignment(*, treatment: Treatment, data: dict) -> N
         raise ValidationError({"effectiveness_evaluation_date": "Debe indicar la fecha de evaluacion de eficacia."})
     if not responsible:
         raise ValidationError({"effectiveness_responsible": "Debe seleccionar el responsable de evaluacion de eficacia."})
-    if not treatment.participants.filter(user_id=responsible.pk).exists():
+    is_participant = treatment.participants.filter(user_id=responsible.pk).exists()
+    is_active_middle_manager = (
+        responsible.is_active
+        and responsible.access_level == User.AccessLevel.MANDO_MEDIO_ACTIVO
+    )
+    if not is_participant and not is_active_middle_manager:
         raise ValidationError(
-            {"effectiveness_responsible": "El responsable de evaluacion de eficacia debe estar convocado al tratamiento."}
+            {
+                "effectiveness_responsible": (
+                    "El responsable de evaluacion de eficacia debe estar convocado al tratamiento "
+                    "o tener nivel de acceso Mando medio activo."
+                )
+            }
         )
 
 
 def _validate_treatment_task_responsible(*, treatment: Treatment, responsible) -> None:
-    if responsible and not treatment.participants.filter(user_id=responsible.pk).exists():
-        raise ValidationError({"responsible": "El responsable de la tarea debe estar convocado al tratamiento."})
+    if responsible and not responsible.is_active:
+        raise ValidationError({"responsible": "El responsable de la accion debe ser un usuario activo."})
 
 
 def is_treatment_closed_by_effective_validation(treatment: Treatment) -> bool:
@@ -1496,10 +1505,6 @@ def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: st
     if not execution_date:
         raise ValidationError({"execution_date": "Debe indicar la fecha de ejecucion."})
 
-    anomaly_ids = data.get("anomaly_ids") or []
-    if not anomaly_ids:
-        raise ValidationError({"anomaly_ids": "Debe vincular al menos una anomalia a la tarea."})
-
     task = TreatmentTask(
         treatment=treatment,
         root_cause=root_causes[0],
@@ -1515,18 +1520,6 @@ def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: st
     task.full_clean()
     task.save()
     task.root_causes.set(root_causes)
-
-    links = []
-    for anomaly_id in anomaly_ids:
-        links.append(
-            TreatmentTaskAnomaly(
-                task=task,
-                anomaly_id=anomaly_id,
-                created_by=user,
-                updated_by=user,
-            )
-        )
-    TreatmentTaskAnomaly.objects.bulk_create(links, ignore_conflicts=True)
 
     record_audit_event(
         entity=treatment,
@@ -1601,20 +1594,6 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
     locked.save()
     if root_causes is not None:
         locked.root_causes.set(root_causes)
-
-    if "anomaly_ids" in data:
-        TreatmentTaskAnomaly.objects.filter(task=locked).delete()
-        links = [
-            TreatmentTaskAnomaly(
-                task=locked,
-                anomaly_id=anomaly_id,
-                created_by=user,
-                updated_by=user,
-            )
-            for anomaly_id in (data.get("anomaly_ids") or [])
-        ]
-        if links:
-            TreatmentTaskAnomaly.objects.bulk_create(links, ignore_conflicts=True)
 
     record_audit_event(
         entity=locked.treatment,

@@ -1053,15 +1053,15 @@ class TreatmentCandidatesApiTests(APITestCase):
                 "responsible": str(self.task_user.pk),
                 "execution_date": timezone.localdate().isoformat(),
                 "status": "pending",
-                "anomaly_ids": [str(self.anomaly_one.pk)],
             },
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(TreatmentTask.objects.filter(treatment=self.treatment_one).count(), 1)
+        self.assertFalse(TreatmentTask.objects.get(treatment=self.treatment_one).anomaly_links.exists())
 
-    def test_add_treatment_task_requires_convoked_responsible(self):
+    def test_add_treatment_task_accepts_active_responsible_without_invitation(self):
         root_cause = TreatmentRootCause.objects.create(
             treatment=self.treatment_one,
             sequence=1,
@@ -1073,20 +1073,19 @@ class TreatmentCandidatesApiTests(APITestCase):
         response = self.client.post(
             f"/api/v1/actions/treatments/{self.treatment_one.pk}/tasks/",
             {
-                "title": "Tarea sin responsable convocado",
+                "title": "Tarea con responsable no convocado",
                 "description": "Descripcion de la tarea",
                 "root_cause": str(root_cause.pk),
                 "responsible": str(self.other_task_user.pk),
                 "execution_date": timezone.localdate().isoformat(),
                 "status": "pending",
-                "anomaly_ids": [str(self.anomaly_one.pk)],
             },
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("responsible", response.data)
-        self.assertEqual(TreatmentTask.objects.filter(treatment=self.treatment_one).count(), 0)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        task = TreatmentTask.objects.get(treatment=self.treatment_one)
+        self.assertEqual(task.responsible, self.other_task_user)
 
     def test_save_analysis_requires_effectiveness_evaluation_date(self):
         TreatmentParticipant.objects.create(
@@ -1156,6 +1155,23 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("effectiveness_responsible", response.data)
+
+    def test_active_middle_manager_can_be_effectiveness_responsible_without_invitation(self):
+        evaluation_date = timezone.localdate().isoformat()
+
+        response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/",
+            {
+                "method_used": "five_whys",
+                "observations": "Analisis asignado a mando medio no convocado.",
+                "effectiveness_evaluation_date": evaluation_date,
+                "effectiveness_responsible": str(self.task_user.pk),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["effectiveness_responsible"]["id"], str(self.task_user.pk))
 
     def test_effectiveness_evaluation_fields_are_persisted_in_treatment_detail(self):
         TreatmentParticipant.objects.create(
@@ -1486,7 +1502,6 @@ class TreatmentCandidatesApiTests(APITestCase):
                 "responsible": str(self.task_user.pk),
                 "execution_date": timezone.localdate().isoformat(),
                 "status": "pending",
-                "anomaly_ids": [str(self.anomaly_one.pk)],
             },
             format="json",
         )

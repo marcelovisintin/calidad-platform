@@ -163,7 +163,7 @@ export function AnomalyDetailPage() {
             <article className="panel">
               <div className="section-head">
                 <div>
-                  <p className="eyebrow">{data.code}</p>
+                  <p className="eyebrow">{`Numero de anomalia: ${data.code}`}</p>
                   <h2>{data.title}</h2>
                   <p className="muted-copy">{`Tipo de desvio: ${data.anomaly_type?.name || "Sin tipo de desvio"}`}</p>
                 </div>
@@ -180,6 +180,7 @@ export function AnomalyDetailPage() {
               <dl className="key-grid">
                 <div className="field-span-2"><dt>Descripcion detallada</dt><dd>{data.description || "Sin descripcion detallada."}</dd></div>
                 <div><dt>Fecha y hora</dt><dd>{formatDateTime(data.detected_at)}</dd></div>
+                <div><dt>Elaborado por</dt><dd>{data.area?.name || "-"}</dd></div>
                 <div><dt>Responsable actual</dt><dd>{data.current_responsible?.full_name || "Sin asignar"}</dd></div>
                 {data.affected_orders.length ? data.affected_orders.map((order) => (
                   <div key={order.id}>

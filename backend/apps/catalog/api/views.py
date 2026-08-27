@@ -1,5 +1,6 @@
 ﻿from django.db.models import Q
 from django.db.models.deletion import ProtectedError
+from django.db.models.functions import Lower
 from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.exceptions import ValidationError
@@ -70,57 +71,50 @@ class CatalogManagementViewSet(viewsets.ModelViewSet):
 
 class SiteManagementViewSet(CatalogManagementViewSet):
     serializer_class = SiteManagementSerializer
-    queryset = Site.objects.all().order_by("display_order", "name")
+    queryset = Site.objects.all().order_by(Lower("code"), "code", "name")
     search_fields = ("code", "name")
 
 
 class AreaManagementViewSet(CatalogManagementViewSet):
     serializer_class = AreaManagementSerializer
-    queryset = Area.objects.select_related("site").order_by("site__display_order", "site__name", "display_order", "name")
+    queryset = Area.objects.select_related("site").order_by(Lower("code"), "code", "name")
     search_fields = ("code", "name", "site__code", "site__name")
 
 
 class LineManagementViewSet(CatalogManagementViewSet):
     serializer_class = LineManagementSerializer
-    queryset = Line.objects.select_related("area", "area__site").order_by(
-        "area__site__display_order",
-        "area__site__name",
-        "area__display_order",
-        "area__name",
-        "display_order",
-        "name",
-    )
+    queryset = Line.objects.select_related("area", "area__site").order_by(Lower("code"), "code", "name")
     search_fields = ("code", "name", "area__code", "area__name", "area__site__code", "area__site__name")
 
 
 class AnomalyTypeManagementViewSet(CatalogManagementViewSet):
     serializer_class = AnomalyTypeManagementSerializer
-    queryset = AnomalyType.objects.all().order_by("display_order", "name")
+    queryset = AnomalyType.objects.all().order_by(Lower("code"), "code", "name")
 
 
 class AnomalyOriginManagementViewSet(CatalogManagementViewSet):
     serializer_class = AnomalyOriginManagementSerializer
-    queryset = AnomalyOrigin.objects.all().order_by("display_order", "name")
+    queryset = AnomalyOrigin.objects.all().order_by(Lower("code"), "code", "name")
 
 
 class SeverityManagementViewSet(CatalogManagementViewSet):
     serializer_class = SeverityManagementSerializer
-    queryset = Severity.objects.all().order_by("display_order", "name")
+    queryset = Severity.objects.all().order_by(Lower("code"), "code", "name")
 
 
 class PriorityManagementViewSet(CatalogManagementViewSet):
     serializer_class = PriorityManagementSerializer
-    queryset = Priority.objects.all().order_by("display_order", "name")
+    queryset = Priority.objects.all().order_by(Lower("code"), "code", "name")
 
 
 class ActionTypeManagementViewSet(CatalogManagementViewSet):
     serializer_class = ActionTypeManagementSerializer
-    queryset = ActionType.objects.all().order_by("display_order", "name")
+    queryset = ActionType.objects.all().order_by(Lower("code"), "code", "name")
 
 
 class OrderTypeManagementViewSet(CatalogManagementViewSet):
     serializer_class = OrderTypeManagementSerializer
-    queryset = OrderType.objects.all().order_by("display_order", "name")
+    queryset = OrderType.objects.all().order_by(Lower("code"), "code", "name")
 
 
 class CatalogApiRootView(APIView):
@@ -153,18 +147,18 @@ class CatalogBootstrapAPIView(APIView):
         payload = {
             "source": "api-database",
             "generatedAt": timezone.now(),
-            "sites": list(Site.objects.filter(is_active=True).order_by("display_order", "name")),
+            "sites": list(Site.objects.filter(is_active=True).order_by(Lower("name"), "name", "code")),
             "areas": list(
                 Area.objects.filter(is_active=True)
                 .select_related("site")
-                .order_by("site__display_order", "site__name", "display_order", "name")
+                .order_by(Lower("name"), "name", "code")
             ),
-            "anomalyTypes": list(AnomalyType.objects.filter(is_active=True).order_by("display_order", "name")),
-            "anomalyOrigins": list(AnomalyOrigin.objects.filter(is_active=True).order_by("display_order", "name")),
-            "severities": list(Severity.objects.filter(is_active=True).order_by("display_order", "name")),
-            "priorities": list(Priority.objects.filter(is_active=True).order_by("display_order", "name")),
-            "actionTypes": list(ActionType.objects.filter(is_active=True).order_by("display_order", "name")),
-            "orderTypes": list(OrderType.objects.filter(is_active=True).order_by("display_order", "name")),
+            "anomalyTypes": list(AnomalyType.objects.filter(is_active=True).order_by(Lower("name"), "name", "code")),
+            "anomalyOrigins": list(AnomalyOrigin.objects.filter(is_active=True).order_by(Lower("name"), "name", "code")),
+            "severities": list(Severity.objects.filter(is_active=True).order_by(Lower("name"), "name", "code")),
+            "priorities": list(Priority.objects.filter(is_active=True).order_by(Lower("name"), "name", "code")),
+            "actionTypes": list(ActionType.objects.filter(is_active=True).order_by(Lower("name"), "name", "code")),
+            "orderTypes": list(OrderType.objects.filter(is_active=True).order_by(Lower("name"), "name", "code")),
         }
         serializer = CatalogBootstrapSerializer(payload)
         return Response(serializer.data)

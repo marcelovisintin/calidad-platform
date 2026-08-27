@@ -60,6 +60,8 @@ const emptyForm: UserFormState = {
   password_confirmation: "",
 };
 
+const DIRECTORY_PAGE_SIZE = 30;
+
 const temporaryPasswordDigits = "0123456789";
 
 function secureRandomIndex(maximum: number) {
@@ -123,7 +125,7 @@ export function UserManagementPage() {
         active: includeInactive ? undefined : true,
         q: search,
         page,
-        pageSize: 10,
+        pageSize: DIRECTORY_PAGE_SIZE,
       }),
       fetchCatalogBootstrap(),
     ]);
@@ -387,8 +389,8 @@ export function UserManagementPage() {
       ) : null}
 
       <DataState loading={loading} error={error} onRetry={reload}>
-        <div className="user-management-grid">
-          <section className="panel">
+        <div className="user-management-grid directory-workspace">
+          <section className="panel directory-form-panel">
             <div className="section-head compact">
               <div>
                 <p className="eyebrow">Formulario</p>
@@ -534,7 +536,7 @@ export function UserManagementPage() {
             </form>
           </section>
 
-          <section className="panel">
+          <section className="panel directory-panel">
             <div className="section-head compact">
               <div>
                 <p className="eyebrow">Directorio</p>
@@ -542,21 +544,25 @@ export function UserManagementPage() {
               </div>
             </div>
 
-            <div className="stack-list user-list-scroll">
+            <div className="stack-list user-list-scroll directory-list user-directory-list">
               {users.length === 0 ? (
                 <p className="muted-copy">No hay usuarios para los filtros seleccionados.</p>
               ) : (
                 users.map((item) => (
                   <article className="list-card" key={item.id}>
-                    <div>
-                      <strong>{item.full_name || item.username}</strong>
-                      <p>{item.email}</p>
-                      <small>
-                        {item.username}
-                        {item.sector ? ` | ${item.sector.name}` : " | Sin sector"}
-                        {item.employee_code ? ` | Legajo ${item.employee_code}` : ""}
-                      </small>
-                      <small>Ultima actividad: {formatDateTime(item.last_activity_at)}</small>
+                    <div className="directory-record-copy">
+                      <div className="directory-record-primary">
+                        <strong>{item.full_name || item.username}</strong>
+                        <span>{item.email}</span>
+                      </div>
+                      <div className="directory-record-secondary">
+                        <small>
+                          {item.username}
+                          {item.sector ? ` | ${item.sector.name}` : " | Sin sector"}
+                          {item.employee_code ? ` | Legajo ${item.employee_code}` : ""}
+                        </small>
+                        <small>Ultima actividad: {formatDateTime(item.last_activity_at)}</small>
+                      </div>
                     </div>
                     <div className="badge-stack align-end">
                       <StatusBadge value={item.is_active ? "active" : "inactive"} compact />
@@ -585,7 +591,9 @@ export function UserManagementPage() {
               )}
             </div>
             <PaginationControls
+              alwaysVisible
               page={page}
+              pageSize={DIRECTORY_PAGE_SIZE}
               totalCount={data?.users.count || 0}
               onPageChange={setPage}
               disabled={loading}
