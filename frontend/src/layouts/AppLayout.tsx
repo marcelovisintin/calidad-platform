@@ -1,21 +1,22 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { createAuthenticatedObjectUrl } from "../api/files";
+import { isAdminUser } from "../app/access";
 import { useAuth } from "../app/providers/AuthProvider";
 import { CompanyLogo } from "../components/CompanyLogo";
 
 const mainNav = [
   { to: "/dashboard", label: "Inicio", mobileLabel: "Inicio" },
-  { to: "/anomalies/new", label: "Nueva", mobileLabel: "Nueva" },
+  { to: "/anomalies/new", label: "Nueva anomalia", mobileLabel: "Nueva" },
   { to: "/anomalies", label: "Seguimiento de anomalias", mobileLabel: "Anomalias" },
-  { to: "/treatments/tracking", label: "Seguimiento de tratamientos", mobileLabel: "Seg. trat." },
-  { to: "/learned-lessons", label: "Lecciones aprendidas", mobileLabel: "Lecciones" },
-  { to: "/anomalies/observations", label: "Observacion", mobileLabel: "Observacion" },
+  { to: "/anomalies/observations", label: "Observaciones", mobileLabel: "Observaciones" },
   { to: "/treatments", label: "Tratamientos", mobileLabel: "Tratamientos" },
   { to: "/actions/mine", label: "Acciones", mobileLabel: "Acciones" },
-  { to: "/validation", label: "Validacion", mobileLabel: "Validacion" },
-  { to: "/tasks", label: "Pendientes", mobileLabel: "Pendientes" },
+  { to: "/validation", label: "Validaciones", mobileLabel: "Validaciones" },
+  { to: "/learned-lessons", label: "Lecciones aprendidas", mobileLabel: "Lecciones" },
+  { to: "/treatments/tracking", label: "Seguimiento de tratamientos", mobileLabel: "Seg. trat." },
   { to: "/notifications/inbox", label: "Bandeja", mobileLabel: "Bandeja" },
+  { to: "/tasks", label: "Pendientes", mobileLabel: "Pendientes" },
 ];
 
 export function AppLayout() {
@@ -24,8 +25,16 @@ export function AppLayout() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const visibleMainNav = isAdminUser(user)
+    ? mainNav
+    : mainNav.filter((item) => item.to !== "/dashboard");
+  const currentNavItem =
+    mainNav.find((item) => location.pathname === item.to) ||
+    [...mainNav]
+      .sort((first, second) => second.to.length - first.to.length)
+      .find((item) => location.pathname.startsWith(`${item.to}/`));
   const currentSection =
-    mainNav.find((item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`))?.label ||
+    currentNavItem?.label ||
     (location.pathname.startsWith("/affected-orders")
       ? "Ordenes afectadas"
       : location.pathname.startsWith("/management/users")
@@ -100,7 +109,7 @@ export function AppLayout() {
         </div>
 
         <nav className="side-nav">
-          {mainNav.map((item) => (
+          {visibleMainNav.map((item) => (
             <NavLink
               key={item.to}
               className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
@@ -193,7 +202,7 @@ export function AppLayout() {
             </button>
           </div>
           <nav className="side-nav">
-            {mainNav.map((item) => (
+            {visibleMainNav.map((item) => (
               <NavLink
                 key={item.to}
                 className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}

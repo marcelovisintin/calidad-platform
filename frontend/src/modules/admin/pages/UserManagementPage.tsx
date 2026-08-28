@@ -108,7 +108,7 @@ export function UserManagementPage() {
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [includeInactive, setIncludeInactive] = useState(true);
+  const [includeInactive, setIncludeInactive] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<UserFormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
