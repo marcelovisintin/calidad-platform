@@ -597,6 +597,7 @@ export interface NotificationInboxItem {
 export interface NotificationInboxSummary {
   total: number;
   unread: number;
+  notices_unread: number;
   tasks_total: number;
   tasks_pending: number;
   tasks_in_progress: number;

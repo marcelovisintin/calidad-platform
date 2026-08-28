@@ -1,4 +1,5 @@
 ﻿from django.db.models import Q
+from django.db.models import F
 from django.utils import timezone
 
 from apps.notifications.models import NotificationChannel, NotificationRecipient, RecipientTaskStatus
@@ -34,6 +35,11 @@ def apply_inbox_filters(queryset, params):
     if task_status := params.get("task_status"):
         if task_status == "open":
             queryset = queryset.filter(notification__is_task=True, task_status__in=OPEN_TASK_STATUSES)
+        elif task_status == "closed":
+            queryset = queryset.filter(
+                notification__is_task=True,
+                task_status__in=[RecipientTaskStatus.COMPLETED, RecipientTaskStatus.DISMISSED],
+            )
         else:
             queryset = queryset.filter(task_status=task_status)
 
@@ -66,6 +72,9 @@ def apply_inbox_filters(queryset, params):
             | Q(notification__template_code__icontains=search)
         )
 
+    if (params.get("unread_first") or "").lower() in {"1", "true", "yes"}:
+        queryset = queryset.order_by(F("read_at").asc(nulls_first=True), "-notification__created_at")
+
     return queryset
 
 
@@ -75,6 +84,7 @@ def notification_summary_for_user(user) -> dict:
     return {
         "total": queryset.count(),
         "unread": queryset.filter(read_at__isnull=True).count(),
+        "notices_unread": queryset.filter(notification__is_task=False, read_at__isnull=True).count(),
         "tasks_total": queryset.filter(notification__is_task=True).count(),
         "tasks_pending": queryset.filter(task_status=RecipientTaskStatus.PENDING).count(),
         "tasks_in_progress": queryset.filter(task_status=RecipientTaskStatus.IN_PROGRESS).count(),

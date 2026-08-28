@@ -1,6 +1,7 @@
 ﻿import { FormEvent, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ApiError } from "../../../api/http";
+import { getDefaultLandingPath } from "../../../app/access";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { CompanyLogo } from "../../../components/CompanyLogo";
 import { usePageTitle } from "../../../hooks/usePageTitle";
@@ -59,14 +60,15 @@ export function ChangePasswordPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const requestedDestination = (location.state as { from?: string } | null)?.from;
+  const defaultDestination = getDefaultLandingPath(user);
 
   useEffect(() => {
     if (status === "authenticated" && user && !user.must_change_password) {
-      navigate(requestedDestination && requestedDestination !== "/change-password" ? requestedDestination : "/dashboard", {
+      navigate(requestedDestination && requestedDestination !== "/change-password" ? requestedDestination : defaultDestination, {
         replace: true,
       });
     }
-  }, [navigate, requestedDestination, status, user]);
+  }, [defaultDestination, navigate, requestedDestination, status, user]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -79,7 +81,7 @@ export function ChangePasswordPage() {
         new_password: newPassword,
         confirm_password: confirmPassword,
       });
-      navigate(requestedDestination && requestedDestination !== "/change-password" ? requestedDestination : "/dashboard", {
+      navigate(requestedDestination && requestedDestination !== "/change-password" ? requestedDestination : defaultDestination, {
         replace: true,
       });
     } catch (err) {

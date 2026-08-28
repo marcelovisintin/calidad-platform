@@ -43,6 +43,11 @@ TREATMENT_TASK_STATUS_MAP = {
     TreatmentTaskStatus.CANCELLED: RecipientTaskStatus.DISMISSED,
 }
 
+MANUALLY_RESOLVABLE_TASK_TYPES = {
+    NotificationTaskType.ANALYSIS_PARTICIPATION,
+    NotificationTaskType.TREATMENT_PARTICIPATION,
+}
+
 FINDING_MANAGEMENT_TEMPLATE = "finding_management_assigned"
 TREATMENT_EFFECTIVENESS_TEMPLATE = "treatment_effectiveness_assigned"
 OBSERVATION_EFFECTIVENESS_TEMPLATE = "observation_effectiveness_assigned"
@@ -273,6 +278,15 @@ def resolve_notification_task(
         raise PermissionDenied("Solo puede gestionar sus propias tareas internas.")
     if not locked.notification.is_task:
         raise ValidationError({"task_status": "La notificacion seleccionada no representa una tarea."})
+    if locked.notification.task_type not in MANUALLY_RESOLVABLE_TASK_TYPES:
+        raise ValidationError(
+            {
+                "task_status": (
+                    "Este pendiente se actualiza desde su pantalla de trabajo. "
+                    "Abra el contexto para gestionarlo."
+                )
+            }
+        )
 
     if task_status not in {
         RecipientTaskStatus.IN_PROGRESS,
@@ -283,6 +297,9 @@ def resolve_notification_task(
 
     locked.task_status = task_status
     locked.resolved_at = timezone.now() if task_status in {RecipientTaskStatus.COMPLETED, RecipientTaskStatus.DISMISSED} else None
+    if not locked.read_at:
+        locked.read_at = timezone.now()
+    locked.delivery_status = DeliveryStatus.READ
     locked.updated_by = user
     _bump_version(locked)
     locked.full_clean()

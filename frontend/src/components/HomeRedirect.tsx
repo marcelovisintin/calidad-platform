@@ -1,5 +1,5 @@
 ﻿import { Navigate } from "react-router-dom";
-import { isManagementUser } from "../app/access";
+import { getDefaultLandingPath } from "../app/access";
 import { useAuth } from "../app/providers/AuthProvider";
 
 export function HomeRedirect() {
@@ -13,5 +13,5 @@ export function HomeRedirect() {
     return <Navigate replace to="/change-password" />;
   }
 
-  return <Navigate replace to={isManagementUser(user) ? "/dashboard" : "/anomalies/new"} />;
+  return <Navigate replace to={getDefaultLandingPath(user)} />;
 }

@@ -51,8 +51,8 @@ const primarySectionsBase = [
   },
   {
     sequence: 6,
-    title: "Acciones y pendientes",
-    description: "Accede a acciones asignadas, tareas abiertas y bandeja interna del usuario.",
+    title: "Acciones",
+    description: "Accede a las acciones asignadas y gestiona su ejecucion y evidencia.",
     to: "/actions/mine",
     label: "Ver acciones",
   },
@@ -72,8 +72,8 @@ const primarySectionsBase = [
   },
   {
     sequence: 9,
-    title: "Bandeja interna",
-    description: "Revisa avisos, solicitudes de participacion y notificaciones operativas por usuario.",
+    title: "Bandeja y pendientes",
+    description: "Revisa pendientes, avisos, participaciones e historial sin informacion duplicada.",
     to: "/notifications/inbox",
     label: "Abrir bandeja",
   },
@@ -100,7 +100,7 @@ const workflowSections = [
   {
     title: "Plan y ejecucion",
     description: "Definicion de propuestas, acciones, responsables, evidencia y seguimiento.",
-    helper: "Se apoya en Acciones, Pendientes y Bandeja.",
+    helper: "Se apoya en Acciones y en la Bandeja unificada.",
   },
   {
     title: "Verificacion y cierre",
@@ -415,7 +415,7 @@ export function DashboardPage() {
                       <strong>2. Seguir:</strong> entra a <span>Seguimiento de anomalias</span> para ver estado, etapa e historial.
                     </li>
                     <li>
-                      <strong>3. Ejecutar:</strong> usa <span>Acciones</span>, <span>Pendientes</span> y <span>Bandeja</span> para resolver tareas.
+                      <strong>3. Ejecutar:</strong> usa <span>Acciones</span> y la <span>Bandeja</span> unificada para resolver tareas.
                     </li>
                     <li>
                       <strong>4. Administrar:</strong> si sos admin, usa el menu contextual para entrar a configuracion y catalogos.

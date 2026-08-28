@@ -172,6 +172,7 @@ class NotificationServiceTests(TestCase):
             anomaly.current_status,
         )
         self.assertEqual(notification_summary_for_user(self.reporter)["unread"], 1)
+        self.assertEqual(notification_summary_for_user(self.reporter)["notices_unread"], 1)
 
         add_participant(
             anomaly=anomaly,
@@ -213,7 +214,7 @@ class NotificationServiceTests(TestCase):
             source_id=self._create_unclassified_anomaly(title="Hallazgo completado").pk,
             actor=self.admin,
             is_task=True,
-            task_type=NotificationTaskType.ACTION_ASSIGNMENT,
+            task_type=NotificationTaskType.TREATMENT_PARTICIPATION,
         )
         completed_recipient = completed.recipients.get(
             user=self.reporter,
@@ -224,16 +225,95 @@ class NotificationServiceTests(TestCase):
             user=self.reporter,
             task_status=RecipientTaskStatus.COMPLETED,
         )
+        dismissed = create_internal_notification(
+            recipients=[self.reporter],
+            title="Participacion descartada",
+            body="La participacion ya no es necesaria.",
+            source_type="anomalies.anomaly",
+            source_id=self._create_unclassified_anomaly(title="Participacion descartada").pk,
+            actor=self.admin,
+            is_task=True,
+            task_type=NotificationTaskType.ANALYSIS_PARTICIPATION,
+        )
+        resolve_notification_task(
+            recipient=dismissed.recipients.get(user=self.reporter, channel=NotificationChannel.IN_APP),
+            user=self.reporter,
+            task_status=RecipientTaskStatus.DISMISSED,
+        )
+        completed_recipient.refresh_from_db()
+        self.assertEqual(completed_recipient.delivery_status, DeliveryStatus.READ)
+        self.assertIsNotNone(completed_recipient.read_at)
 
         client = APIClient()
         client.force_authenticate(user=self.reporter)
         open_response = client.get("/api/v1/notifications/inbox/tasks/")
         completed_response = client.get("/api/v1/notifications/inbox/tasks/?task_status=completed")
+        closed_response = client.get("/api/v1/notifications/inbox/tasks/?task_status=closed")
 
         self.assertEqual(open_response.status_code, 200)
         self.assertEqual(completed_response.status_code, 200)
+        self.assertEqual(closed_response.status_code, 200)
         self.assertEqual({item["title"] for item in open_response.data["results"]}, {pending.title})
         self.assertEqual({item["title"] for item in completed_response.data["results"]}, {completed.title})
+        self.assertEqual(
+            {item["title"] for item in closed_response.data["results"]},
+            {completed.title, dismissed.title},
+        )
+
+    def test_inbox_can_exclude_tasks_to_avoid_duplicate_presentation(self):
+        notice = create_internal_notification(
+            recipients=[self.reporter],
+            title="Aviso informativo",
+            body="Sin tarea asociada.",
+            source_type="notifications.test",
+            source_id=self._create_unclassified_anomaly().pk,
+            actor=self.admin,
+        )
+        create_internal_notification(
+            recipients=[self.reporter],
+            title="Pendiente operativo",
+            body="Con tarea asociada.",
+            source_type="notifications.test",
+            source_id=self._create_unclassified_anomaly(title="Pendiente operativo").pk,
+            actor=self.admin,
+            is_task=True,
+            task_type=NotificationTaskType.FINDING_MANAGEMENT,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.reporter)
+
+        response = client.get("/api/v1/notifications/inbox/?is_task=false&unread_first=true")
+
+        self.assertEqual(response.status_code, 200)
+        titles = {item["title"] for item in response.data["results"]}
+        self.assertIn(notice.title, titles)
+        self.assertNotIn("Pendiente operativo", titles)
+        self.assertTrue(all(not item["is_task"] for item in response.data["results"]))
+
+    def test_domain_task_cannot_be_completed_only_from_notification(self):
+        task = create_internal_notification(
+            recipients=[self.reporter],
+            title="Accion pendiente",
+            body="Debe completarse desde Acciones.",
+            source_type="actions.actionitem",
+            source_id=self._create_unclassified_anomaly().pk,
+            actor=self.admin,
+            is_task=True,
+            task_type=NotificationTaskType.ACTION_ASSIGNMENT,
+        )
+        recipient = task.recipients.get(user=self.reporter, channel=NotificationChannel.IN_APP)
+        client = APIClient()
+        client.force_authenticate(user=self.reporter)
+
+        response = client.post(
+            f"/api/v1/notifications/inbox/{recipient.pk}/resolve/",
+            {"task_status": RecipientTaskStatus.COMPLETED},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        recipient.refresh_from_db()
+        self.assertEqual(recipient.task_status, RecipientTaskStatus.PENDING)
 
     @override_settings(
         EMAIL_NOTIFICATIONS_ENABLED=True,

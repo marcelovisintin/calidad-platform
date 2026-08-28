@@ -22,7 +22,6 @@ import { LearnedLessonsPage } from "../modules/treatments/pages/LearnedLessonsPa
 import { TreatmentTrackingPage } from "../modules/treatments/pages/TreatmentTrackingPage";
 import { TreatmentValidationPage } from "../modules/treatments/pages/TreatmentValidationPage";
 import { InboxPage } from "../modules/notifications/pages/InboxPage";
-import { PendingTasksPage } from "../modules/notifications/pages/PendingTasksPage";
 
 export const router = createBrowserRouter([
   {
@@ -60,7 +59,7 @@ export const router = createBrowserRouter([
       { path: "learned-lessons", element: <LearnedLessonsPage /> },
       { path: "actions/mine", element: <MyActionsPage /> },
       { path: "validation", element: <TreatmentValidationPage /> },
-      { path: "tasks", element: <PendingTasksPage /> },
+      { path: "tasks", element: <Navigate replace to="/notifications/inbox?tab=pending" /> },
       { path: "notifications/inbox", element: <InboxPage /> },
       { path: "management/users", element: <UserManagementPage /> },
       { path: "management/users/import", element: <UserBulkImportPage /> },

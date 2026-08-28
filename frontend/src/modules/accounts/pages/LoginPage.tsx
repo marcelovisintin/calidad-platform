@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { isManagementUser } from "../../../app/access";
+import { getDefaultLandingPath } from "../../../app/access";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { CompanyLogo } from "../../../components/CompanyLogo";
 import { usePageTitle } from "../../../hooks/usePageTitle";
@@ -16,7 +16,7 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const requestedDestination = (location.state as { from?: string } | null)?.from;
-  const defaultDestination = isManagementUser(user) ? "/dashboard" : "/anomalies/new";
+  const defaultDestination = getDefaultLandingPath(user);
   const redirectTo = requestedDestination || defaultDestination;
 
   useEffect(() => {

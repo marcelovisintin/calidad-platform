@@ -48,6 +48,7 @@ class NotificationInboxItemSerializer(serializers.ModelSerializer):
 class NotificationInboxSummarySerializer(serializers.Serializer):
     total = serializers.IntegerField()
     unread = serializers.IntegerField()
+    notices_unread = serializers.IntegerField()
     tasks_total = serializers.IntegerField()
     tasks_pending = serializers.IntegerField()
     tasks_in_progress = serializers.IntegerField()

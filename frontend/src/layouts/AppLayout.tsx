@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { createAuthenticatedObjectUrl } from "../api/files";
-import { isAdminUser } from "../app/access";
+import { getDefaultLandingPath, isAdminUser } from "../app/access";
 import { useAuth } from "../app/providers/AuthProvider";
 import { CompanyLogo } from "../components/CompanyLogo";
 
@@ -16,8 +16,10 @@ const mainNav = [
   { to: "/learned-lessons", label: "Lecciones aprendidas", mobileLabel: "Lecciones" },
   { to: "/treatments/tracking", label: "Seguimiento de tratamientos", mobileLabel: "Seg. trat." },
   { to: "/notifications/inbox", label: "Bandeja", mobileLabel: "Bandeja" },
-  { to: "/tasks", label: "Pendientes", mobileLabel: "Pendientes" },
+  { to: "/affected-orders", label: "Ordenes afectadas", mobileLabel: "Ordenes" },
 ];
+
+const adminOnlyNavPaths = new Set(["/dashboard", "/affected-orders"]);
 
 export function AppLayout() {
   const { user, logout } = useAuth();
@@ -27,7 +29,7 @@ export function AppLayout() {
   const [loggingOut, setLoggingOut] = useState(false);
   const visibleMainNav = isAdminUser(user)
     ? mainNav
-    : mainNav.filter((item) => item.to !== "/dashboard");
+    : mainNav.filter((item) => !adminOnlyNavPaths.has(item.to));
   const currentNavItem =
     mainNav.find((item) => location.pathname === item.to) ||
     [...mainNav]
@@ -35,13 +37,11 @@ export function AppLayout() {
       .find((item) => location.pathname.startsWith(`${item.to}/`));
   const currentSection =
     currentNavItem?.label ||
-    (location.pathname.startsWith("/affected-orders")
-      ? "Ordenes afectadas"
-      : location.pathname.startsWith("/management/users")
-        ? "Usuarios"
-        : location.pathname.startsWith("/management/catalogs")
-          ? "Catalogos"
-          : "Plataforma");
+    (location.pathname.startsWith("/management/users")
+      ? "Usuarios"
+      : location.pathname.startsWith("/management/catalogs")
+        ? "Catalogos"
+        : "Plataforma");
   const userTag = user?.username || user?.email?.split("@")[0] || "usuario";
   const [photoSrc, setPhotoSrc] = useState("");
   const canGoBack = (window.history.state?.idx ?? 0) > 0;
@@ -83,7 +83,7 @@ export function AppLayout() {
       navigate(-1);
       return;
     }
-    navigate("/dashboard", { replace: true });
+    navigate(getDefaultLandingPath(user), { replace: true });
   };
 
   const handleLogout = async () => {

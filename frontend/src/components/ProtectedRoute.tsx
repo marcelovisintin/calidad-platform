@@ -1,4 +1,5 @@
 ﻿import { Navigate, useLocation } from "react-router-dom";
+import { getDefaultLandingPath } from "../app/access";
 import { useAuth } from "../app/providers/AuthProvider";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -19,7 +20,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (!user?.must_change_password && location.pathname === "/change-password") {
     const requested = (location.state as { from?: string } | null)?.from;
-    const destination = requested && requested !== "/change-password" ? requested : "/dashboard";
+    const destination = requested && requested !== "/change-password" ? requested : getDefaultLandingPath(user);
     return <Navigate to={destination} replace />;
   }
 

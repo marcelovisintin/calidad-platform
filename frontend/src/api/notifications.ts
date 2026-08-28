@@ -5,8 +5,23 @@ export function fetchInboxSummary() {
   return apiRequest<NotificationInboxSummary>("/notifications/inbox/summary/");
 }
 
-export function fetchInbox(page = 1) {
+export function fetchInbox(
+  page = 1,
+  filters: { isTask?: boolean; unread?: boolean; unreadFirst?: boolean; search?: string } = {},
+) {
   const params = new URLSearchParams({ page: String(page), page_size: "10" });
+  if (filters.isTask !== undefined) {
+    params.set("is_task", String(filters.isTask));
+  }
+  if (filters.unread !== undefined) {
+    params.set("unread", String(filters.unread));
+  }
+  if (filters.unreadFirst) {
+    params.set("unread_first", "true");
+  }
+  if (filters.search?.trim()) {
+    params.set("search", filters.search.trim());
+  }
   return apiRequest<PagedResponse<NotificationInboxItem>>(`/notifications/inbox/?${params.toString()}`);
 }
 

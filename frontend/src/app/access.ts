@@ -18,3 +18,7 @@ export function isManagementUser(user: CurrentUser | null | undefined) {
 
   return MANAGEMENT_ACCESS_LEVELS.has(user.access_level);
 }
+
+export function getDefaultLandingPath(user: CurrentUser | null | undefined) {
+  return isAdminUser(user) ? "/dashboard" : "/anomalies/new";
+}
