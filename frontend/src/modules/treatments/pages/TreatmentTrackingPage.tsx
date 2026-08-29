@@ -11,6 +11,7 @@ import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
+import { resolveTreatmentHelpWorkContext, usePublishHelpWorkContext } from "../../help/workContext";
 
 function treatmentDisplayStatus(treatment?: TreatmentSummary | TreatmentDetail | null) {
   if (!treatment) {
@@ -155,6 +156,7 @@ export function TreatmentTrackingPage() {
     }
     return Array.from(names);
   }, [detail]);
+  usePublishHelpWorkContext(detail ? resolveTreatmentHelpWorkContext(detail) : null);
 
   const handleFilterChange = (setter: (value: string) => void) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setter(event.target.value);

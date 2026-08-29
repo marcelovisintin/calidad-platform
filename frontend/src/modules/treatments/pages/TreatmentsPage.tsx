@@ -25,6 +25,7 @@ import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
+import { resolveTreatmentHelpWorkContext, usePublishHelpWorkContext } from "../../help/workContext";
 
 type TreatmentTab = "agenda" | "analysis";
 
@@ -364,6 +365,7 @@ export function TreatmentsPage() {
   const treatmentClosed = Boolean(selectedTreatment?.is_locked);
   const treatmentLocked = treatmentClosed || !selectedTreatment?.can_manage;
   const convocationConfirmed = Boolean(selectedTreatment?.convocation_confirmed_at);
+  usePublishHelpWorkContext(selectedTreatment ? resolveTreatmentHelpWorkContext(selectedTreatment) : null);
 
   useEffect(() => {
     if (!selectedTask) {

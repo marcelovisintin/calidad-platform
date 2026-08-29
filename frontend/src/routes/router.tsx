@@ -24,6 +24,7 @@ import { TreatmentValidationPage } from "../modules/treatments/pages/TreatmentVa
 import { InboxPage } from "../modules/notifications/pages/InboxPage";
 import { IndicatorDashboardPage } from "../modules/indicators/pages/IndicatorDashboardPage";
 import { IndicatorsPage } from "../modules/indicators/pages/IndicatorsPage";
+import { HelpCenterPage } from "../modules/help/pages/HelpCenterPage";
 
 export const router = createBrowserRouter([
   {
@@ -65,6 +66,7 @@ export const router = createBrowserRouter([
       { path: "validation", element: <TreatmentValidationPage /> },
       { path: "tasks", element: <Navigate replace to="/notifications/inbox?tab=pending" /> },
       { path: "notifications/inbox", element: <InboxPage /> },
+      { path: "help", element: <HelpCenterPage /> },
       { path: "management/users", element: <UserManagementPage /> },
       { path: "management/users/import", element: <UserBulkImportPage /> },
       { path: "management/user-scopes", element: <UserScopesPage /> },

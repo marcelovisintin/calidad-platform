@@ -9,6 +9,7 @@ import { PaginationControls } from "../../../components/PaginationControls";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
+import { resolveTreatmentHelpWorkContext, usePublishHelpWorkContext } from "../../help/workContext";
 
 type ValidationResult = "effective" | "not_effective" | "";
 
@@ -74,6 +75,7 @@ export function TreatmentValidationPage() {
 
   const blockers = selectedTreatment?.validation_state?.blockers ?? [];
   const validationAvailable = Boolean(selectedTreatment?.validation_state?.available);
+  usePublishHelpWorkContext(selectedTreatment ? resolveTreatmentHelpWorkContext(selectedTreatment) : null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

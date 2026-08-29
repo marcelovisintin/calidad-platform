@@ -3,6 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { fetchAnomalyDetail } from "../../../api/anomalies";
 import { readStoredSession } from "../../../api/http";
 import { formatDate, formatDateTime } from "../../../app/utils";
+import { isAdminUser } from "../../../app/access";
+import { useAuth } from "../../../app/providers/AuthProvider";
 import { DataState } from "../../../components/DataState";
 import { LearnedLessonReadOnly } from "../../../components/LearnedLessonReadOnly";
 import { PageHeader } from "../../../components/PageHeader";
@@ -10,14 +12,17 @@ import { StatusBadge } from "../../../components/StatusBadge";
 import { Timeline } from "../../../components/Timeline";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
+import { resolveAnomalyHelpWorkContext, usePublishHelpWorkContext } from "../../help/workContext";
 
 export function AnomalyDetailPage() {
+  const { user } = useAuth();
   const { anomalyId = "" } = useParams();
   const navigate = useNavigate();
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
 
   usePageTitle("Detalle de anomalia");
   const { data, loading, error, reload } = useAsyncTask(() => fetchAnomalyDetail(anomalyId), [anomalyId]);
+  usePublishHelpWorkContext(data ? resolveAnomalyHelpWorkContext(data, isAdminUser(user)) : null);
 
   const initialVerificationLabel = data?.initial_verification
     ? `Verificada ${formatDateTime(data.initial_verification.verified_at)}${data.initial_verification.verified_by?.full_name ? ` por ${data.initial_verification.verified_by.full_name}` : ""}`

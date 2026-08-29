@@ -10,6 +10,7 @@ import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
+import { resolveTaskHelpWorkContext, usePublishHelpWorkContext } from "../../help/workContext";
 
 type TaskDraft = {
   title: string;
@@ -165,6 +166,7 @@ export function MyActionsPage() {
     () => data?.results.find((item) => item.id === selectedTaskId) ?? null,
     [data?.results, selectedTaskId],
   );
+  usePublishHelpWorkContext(selectedTask ? resolveTaskHelpWorkContext(selectedTask) : null);
 
   useEffect(() => {
     const firstId = data?.results?.[0]?.id || "";

@@ -17,6 +17,8 @@ import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
+import { isAdminUser } from "../../../app/access";
+import { resolveAnomalyHelpWorkContext, usePublishHelpWorkContext } from "../../help/workContext";
 
 function nowAsLocalDateTime() {
   const date = new Date();
@@ -281,6 +283,7 @@ export function ImmediateActionsPage() {
   const hasConfirmedActions = Boolean(selectedAnomaly?.immediate_action?.actions_taken);
   const notEffective = selectedAnomaly?.immediate_action?.effectiveness_is_effective === false || effectivenessResult === "not_effective";
   const assignedResponsible = selectedAnomaly?.immediate_action?.responsible || selectedAnomaly?.owner || selectedAnomaly?.current_responsible || null;
+  usePublishHelpWorkContext(selectedAnomaly ? resolveAnomalyHelpWorkContext(selectedAnomaly, isAdminUser(user)) : null);
 
   return (
     <section className="page-shell">

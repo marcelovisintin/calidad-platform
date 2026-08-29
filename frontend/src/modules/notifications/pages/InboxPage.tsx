@@ -16,6 +16,7 @@ import { StatCard } from "../../../components/StatCard";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
+import { usePublishHelpWorkContext } from "../../help/workContext";
 
 type InboxTab = "pending" | "notices" | "history";
 
@@ -209,6 +210,19 @@ export function InboxPage() {
       description: "Los pendientes completados o descartados apareceran aca.",
     },
   }[activeTab];
+  usePublishHelpWorkContext(data ? {
+    recordLabel: "Bandeja personal",
+    status: activeTab === "pending" ? "Pendientes" : activeTab === "notices" ? "Avisos" : "Historial",
+    stage: "Seguimiento diario",
+    responsible: "Usuario de la sesión",
+    nextAction: pendingCount > 0
+      ? `Revisa los ${pendingCount} pendientes actuales, comenzando por los vencidos.`
+      : data.summary.notices_unread > 0
+        ? `No tienes trabajo pendiente. Revisa los ${data.summary.notices_unread} avisos sin leer.`
+        : "No hay pendientes ni avisos sin leer en este momento.",
+    blockers: data.summary.tasks_overdue > 0 ? [`Hay ${data.summary.tasks_overdue} actividades vencidas.`] : [],
+    tone: data.summary.tasks_overdue > 0 ? "warning" : pendingCount === 0 ? "success" : "info",
+  } : null);
 
   return (
     <section className="page-shell">

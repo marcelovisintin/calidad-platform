@@ -1,9 +1,19 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { createAuthenticatedObjectUrl } from "../api/files";
-import { getDefaultLandingPath, isAdminUser } from "../app/access";
+import { getDefaultLandingPath, isAdminUser, isManagementUser } from "../app/access";
 import { useAuth } from "../app/providers/AuthProvider";
 import { CompanyLogo } from "../components/CompanyLogo";
+import { ContextualHelpDrawer } from "../modules/help/components/ContextualHelpDrawer";
+import { GuidedTourOverlay } from "../modules/help/components/GuidedTourOverlay";
+import { getContextualHelp } from "../modules/help/contextualHelp";
+import { getGuidedTour } from "../modules/help/guidedTours";
+import { markHelpTourCompleted } from "../modules/help/helpProgress";
+import {
+  getDefaultHelpWorkContext,
+  subscribeHelpWorkContext,
+  type HelpWorkContext,
+} from "../modules/help/workContext";
 
 const mainNav = [
   { to: "/dashboard", label: "Inicio", mobileLabel: "Inicio" },
@@ -18,6 +28,7 @@ const mainNav = [
   { to: "/notifications/inbox", label: "Bandeja", mobileLabel: "Bandeja" },
   { to: "/indicators", label: "Indicadores", mobileLabel: "Indicadores" },
   { to: "/affected-orders", label: "Ordenes afectadas", mobileLabel: "Ordenes" },
+  { to: "/help", label: "Ayuda", mobileLabel: "Ayuda" },
 ];
 
 const adminOnlyNavPaths = new Set(["/dashboard", "/indicators", "/affected-orders"]);
@@ -27,6 +38,9 @@ export function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+  const [dynamicHelpContext, setDynamicHelpContext] = useState<HelpWorkContext | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const visibleMainNav = isAdminUser(user)
     ? mainNav
@@ -43,13 +57,43 @@ export function AppLayout() {
       : location.pathname.startsWith("/management/catalogs")
         ? "Catalogos"
         : "Plataforma");
+  const contextualHelp = getContextualHelp(location.pathname, {
+    isAdmin: isAdminUser(user),
+    isManagement: isManagementUser(user),
+  });
+  const guidedTour = getGuidedTour(location.pathname, {
+    isAdmin: isAdminUser(user),
+    isManagement: isManagementUser(user),
+  });
+  const helpWorkContext = dynamicHelpContext ?? getDefaultHelpWorkContext(location.pathname, user);
   const userTag = user?.username || user?.email?.split("@")[0] || "usuario";
   const [photoSrc, setPhotoSrc] = useState("");
   const canGoBack = (window.history.state?.idx ?? 0) > 0;
 
   useEffect(() => {
     setMenuOpen(false);
+    setHelpOpen(false);
+    setTourOpen(false);
+    setDynamicHelpContext(null);
   }, [location.pathname]);
+
+  useEffect(
+    () => subscribeHelpWorkContext((detail) => {
+      setDynamicHelpContext(detail?.pathname === window.location.pathname ? detail.context : null);
+    }),
+    [],
+  );
+
+  const closeTour = useCallback((completed: boolean) => {
+    if (completed && guidedTour) {
+      markHelpTourCompleted(user?.id, guidedTour.id);
+    }
+    setTourOpen(false);
+  }, [guidedTour, user?.id]);
+  const startTour = useCallback(() => {
+    setHelpOpen(false);
+    setTourOpen(true);
+  }, []);
 
   useEffect(() => {
     let objectUrl = "";
@@ -149,6 +193,18 @@ export function AppLayout() {
               )}
               <span>{user?.full_name || userTag}</span>
             </div>
+            {contextualHelp ? (
+              <button
+                aria-controls="contextual-help-drawer"
+                aria-expanded={helpOpen}
+                className="button button-secondary topbar-help"
+                onClick={() => setHelpOpen(true)}
+                type="button"
+              >
+                <span aria-hidden="true">?</span>
+                <span className="topbar-help-label">Ayuda</span>
+              </button>
+            ) : null}
             <button
               className="button button-secondary topbar-logout"
               disabled={loggingOut}
@@ -229,6 +285,20 @@ export function AppLayout() {
           </div>
         </aside>
       </div>
+
+      {contextualHelp ? (
+        <ContextualHelpDrawer
+          contextLabel={contextualHelp.contextLabel}
+          onClose={() => setHelpOpen(false)}
+          onStartTour={guidedTour ? startTour : undefined}
+          open={helpOpen}
+          topic={contextualHelp.topic}
+          workContext={helpWorkContext}
+        />
+      ) : null}
+      {guidedTour ? (
+        <GuidedTourOverlay onFinish={closeTour} open={tourOpen} tour={guidedTour} />
+      ) : null}
     </div>
   );
 }
