@@ -16,10 +16,11 @@ const mainNav = [
   { to: "/learned-lessons", label: "Lecciones aprendidas", mobileLabel: "Lecciones" },
   { to: "/treatments/tracking", label: "Seguimiento de tratamientos", mobileLabel: "Seg. trat." },
   { to: "/notifications/inbox", label: "Bandeja", mobileLabel: "Bandeja" },
+  { to: "/indicators", label: "Indicadores", mobileLabel: "Indicadores" },
   { to: "/affected-orders", label: "Ordenes afectadas", mobileLabel: "Ordenes" },
 ];
 
-const adminOnlyNavPaths = new Set(["/dashboard", "/affected-orders"]);
+const adminOnlyNavPaths = new Set(["/dashboard", "/indicators", "/affected-orders"]);
 
 export function AppLayout() {
   const { user, logout } = useAuth();

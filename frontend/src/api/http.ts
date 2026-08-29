@@ -247,3 +247,33 @@ export function apiRequest<T>(path: string, options: RequestOptions = {}): Promi
     },
   );
 }
+
+export async function downloadApiFile(path: string): Promise<{ blob: Blob; filename: string }> {
+  const execute = (access?: string) => fetch(buildUrl(path), {
+    cache: "no-store",
+    headers: {
+      Accept: "*/*",
+      ...(access ? { Authorization: `Bearer ${access}` } : {}),
+      "X-Request-ID": generateRequestId(),
+    },
+  });
+  const session = readStoredSession();
+  let response = await execute(session?.access);
+  if (response.status === 401 && session?.refresh) {
+    const nextAccess = await refreshAccessToken();
+    response = await execute(nextAccess ?? undefined);
+  }
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = text;
+    try { payload = text ? JSON.parse(text) : null; } catch { /* respuesta no JSON */ }
+    throw new ApiError(extractErrorMessage(payload, response.status), response.status, payload);
+  }
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const plain = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+  return {
+    blob: await response.blob(),
+    filename: encoded ? decodeURIComponent(encoded) : plain ?? "descarga",
+  };
+}

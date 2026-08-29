@@ -69,10 +69,13 @@
       EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
       EMAIL_USE_SSL: ${EMAIL_USE_SSL:-False}
       EMAIL_TIMEOUT: ${EMAIL_TIMEOUT:-10}
+      EMAIL_CA_CERT_FILE: ${EMAIL_CA_CERT_FILE:-}
       DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-calidad@localhost}
       EMAIL_MAX_RETRIES: ${EMAIL_MAX_RETRIES:-3}
       EMAIL_RETRY_DELAY_MINUTES: ${EMAIL_RETRY_DELAY_MINUTES:-5}
       EMAIL_PROCESSING_TIMEOUT_MINUTES: ${EMAIL_PROCESSING_TIMEOUT_MINUTES:-10}
+      EMAIL_LOCAL_DISPATCH_ENABLED: ${EMAIL_LOCAL_DISPATCH_ENABLED:-False}
+      EMAIL_LOCAL_DISPATCH_INTERVAL_SECONDS: ${EMAIL_LOCAL_DISPATCH_INTERVAL_SECONDS:-60}
       JWT_ACCESS_TOKEN_MINUTES: ${JWT_ACCESS_TOKEN_MINUTES}
       JWT_REFRESH_TOKEN_MINUTES: ${JWT_REFRESH_TOKEN_MINUTES}
       DRF_ANON_RATE: ${DRF_ANON_RATE}
@@ -84,7 +87,13 @@
     command: >-
       sh -c "python manage.py migrate --noinput &&
       python manage.py collectstatic --noinput &&
-      gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS} --timeout ${GUNICORN_TIMEOUT}"
+      if [ \"$${EMAIL_LOCAL_DISPATCH_ENABLED}\" = \"True\" ]; then
+      (while true; do
+      python manage.py send_pending_email_notifications --limit 100;
+      sleep $${EMAIL_LOCAL_DISPATCH_INTERVAL_SECONDS};
+      done) &
+      fi;
+      exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS} --timeout ${GUNICORN_TIMEOUT}"
     depends_on:
       db:
         condition: service_healthy
@@ -93,6 +102,7 @@
       - ${HOST_TMP_ROOT}:/srv/calidad/storage/tmp
       - ${HOST_STATIC_ROOT}:/srv/calidad/runtime/staticfiles
       - ${HOST_LOG_ROOT}:/srv/calidad/runtime/logs
+      - ${HOST_SMTP_CA_DIR:-../../runtime/smtp-ca}:/srv/calidad/runtime/smtp-ca:ro
     expose:
       - "8000"
     healthcheck:

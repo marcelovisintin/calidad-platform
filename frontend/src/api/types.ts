@@ -236,6 +236,102 @@ export interface ApiRootResponse {
   endpoints: Record<string, string>;
 }
 
+export interface IndicatorDefinition {
+  key: string;
+  sequence: number;
+  title: string;
+  description: string;
+  primary_date: string;
+  dashboard_url: string;
+}
+
+export interface IndicatorCatalogResponse {
+  indicators: IndicatorDefinition[];
+}
+
+export interface IndicatorComparison {
+  current: number;
+  previous: number;
+  delta: number;
+  delta_percentage: number | null;
+}
+
+export interface IndicatorMetric {
+  key: string;
+  label: string;
+  value: number;
+  percentage: number | null;
+  tone: "default" | "accent" | "success" | "warning";
+  hint?: string;
+  comparison: IndicatorComparison | null;
+}
+
+export interface IndicatorSeriesValue {
+  key: string;
+  label: string;
+  count: number;
+  percentage?: number | null;
+}
+
+export interface IndicatorSeriesPoint {
+  period: string;
+  label: string;
+  values: IndicatorSeriesValue[];
+}
+
+export interface IndicatorBreakdownItem {
+  key: string;
+  label: string;
+  count: number;
+  percentage: number | null;
+  comparison?: IndicatorComparison;
+  cumulative_percentage?: number | null;
+}
+
+export type IndicatorDashboardRow = Record<string, string | number | boolean | null>;
+
+export interface IndicatorDashboardResponse extends IndicatorDefinition {
+  available: boolean;
+  period: {
+    date_from: string;
+    date_to: string;
+    previous_from: string;
+    previous_to: string;
+  };
+  filters: { area: string; group_by?: string };
+  formula_notes: string[];
+  metrics: IndicatorMetric[];
+  series: IndicatorSeriesPoint[];
+  breakdown: IndicatorBreakdownItem[];
+  rows: {
+    count: number;
+    page: number;
+    page_size: number;
+    pages: number;
+    results: IndicatorDashboardRow[];
+  };
+}
+
+export interface IndicatorReportRecipient {
+  id: UUID;
+  name: string;
+  email: string;
+  delivery_status?: string;
+  delivery_error?: string;
+}
+
+export interface IndicatorReportResponse {
+  id: UUID;
+  indicator_key: string;
+  status: string;
+  row_count: number;
+  filename: string;
+  checksum_sha256: string;
+  generated_at: string;
+  expires_at: string | null;
+  recipients: IndicatorReportRecipient[];
+}
+
 export interface PagedResponse<T> {
   count: number;
   next: string | null;
@@ -436,6 +532,7 @@ export interface TreatmentTask {
   description: string;
   status: string;
   execution_date?: string | null;
+  completed_at?: string | null;
   responsible?: UserSummary | null;
   root_cause?: UUID | null;
   root_causes: TreatmentTaskHistoryRootCause[];
@@ -470,6 +567,7 @@ export interface TreatmentTaskHistory {
   description: string;
   status: string;
   execution_date?: string | null;
+  completed_at?: string | null;
   is_overdue?: boolean;
   responsible?: UserSummary | null;
   treatment: TreatmentTaskHistoryTreatment;

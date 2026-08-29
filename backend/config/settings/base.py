@@ -53,6 +53,7 @@ LOCAL_APPS = [
     "apps.actions.apps.ActionsConfig",
     "apps.notifications.apps.NotificationsConfig",
     "apps.audit.apps.AuditConfig",
+    "apps.indicators.apps.IndicatorsConfig",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -125,6 +126,7 @@ EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", default=True)
 EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", default=False)
 EMAIL_TIMEOUT = env_int("EMAIL_TIMEOUT", default=10)
+EMAIL_CA_CERT_FILE = env("EMAIL_CA_CERT_FILE", default="")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="calidad@localhost")
 EMAIL_MAX_RETRIES = env_int("EMAIL_MAX_RETRIES", default=3)
 EMAIL_RETRY_DELAY_MINUTES = env_int("EMAIL_RETRY_DELAY_MINUTES", default=5)

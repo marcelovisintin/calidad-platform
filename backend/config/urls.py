@@ -20,6 +20,7 @@ def api_root(_request):
                 "actions": f"/api/{settings.API_VERSION}/actions/",
                 "notifications": f"/api/{settings.API_VERSION}/notifications/",
                 "audit": f"/api/{settings.API_VERSION}/audit/",
+                "indicators": f"/api/{settings.API_VERSION}/indicators/",
             },
         }
     )
@@ -34,6 +35,7 @@ api_patterns = [
     path("actions/", include("apps.actions.api.urls")),
     path("notifications/", include("apps.notifications.api.urls")),
     path("audit/", include("apps.audit.api.urls")),
+    path("indicators/", include("apps.indicators.api.urls")),
 ]
 
 urlpatterns = [

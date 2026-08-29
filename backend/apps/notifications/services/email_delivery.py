@@ -63,6 +63,32 @@ def _refresh_notification_status(notification_id) -> None:
         row_version=F("row_version") + 1,
         updated_at=timezone.now(),
     )
+    from apps.indicators.models import IndicatorReport, IndicatorReportStatus
+
+    report_status = {
+        NotificationStatus.PENDING: IndicatorReportStatus.QUEUED,
+        NotificationStatus.SENT: IndicatorReportStatus.COMPLETED,
+        NotificationStatus.FAILED: IndicatorReportStatus.FAILED,
+    }[status]
+    report_query = IndicatorReport.objects.filter(notification_id=notification_id)
+    report_query.update(
+        status=report_status,
+        error_message="" if report_status != IndicatorReportStatus.FAILED else "Uno o mas envios finalizaron con error.",
+        row_version=F("row_version") + 1,
+        updated_at=timezone.now(),
+    )
+    if report_status == IndicatorReportStatus.COMPLETED:
+        for report in report_query.exclude(report_file="").iterator():
+            try:
+                report.report_file.delete(save=False)
+                IndicatorReport.objects.filter(pk=report.pk).update(
+                    report_file=None,
+                    expires_at=None,
+                    row_version=F("row_version") + 1,
+                    updated_at=timezone.now(),
+                )
+            except Exception:
+                logger.exception("No se pudo eliminar el PDF ya enviado del informe %s.", report.pk)
 
 
 @transaction.atomic
@@ -142,6 +168,17 @@ def _send_claimed_recipient(recipient_id) -> str:
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[recipient.destination],
         )
+        report = getattr(recipient.notification, "indicator_report", None)
+        if report and report.report_file:
+            report.report_file.open("rb")
+            try:
+                message.attach(
+                    report.original_name or "informe-indicador.pdf",
+                    report.report_file.read(),
+                    report.content_type or "application/pdf",
+                )
+            finally:
+                report.report_file.close()
         message.send(fail_silently=False)
     except Exception as exc:  # El error SMTP no debe afectar la operación de negocio.
         error_message = str(exc)[:2000] or exc.__class__.__name__

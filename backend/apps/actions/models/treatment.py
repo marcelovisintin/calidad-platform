@@ -185,6 +185,7 @@ class TreatmentTask(AuditBaseModel):
         blank=True,
     )
     execution_date = models.DateField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=TreatmentTaskStatus.choices, default=TreatmentTaskStatus.PENDING)
 
     class Meta:

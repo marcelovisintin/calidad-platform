@@ -46,3 +46,8 @@ def treatment_learned_lesson_evidence_upload_to(instance, filename: str) -> str:
 def user_photo_upload_to(instance, filename: str) -> str:
     user_id = getattr(instance, "pk", None) or "unassigned"
     return _build_upload_path("user-photos", user_id, filename)
+
+
+def indicator_report_upload_to(instance, filename: str) -> str:
+    report_id = getattr(instance, "pk", None) or "unassigned"
+    return _build_upload_path("indicator-reports", report_id, filename)

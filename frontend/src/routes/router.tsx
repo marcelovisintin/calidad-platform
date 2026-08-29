@@ -22,6 +22,8 @@ import { LearnedLessonsPage } from "../modules/treatments/pages/LearnedLessonsPa
 import { TreatmentTrackingPage } from "../modules/treatments/pages/TreatmentTrackingPage";
 import { TreatmentValidationPage } from "../modules/treatments/pages/TreatmentValidationPage";
 import { InboxPage } from "../modules/notifications/pages/InboxPage";
+import { IndicatorDashboardPage } from "../modules/indicators/pages/IndicatorDashboardPage";
+import { IndicatorsPage } from "../modules/indicators/pages/IndicatorsPage";
 
 export const router = createBrowserRouter([
   {
@@ -53,6 +55,8 @@ export const router = createBrowserRouter([
       { path: "anomalies/new", element: <NewAnomalyPage /> },
       { path: "anomalies/created", element: <AnomalyCreatedPage /> },
       { path: "affected-orders", element: <AffectedOrdersPage /> },
+      { path: "indicators", element: <IndicatorsPage /> },
+      { path: "indicators/:indicatorKey", element: <IndicatorDashboardPage /> },
       { path: "anomalies/:anomalyId", element: <AnomalyDetailPage /> },
       { path: "treatments", element: <TreatmentsPage /> },
       { path: "treatments/tracking", element: <TreatmentTrackingPage /> },

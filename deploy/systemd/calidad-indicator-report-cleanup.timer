@@ -1,0 +1,11 @@
+[Unit]
+Description=Limpieza diaria de PDF vencidos de indicadores
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+RandomizedDelaySec=10m
+Unit=calidad-indicator-report-cleanup.service
+
+[Install]
+WantedBy=timers.target

@@ -12,6 +12,7 @@ import { DataState } from "../../../components/DataState";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
+import { IndicatorsCatalog } from "../../indicators/components/IndicatorsCatalog";
 
 const primarySectionsBase = [
   {
@@ -126,7 +127,7 @@ const adminSections = [
   { title: "Panel admin Django", description: "Acceso completo al panel tecnico y maestros.", href: "/admin/" },
 ];
 
-type DashboardView = "none" | "welcome" | "overview" | "sections" | "workflow" | "tracking" | "admin";
+type DashboardView = "none" | "welcome" | "overview" | "sections" | "workflow" | "tracking" | "indicators" | "admin";
 
 type ViewOption = {
   id: DashboardView;
@@ -148,6 +149,7 @@ const viewLabels: Record<DashboardView, string> = {
   sections: "Secciones principales",
   workflow: "Pasos del flujo",
   tracking: "Seguimiento operativo",
+  indicators: "Indicadores",
   admin: "Configuracion y maestros",
 };
 
@@ -274,8 +276,8 @@ function resolveDashboardView(value: string | null, adminUser: boolean): Dashboa
     return normalized;
   }
 
-  if (normalized === "admin" && adminUser) {
-    return "admin";
+  if (["admin", "indicators"].includes(normalized) && adminUser) {
+    return normalized;
   }
 
   return "none";
@@ -295,7 +297,7 @@ export function DashboardPage() {
   }, [adminUser, searchParams]);
 
   const contextualOptions = useMemo(
-    () => (adminUser ? [...baseOptions, { id: "admin", label: "Configuracion admin" }] : baseOptions),
+    () => (adminUser ? [...baseOptions, { id: "indicators", label: "Indicadores" }, { id: "admin", label: "Configuracion admin" }] : baseOptions),
     [adminUser],
   );
 
@@ -577,6 +579,24 @@ export function DashboardPage() {
                   </div>
                 </article>
               </div>
+            ) : null}
+
+            {activeView === "indicators" ? (
+              adminUser ? (
+                <section className="panel">
+                  <div className="section-head">
+                    <div>
+                      <p className="eyebrow">Analisis integral</p>
+                      <h2>Indicadores del sistema</h2>
+                      <p className="page-description">
+                        Selecciona una tarjeta para abrir su dashboard, filtros, graficos y datos relacionados.
+                      </p>
+                    </div>
+                    <Link className="button button-secondary" to="/indicators">Abrir seccion completa</Link>
+                  </div>
+                  <IndicatorsCatalog />
+                </section>
+              ) : null
             ) : null}
 
             {activeView === "admin" ? (

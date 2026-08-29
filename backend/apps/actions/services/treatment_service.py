@@ -25,6 +25,7 @@ from apps.actions.models import (
     TreatmentStatus,
     TreatmentTask,
     TreatmentTaskEvidence,
+    TreatmentTaskStatus,
 )
 from apps.audit.services import record_audit_event
 from apps.anomalies.models import (
@@ -1505,6 +1506,7 @@ def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: st
     if not execution_date:
         raise ValidationError({"execution_date": "Debe indicar la fecha de ejecucion."})
 
+    initial_status = data.get("status") or TreatmentTaskStatus.PENDING
     task = TreatmentTask(
         treatment=treatment,
         root_cause=root_causes[0],
@@ -1513,7 +1515,8 @@ def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: st
         description=description,
         responsible=responsible,
         execution_date=execution_date,
-        status=data.get("status") or "pending",
+        status=initial_status,
+        completed_at=timezone.now() if initial_status == TreatmentTaskStatus.COMPLETED else None,
         created_by=user,
         updated_by=user,
     )
@@ -1584,6 +1587,12 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
     for field in ("title", "description", "responsible", "execution_date", "status", "root_cause"):
         if field in data:
             setattr(locked, field, data[field])
+
+    if status_changed:
+        if locked.status == TreatmentTaskStatus.COMPLETED:
+            locked.completed_at = timezone.now()
+        elif previous_status == TreatmentTaskStatus.COMPLETED:
+            locked.completed_at = None
 
     if "responsible" in data:
         _validate_treatment_task_responsible(treatment=locked.treatment, responsible=locked.responsible)
