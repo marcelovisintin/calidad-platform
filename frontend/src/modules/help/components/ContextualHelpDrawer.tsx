@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { HelpTopic } from "../helpContent";
 import type { HelpWorkContext } from "../workContext";
 
@@ -13,6 +13,13 @@ type ContextualHelpDrawerProps = {
 
 export function ContextualHelpDrawer({ contextLabel, open, topic, onClose, onStartTour, workContext }: ContextualHelpDrawerProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setExpanded(false);
+    }
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -42,7 +49,7 @@ export function ContextualHelpDrawer({ contextLabel, open, topic, onClose, onSta
       <aside
         aria-labelledby="context-help-title"
         aria-modal="true"
-        className="context-help-drawer"
+        className={`context-help-drawer${expanded ? " expanded" : ""}`}
         id="contextual-help-drawer"
         role="dialog"
       >
@@ -126,14 +133,14 @@ export function ContextualHelpDrawer({ contextLabel, open, topic, onClose, onSta
               Iniciar recorrido
             </button>
           ) : null}
-          <a
+          <button
+            aria-expanded={expanded}
             className="button button-secondary"
-            href={`/help?topic=${encodeURIComponent(topic.id)}`}
-            rel="noreferrer"
-            target="_blank"
+            onClick={() => setExpanded((current) => !current)}
+            type="button"
           >
-            Abrir guía en otra pestaña
-          </a>
+            {expanded ? "Volver a vista compacta" : "Ver guía completa"}
+          </button>
           <button className="button button-ghost" onClick={onClose} type="button">
             Continuar trabajando
           </button>

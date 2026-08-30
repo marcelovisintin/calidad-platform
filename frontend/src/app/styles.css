@@ -3619,6 +3619,24 @@ small {
   background: #e4f2ee;
   box-shadow: -18px 0 48px rgba(3, 35, 43, 0.24);
   animation: context-help-slide-in 0.22s ease-out;
+  transition: width 0.22s ease;
+}
+
+.context-help-drawer.expanded {
+  width: min(1040px, 100vw);
+}
+
+.context-help-drawer.expanded .context-help-body {
+  padding-right: clamp(1.1rem, 4vw, 3.5rem);
+  padding-left: clamp(1.1rem, 4vw, 3.5rem);
+}
+
+.context-help-drawer.expanded .context-help-intro,
+.context-help-drawer.expanded .help-work-context,
+.context-help-drawer.expanded .context-help-section {
+  max-width: 900px;
+  margin-right: auto;
+  margin-left: auto;
 }
 
 .context-help-header {
@@ -3878,6 +3896,10 @@ small {
   }
 
   .context-help-drawer {
+    width: 100%;
+  }
+
+  .context-help-drawer.expanded {
     width: 100%;
   }
 
