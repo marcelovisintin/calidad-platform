@@ -26,12 +26,13 @@ const mainNav = [
   { to: "/learned-lessons", label: "Lecciones aprendidas", mobileLabel: "Lecciones" },
   { to: "/treatments/tracking", label: "Seguimiento de tratamientos", mobileLabel: "Seg. trat." },
   { to: "/notifications/inbox", label: "Bandeja", mobileLabel: "Bandeja" },
+  { to: "/dashboard/summary", label: "Resumen rapido", mobileLabel: "Resumen" },
   { to: "/indicators", label: "Indicadores", mobileLabel: "Indicadores" },
   { to: "/affected-orders", label: "Ordenes afectadas", mobileLabel: "Ordenes" },
   { to: "/help", label: "Ayuda", mobileLabel: "Ayuda" },
 ];
 
-const adminOnlyNavPaths = new Set(["/dashboard", "/indicators", "/affected-orders"]);
+const adminOnlyNavPaths = new Set(["/dashboard", "/dashboard/summary", "/indicators", "/affected-orders"]);
 
 export function AppLayout() {
   const { user, logout } = useAuth();
@@ -156,6 +157,7 @@ export function AppLayout() {
         <nav className="side-nav">
           {visibleMainNav.map((item) => (
             <NavLink
+              end={item.to === "/dashboard"}
               key={item.to}
               className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
               to={item.to}
@@ -261,6 +263,7 @@ export function AppLayout() {
           <nav className="side-nav">
             {visibleMainNav.map((item) => (
               <NavLink
+                end={item.to === "/dashboard"}
                 key={item.to}
                 className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
                 to={item.to}

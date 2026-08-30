@@ -46,6 +46,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         paragraphs: [
           "Administrador y Desarrollador ingresan al Panel principal. Usuario activo y Mando medio activo comienzan en Nueva anomalía para facilitar el registro operativo.",
           "El menú lateral muestra únicamente las secciones habilitadas para el nivel del usuario. En pantallas pequeñas se abre desde el botón Menú del encabezado.",
+          "Administrador y Desarrollador disponen de Resumen rápido debajo de Bandeja. El menú contextual del Panel principal enlaza al Centro de Ayuda y a los demás bloques de gestión.",
         ],
       },
       {
@@ -55,6 +56,7 @@ export const HELP_TOPICS: HelpTopic[] = [
           "Título superior: identifica la sección actual.",
           "Usuario: muestra la persona que tiene la sesión abierta.",
           "Cerrar sesión: finaliza el acceso actual y vuelve al ingreso.",
+          "Acerca de: en el Centro de Ayuda muestra el nombre, versión, fecha de compilación, autor y tecnologías configuradas del sistema.",
         ],
       },
       {
@@ -64,7 +66,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         ],
       },
     ],
-    related: ["cambiar-contrasena", "usar-bandeja", "registrar-anomalia"],
+    related: ["cambiar-contrasena", "usar-bandeja", "registrar-anomalia", "consultar-resumen-rapido"],
   },
   {
     id: "cambiar-contrasena",
@@ -492,6 +494,51 @@ export const HELP_TOPICS: HelpTopic[] = [
     related: ["orientarse-en-el-sistema", "ejecutar-acciones", "consultar-anomalias"],
   },
   {
+    id: "consultar-resumen-rapido",
+    category: "Análisis y control",
+    title: "Consultar el Resumen rápido",
+    summary: "Interpreta los totales históricos, los estados y el detalle general por usuario.",
+    audience: "admin",
+    keywords: ["resumen", "rapido", "panel", "totales", "estados", "usuario", "historico", "vencido"],
+    route: "/dashboard/summary",
+    routeLabel: "Ir a Resumen rápido",
+    sections: [
+      {
+        title: "Objetivo y acceso",
+        paragraphs: [
+          "Resumen rápido está disponible para Administrador y Desarrollador desde el panel lateral, debajo de Bandeja.",
+          "Su finalidad es ofrecer una lectura general del sistema sin reemplazar los listados operativos ni los dashboards de Indicadores.",
+        ],
+      },
+      {
+        title: "Información mostrada",
+        bullets: [
+          "Anomalías: total y distribución por estados definidos en el resumen.",
+          "Acciones: acciones directas y acciones surgidas de tratamientos, incluyendo su situación y vencimiento.",
+          "Tratamientos: total y distribución por estado operativo.",
+          "Verificaciones: pendientes, vencidas y completadas.",
+        ],
+      },
+      {
+        title: "Cómo utilizarlo",
+        steps: [
+          "Revisa el total principal de cada tarjeta.",
+          "Compara el desglose compacto de estados para detectar acumulaciones o vencimientos.",
+          "Selecciona Ver detalle por usuario para abrir la tabla individual.",
+          "Utiliza el enlace del módulo correspondiente cuando necesites investigar o gestionar los registros.",
+        ],
+      },
+      {
+        title: "Alcance de los datos",
+        paragraphs: [
+          "El resumen global incluye los registros históricos contemplados por cada cálculo y presenta una fila de total general en el detalle por usuario.",
+        ],
+        note: "Las tarjetas son informativas. Las modificaciones se realizan desde Anomalías, Tratamientos, Acciones, Validaciones o el módulo relacionado.",
+      },
+    ],
+    related: ["consultar-indicadores", "consultar-anomalias", "consultar-tratamientos", "usar-bandeja"],
+  },
+  {
     id: "consultar-indicadores",
     category: "Análisis y control",
     title: "Consultar indicadores",
@@ -530,6 +577,52 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     related: ["ordenes-afectadas", "consultar-anomalias", "consultar-tratamientos"],
+  },
+  {
+    id: "trazabilidad-versiones-iso",
+    category: "Análisis y control",
+    title: "Comprender versiones y trazabilidad ISO 9001",
+    summary: "Interpreta el historial de cambios y conoce qué controles completan la evidencia documental.",
+    audience: "all",
+    keywords: ["version", "cambio", "historial", "iso", "9001", "trazabilidad", "documentacion", "git", "aprobacion"],
+    sections: [
+      {
+        title: "Finalidad del historial",
+        paragraphs: [
+          "El historial identifica la versión, fecha, estado, resumen, referencia Git y responsable de cada revisión registrada.",
+          "Se consulta desde Centro de Ayuda, Acerca de, Historial de cambios.",
+        ],
+      },
+      {
+        title: "Relación con ISO 9001",
+        paragraphs: [
+          "El control de la información documentada requiere identificar revisiones y controlar los cambios. La planificación de cambios también debe preservar la integridad del sistema de gestión.",
+          "La guía oficial de ISO sobre información documentada y la ISO 10013:2021 orientan el desarrollo y mantenimiento de esta información.",
+          "En la cabecera principal del Centro de Ayuda, el botón Guía de información documentada resume el propósito, los soportes, las evidencias que deben conservarse y los criterios recomendados para el Sistema de Gestión de Calidad.",
+        ],
+      },
+      {
+        title: "Evidencia que aporta",
+        bullets: [
+          "Identificación de la revisión vigente y de las anteriores.",
+          "Resumen comprensible del alcance de cada cambio.",
+          "Fecha, estado y responsable del registro.",
+          "Vínculo lógico con el commit o tag conservado en Git.",
+        ],
+      },
+      {
+        title: "Controles complementarios",
+        bullets: [
+          "Pruebas satisfactorias antes de liberar.",
+          "Aprobación de la versión por una persona autorizada.",
+          "Commit y tag definitivos, sin cambios locales pendientes.",
+          "Backup previo y registro del despliegue cuando pasa a producción.",
+          "Identificación clara de versiones obsoletas y de la vigente.",
+        ],
+        note: "El historial ayuda a la trazabilidad, pero su existencia aislada no certifica el cumplimiento de ISO 9001.",
+      },
+    ],
+    related: ["consultar-resumen-rapido", "orientarse-en-el-sistema", "administrar-catalogos"],
   },
   {
     id: "ordenes-afectadas",

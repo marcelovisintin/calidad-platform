@@ -31,7 +31,7 @@ Sistema de Gestión de Calidad
 ├── Inicio / Panel de gestión [Admin]
 │   ├── Vista compacta
 │   └── Menú contextual
-│       ├── Bienvenida y ayuda
+│       ├── Centro de ayuda → Ayuda
 │       ├── Resumen rápido
 │       │   ├── Anomalías
 │       │   │   └── Ver detalle por usuario [Admin]
@@ -42,21 +42,19 @@ Sistema de Gestión de Calidad
 │       │   └── Verificaciones de eficacia
 │       │       └── Ver detalle por usuario [Admin]
 │       ├── Secciones principales
-│       │   ├── Registrar anomalía → Nueva anomalía
-│       │   ├── Seguimiento de anomalías → Seguimiento de anomalías
-│       │   ├── Tratamientos → Tratamientos
-│       │   ├── Observación → Observaciones
-│       │   ├── Seguimiento de tratamientos → Seguimiento de tratamientos
-│       │   ├── Acciones → Acciones y pendientes
-│       │   ├── Validación → Validaciones
-│       │   ├── Lecciones aprendidas → Lecciones aprendidas
-│       │   ├── Bandeja y pendientes → Bandeja
-│       │   └── Órdenes afectadas → Órdenes afectadas
-│       ├── Pasos del flujo
-│       │   ├── Registro y contención
-│       │   ├── Revisión de hallazgos y causa
-│       │   ├── Plan y ejecución
-│       │   └── Verificación y cierre
+│       │   ├── 1. Nueva anomalía
+│       │   ├── 2. Seguimiento de anomalías
+│       │   ├── 3. Observaciones
+│       │   ├── 4. Tratamientos
+│       │   ├── 5. Acciones
+│       │   ├── 6. Validaciones
+│       │   ├── 7. Lecciones aprendidas
+│       │   ├── 8. Seguimiento de tratamientos
+│       │   ├── 9. Bandeja
+│       │   ├── 10. Resumen rápido
+│       │   ├── 11. Indicadores
+│       │   ├── 12. Órdenes afectadas
+│       │   └── 13. Ayuda
 │       ├── Seguimiento operativo
 │       │   ├── Últimas anomalías → Detalle de anomalía
 │       │   ├── Tratamientos en gestión → Tratamientos
@@ -249,6 +247,9 @@ Sistema de Gestión de Calidad
 │   └── Historial
 │       └── Pendientes completados/descartados
 │
+├── Resumen rápido [Admin]
+│   └── Abre el resumen histórico del Panel de gestión
+│
 ├── Indicadores [Admin]
 │   ├── Catálogo
 │   │   ├── Anomalías generadas y tratadas
@@ -289,6 +290,21 @@ Sistema de Gestión de Calidad
 │   ├── Tabla paginada
 │   │   └── Abrir anomalía → Detalle de anomalía
 │   └── Exportar CSV
+│
+├── Centro de Ayuda [Todos]
+│   ├── Búsqueda y filtros por categoría
+│   ├── Guías según el nivel de acceso
+│   ├── Progreso personal
+│   ├── Ayuda contextual y recorridos guiados
+│   ├── Guía de información documentada
+│   │   ├── Finalidad, soportes y responsabilidades
+│   │   ├── Documentos y registros como evidencia
+│   │   ├── Evidencia de no conformidades
+│   │   └── Criterios recomendados para el sistema
+│   └── Acerca de
+│       ├── Información del sistema y tecnologías
+│       ├── Historial controlado de cambios
+│       └── Ayuda de trazabilidad ISO 9001
 │
 └── Configuración y maestros [Admin]
     ├── Usuarios

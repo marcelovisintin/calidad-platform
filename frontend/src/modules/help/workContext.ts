@@ -57,6 +57,16 @@ export function subscribeHelpWorkContext(listener: (detail: HelpWorkContextEvent
 export function getDefaultHelpWorkContext(pathname: string, user?: CurrentUser | null): HelpWorkContext | null {
   const currentUser = userLabel(user);
 
+  if (pathname === "/dashboard/summary") {
+    return {
+      status: "Resumen global",
+      stage: "Control y seguimiento",
+      responsible: currentUser,
+      nextAction: "Revisa los totales y estados; abre el detalle por usuario cuando necesites identificar responsables o pendientes.",
+      blockers: [],
+      tone: "info",
+    };
+  }
   if (pathname === "/anomalies/new") {
     return {
       status: "Nuevo registro",

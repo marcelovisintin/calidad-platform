@@ -103,15 +103,16 @@ Visible en el menú para Administrador y Desarrollador. El backend puede calcula
 
 La pantalla comienza en **Vista compacta**. El botón **Menú contextual** permite abrir:
 
-- **Bienvenida y ayuda:** guía rápida de registrar, seguir, ejecutar y administrar.
+- **Centro de ayuda:** abre el módulo de ayuda vigente con guías, búsquedas y orientación por perfil.
 - **Resumen rápido:** tarjetas históricas de anomalías, acciones, tratamientos y verificaciones.
 - **Secciones principales:** accesos a módulos operativos.
-- **Pasos del flujo:** registro y contención; revisión y causa; plan y ejecución; verificación y cierre.
 - **Seguimiento operativo:** últimas anomalías, tratamientos en gestión y acciones pendientes.
 - **Indicadores:** disponible para Administrador y Desarrollador.
 - **Configuración admin:** usuarios, alcances y maestros; disponible para Administrador y Desarrollador.
 
 ### Resumen rápido
+
+También tiene un acceso directo en el panel lateral, inmediatamente debajo de **Bandeja**, visible solo para Administrador y Desarrollador.
 
 Las tarjetas consideran registros históricos, no solo activos:
 
@@ -121,6 +122,16 @@ Las tarjetas consideran registros históricos, no solo activos:
 - **Verificaciones:** pendientes, vencidas y completadas.
 
 Para Administrador/Desarrollador el resumen es global y permite **Ver detalle por usuario**, con fila de total general. Para un resumen no global, el backend limita la información a casos relacionados con el usuario.
+
+### Acerca de e historial de cambios
+
+En **Centro de Ayuda → Acerca de** se muestran el nombre del sistema, la versión vigente, el estado de la versión, la fecha de compilación, el autor y las tecnologías configuradas.
+
+El botón **Historial de cambios** despliega las revisiones desde la más reciente, indicando número, fecha, estado, resumen, commit/tag y responsable. Una versión marcada **En preparación local** todavía no debe considerarse liberada ni productiva.
+
+La ayuda **¿Cómo aporta a ISO 9001?** explica la relación con el control de información documentada y aclara los controles complementarios: pruebas, aprobación, commit/tag definitivo, backup y registro del despliegue. El historial mejora la trazabilidad, pero no constituye por sí solo certificación de cumplimiento.
+
+Desde la cabecera principal del **Centro de Ayuda**, el botón **Guía de información documentada** despliega una explicación ampliada sobre el propósito y los posibles soportes de la información documentada, las evidencias que deben conservarse y los registros relativos a no conformidades. También incluye una tabla de criterios recomendados para fortalecer el sistema. Esa tabla expresa objetivos de diseño y no confirma por sí sola que cada capacidad se encuentre implementada.
 
 ### Configuración y maestros
 

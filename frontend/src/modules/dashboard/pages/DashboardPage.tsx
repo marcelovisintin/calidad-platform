@@ -7,7 +7,6 @@ import type { ActionItemSummary, AnomalyListItem, DashboardSummaryCard, Dashboar
 import { isAdminUser } from "../../../app/access";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { formatDate, formatDateTime } from "../../../app/utils";
-import { CompanyLogo } from "../../../components/CompanyLogo";
 import { DataState } from "../../../components/DataState";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
@@ -17,10 +16,10 @@ import { IndicatorsCatalog } from "../../indicators/components/IndicatorsCatalog
 const primarySectionsBase = [
   {
     sequence: 1,
-    title: "Registrar anomalia",
+    title: "Nueva anomalia",
     description: "Carga inicial desde planta con datos rapidos, multiples ordenes afectadas y confirmacion inmediata.",
     to: "/anomalies/new",
-    label: "Ir a nueva anomalia",
+    label: "Abrir Nueva anomalia",
   },
   {
     sequence: 2,
@@ -31,82 +30,80 @@ const primarySectionsBase = [
   },
   {
     sequence: 3,
-    title: "Tratamientos",
-    description: "Gestiona convocatorias, analisis de causa raiz y tareas surgidas de anomalias con Revisión de hallazgos para tratamiento.",
-    to: "/treatments",
-    label: "Ver tratamientos",
+    title: "Observaciones",
+    description: "Cierre directo de anomalias con Revisión de hallazgos como Observacion, con responsable, evidencia y verificacion de eficacia.",
+    to: "/anomalies/observations",
+    label: "Abrir Observaciones",
   },
   {
     sequence: 4,
-    title: "Observacion",
-    description: "Cierre directo de anomalias con Revisión de hallazgos como Observacion, con responsable, evidencia y verificacion de eficacia.",
-    to: "/anomalies/observations",
-    label: "Gestionar Observacion",
+    title: "Tratamientos",
+    description: "Gestiona convocatorias, analisis de causa raiz y acciones surgidas de anomalias con Revisión de hallazgos para tratamiento.",
+    to: "/treatments",
+    label: "Abrir Tratamientos",
   },
   {
     sequence: 5,
-    title: "Seguimiento de tratamientos",
-    description: "Consulta solo lectura de procedimientos, tareas, responsables, evidencias y validaciones.",
-    to: "/treatments/tracking",
-    label: "Auditar tratamientos",
-  },
-  {
-    sequence: 6,
     title: "Acciones",
     description: "Accede a las acciones asignadas y gestiona su ejecucion y evidencia.",
     to: "/actions/mine",
-    label: "Ver acciones",
+    label: "Abrir Acciones",
+  },
+  {
+    sequence: 6,
+    title: "Validaciones",
+    description: "Evalua si los tratamientos completados fueron eficaces o deben reabrirse.",
+    to: "/validation",
+    label: "Abrir Validaciones",
   },
   {
     sequence: 7,
-    title: "Validacion",
-    description: "Evalua si los tratamientos completados fueron eficaces o deben reabrirse.",
-    to: "/validation",
-    label: "Validar eficacia",
-  },
-  {
-    sequence: 8,
     title: "Lecciones aprendidas",
     description: "Registra aprendizajes y evidencias de tratamientos validados como eficaces.",
     to: "/learned-lessons",
-    label: "Registrar aprendizajes",
+    label: "Abrir Lecciones aprendidas",
+  },
+  {
+    sequence: 8,
+    title: "Seguimiento de tratamientos",
+    description: "Consulta solo lectura de procedimientos, acciones, responsables, evidencias y validaciones.",
+    to: "/treatments/tracking",
+    label: "Abrir Seguimiento de tratamientos",
   },
   {
     sequence: 9,
-    title: "Bandeja y pendientes",
+    title: "Bandeja",
     description: "Revisa pendientes, avisos, participaciones e historial sin informacion duplicada.",
     to: "/notifications/inbox",
-    label: "Abrir bandeja",
+    label: "Abrir Bandeja",
   },
   {
     sequence: 10,
+    title: "Resumen rapido",
+    description: "Consulta totales historicos, distribucion por estados y detalle general por usuario.",
+    to: "/dashboard/summary",
+    label: "Abrir Resumen rapido",
+  },
+  {
+    sequence: 11,
+    title: "Indicadores",
+    description: "Analiza resultados mediante filtros, metricas, graficos, listados e informes.",
+    to: "/indicators",
+    label: "Abrir Indicadores",
+  },
+  {
+    sequence: 12,
     title: "Ordenes afectadas",
     description: "Consulta ordenes vinculadas con anomalias, cantidades, procesos y totalizadores.",
     to: "/affected-orders",
-    label: "Ver ordenes afectadas",
-  },
-];
-
-const workflowSections = [
-  {
-    title: "Registro y contencion",
-    description: "Inicio del caso, contencion operativa y confirmacion inicial del evento.",
-    helper: "Se trabaja desde Nueva anomalia y el detalle del caso.",
+    label: "Abrir Ordenes afectadas",
   },
   {
-    title: "Revisión de hallazgos y causa",
-    description: "Analisis tecnico, criterio de Revisión de hallazgos, origen y determinacion de causa raiz.",
-    helper: "Ideal para perfiles de calidad, supervision e ingenieria.",
-  },
-  {
-    title: "Plan y ejecucion",
-    description: "Definicion de propuestas, acciones, responsables, evidencia y seguimiento.",
-    helper: "Se apoya en Acciones y en la Bandeja unificada.",
-  },
-  {
-    title: "Verificacion y cierre",
-    description: "Control de eficacia, cierre formal y aprendizaje documentado.",
-    helper: "La trazabilidad completa queda disponible en el detalle.",
+    sequence: 13,
+    title: "Ayuda",
+    description: "Consulta guias por perfil, ayuda contextual, recorridos interactivos y progreso personal.",
+    to: "/help",
+    label: "Abrir Ayuda",
   },
 ];
 
@@ -127,7 +124,7 @@ const adminSections = [
   { title: "Panel admin Django", description: "Acceso completo al panel tecnico y maestros.", href: "/admin/" },
 ];
 
-type DashboardView = "none" | "welcome" | "overview" | "sections" | "workflow" | "tracking" | "indicators" | "admin";
+type DashboardView = "none" | "overview" | "sections" | "tracking" | "indicators" | "admin";
 
 type ViewOption = {
   id: DashboardView;
@@ -135,19 +132,15 @@ type ViewOption = {
 };
 
 const baseOptions: ViewOption[] = [
-  { id: "welcome", label: "Bienvenida y ayuda" },
   { id: "overview", label: "Resumen rapido" },
   { id: "sections", label: "Secciones principales" },
-  { id: "workflow", label: "Pasos del flujo" },
   { id: "tracking", label: "Seguimiento operativo" },
 ];
 
 const viewLabels: Record<DashboardView, string> = {
   none: "Vista compacta",
-  welcome: "Bienvenida y ayuda",
   overview: "Resumen rapido",
   sections: "Secciones principales",
-  workflow: "Pasos del flujo",
   tracking: "Seguimiento operativo",
   indicators: "Indicadores",
   admin: "Configuracion y maestros",
@@ -265,13 +258,13 @@ function DashboardSummaryDetail({ card }: { card: DashboardSummaryCard }) {
   );
 }
 
-function resolveDashboardView(value: string | null, adminUser: boolean): DashboardView {
+function resolveDashboardView(value: string | null, adminUser: boolean, defaultView: DashboardView = "none"): DashboardView {
   if (!value) {
-    return "none";
+    return defaultView;
   }
 
   const normalized = value.toLowerCase() as DashboardView;
-  const allowedBase: DashboardView[] = ["welcome", "overview", "sections", "workflow", "tracking", "none"];
+  const allowedBase: DashboardView[] = ["overview", "sections", "tracking", "none"];
   if (allowedBase.includes(normalized)) {
     return normalized;
   }
@@ -283,18 +276,18 @@ function resolveDashboardView(value: string | null, adminUser: boolean): Dashboa
   return "none";
 }
 
-export function DashboardPage() {
+export function DashboardPage({ defaultView = "none" }: { defaultView?: DashboardView }) {
   usePageTitle("Inicio");
   const { user } = useAuth();
   const adminUser = isAdminUser(user);
   const [searchParams, setSearchParams] = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);
   const [expandedSummary, setExpandedSummary] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<DashboardView>(() => resolveDashboardView(searchParams.get("view"), adminUser));
+  const [activeView, setActiveView] = useState<DashboardView>(() => resolveDashboardView(searchParams.get("view"), adminUser, defaultView));
 
   useEffect(() => {
-    setActiveView(resolveDashboardView(searchParams.get("view"), adminUser));
-  }, [adminUser, searchParams]);
+    setActiveView(resolveDashboardView(searchParams.get("view"), adminUser, defaultView));
+  }, [adminUser, defaultView, searchParams]);
 
   const contextualOptions = useMemo(
     () => (adminUser ? [...baseOptions, { id: "indicators", label: "Indicadores" }, { id: "admin", label: "Configuracion admin" }] : baseOptions),
@@ -331,7 +324,7 @@ export function DashboardPage() {
     setActiveView(viewId);
     setMenuOpen(false);
     if (viewId === "none") {
-      setSearchParams({});
+      setSearchParams(defaultView === "none" ? {} : { view: "none" });
       return;
     }
     setSearchParams({ view: viewId });
@@ -359,6 +352,9 @@ export function DashboardPage() {
 
           {menuOpen ? (
             <div className="context-menu-popover">
+              <Link className="context-menu-option" onClick={() => setMenuOpen(false)} to="/help">
+                Centro de ayuda
+              </Link>
               {contextualOptions.map((option) => (
                 <button
                   className={`context-menu-option${activeView === option.id ? " active" : ""}`}
@@ -392,41 +388,6 @@ export function DashboardPage() {
       <DataState loading={loading} error={error} onRetry={reload}>
         {data ? (
           <>
-            {activeView === "welcome" ? (
-              <section className="panel control-hero">
-                <div className="control-hero-copy">
-                  <CompanyLogo />
-                  <div>
-                    <p className="eyebrow">Centro principal</p>
-                    <h2>Bienvenido al espacio de gestion</h2>
-                    <p className="page-description">
-                      Desde esta pantalla podes orientar el trabajo diario, abrir nuevas anomalias, seguir acciones y entrar rapido a las
-                      secciones clave del flujo.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="control-hero-help">
-                  <p className="eyebrow">Ayuda rapida</p>
-                  <h2>Como usar el sistema</h2>
-                  <ul className="help-list">
-                    <li>
-                      <strong>1. Registrar:</strong> usa <span>Nueva anomalia</span> para iniciar un caso con datos operativos.
-                    </li>
-                    <li>
-                      <strong>2. Seguir:</strong> entra a <span>Seguimiento de anomalias</span> para ver estado, etapa e historial.
-                    </li>
-                    <li>
-                      <strong>3. Ejecutar:</strong> usa <span>Acciones</span> y la <span>Bandeja</span> unificada para resolver tareas.
-                    </li>
-                    <li>
-                      <strong>4. Administrar:</strong> si sos admin, usa el menu contextual para entrar a configuracion y catalogos.
-                    </li>
-                  </ul>
-                </div>
-              </section>
-            ) : null}
-
             {activeView === "overview" ? (
               <section className="panel">
                 <div className="section-head compact">
@@ -469,27 +430,6 @@ export function DashboardPage() {
                       <p>{section.description}</p>
                       <span className="management-card-link">{section.label}</span>
                     </Link>
-                  ))}
-                </div>
-              </section>
-            ) : null}
-
-            {activeView === "workflow" ? (
-              <section className="panel">
-                <div className="section-head">
-                  <div>
-                    <p className="eyebrow">Flujo</p>
-                    <h2>Pasos clave del proceso</h2>
-                  </div>
-                </div>
-                <div className="workflow-grid">
-                  {workflowSections.map((step, index) => (
-                    <article className="workflow-card" key={step.title}>
-                      <span className="workflow-step">0{index + 1}</span>
-                      <h3>{step.title}</h3>
-                      <p>{step.description}</p>
-                      <small>{step.helper}</small>
-                    </article>
                   ))}
                 </div>
               </section>

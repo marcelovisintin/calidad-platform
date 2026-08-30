@@ -49,6 +49,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomeRedirect /> },
       { path: "dashboard", element: <DashboardPage /> },
+      { path: "dashboard/summary", element: <DashboardPage defaultView="overview" /> },
       { path: "anomalies", element: <MyAnomaliesPage /> },
       { path: "anomalies/observations", element: <ImmediateActionsPage /> },
       { path: "anomalies/immediate-actions", element: <ImmediateActionsPage /> },

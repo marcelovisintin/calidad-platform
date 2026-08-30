@@ -4,6 +4,9 @@ import { isAdminUser, isManagementUser } from "../../../app/access";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { PageHeader } from "../../../components/PageHeader";
 import { usePageTitle } from "../../../hooks/usePageTitle";
+import { ABOUT_SYSTEM } from "../aboutInfo";
+import { DocumentedInformationGuidePanel } from "../components/DocumentedInformationGuidePanel";
+import { RELEASE_HISTORY } from "../releaseHistory";
 import {
   HELP_CATEGORY_ORDER,
   HELP_TOPICS,
@@ -72,6 +75,10 @@ export function HelpCenterPage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [category, setCategory] = useState(ALL_CATEGORIES);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [isoHelpOpen, setIsoHelpOpen] = useState(false);
+  const [documentGuideOpen, setDocumentGuideOpen] = useState(false);
   const [progress, setProgress] = useState<HelpProgress>(() => readHelpProgress(user?.id));
   const query = searchParams.get("q") ?? "";
   const selectedTopicId = searchParams.get("topic");
@@ -116,6 +123,12 @@ export function HelpCenterPage() {
     : 0;
   const continueTopic = availableTopics.find((topic) => topic.quick && !readTopicIds.has(topic.id))
     ?? availableTopics.find((topic) => !readTopicIds.has(topic.id));
+  const buildDate = useMemo(() => {
+    const date = new Date(ABOUT_SYSTEM.buildDate);
+    return Number.isNaN(date.getTime())
+      ? ABOUT_SYSTEM.buildDate
+      : new Intl.DateTimeFormat("es-AR", { dateStyle: "long", timeStyle: "short" }).format(date);
+  }, []);
 
   useEffect(() => {
     setProgress(readHelpProgress(user?.id));
@@ -222,7 +235,136 @@ export function HelpCenterPage() {
       <PageHeader
         title="Centro de Ayuda"
         description="Guías de uso del Sistema de Gestión de Calidad, organizadas según tu nivel de acceso."
+        action={(
+          <div className="help-header-actions">
+            <button
+              aria-controls="documented-information-guide"
+              aria-expanded={documentGuideOpen}
+              className="button button-secondary"
+              onClick={() => {
+                setDocumentGuideOpen((current) => !current);
+                setAboutOpen(false);
+                setHistoryOpen(false);
+                setIsoHelpOpen(false);
+              }}
+              type="button"
+            >
+              {documentGuideOpen ? "Ocultar guía documental" : "Guía de información documentada"}
+            </button>
+            <button
+              aria-controls="about-system-card"
+              aria-expanded={aboutOpen}
+              className="button button-secondary help-about-toggle"
+              onClick={() => {
+                setAboutOpen((current) => !current);
+                setDocumentGuideOpen(false);
+              }}
+              type="button"
+            >
+              Acerca de
+            </button>
+          </div>
+        )}
       />
+
+      {documentGuideOpen ? <DocumentedInformationGuidePanel /> : null}
+
+      {aboutOpen ? (
+        <section className="help-about-card" id="about-system-card">
+          <div className="help-about-main">
+            <p className="eyebrow">Información del sistema</p>
+            <h2>{ABOUT_SYSTEM.name}</h2>
+            <p>{ABOUT_SYSTEM.description}</p>
+            <strong>Creado por {ABOUT_SYSTEM.createdBy}</strong>
+          </div>
+          <dl className="help-about-meta">
+            <div>
+              <dt>Versión</dt>
+              <dd>{ABOUT_SYSTEM.version}</dd>
+              <small>{ABOUT_SYSTEM.versionStatus} · versión técnica {ABOUT_SYSTEM.technicalVersion}</small>
+              <button
+                aria-controls="release-history-panel"
+                aria-expanded={historyOpen}
+                className="button button-secondary help-history-toggle"
+                onClick={() => setHistoryOpen((current) => !current)}
+                type="button"
+              >
+                {historyOpen ? "Ocultar historial" : "Historial de cambios"}
+              </button>
+            </div>
+            <div><dt>Fecha de compilación</dt><dd>{buildDate}</dd></div>
+          </dl>
+          <div className="help-about-technologies">
+            <h3>Tecnologías utilizadas</h3>
+            <div>
+              {ABOUT_SYSTEM.technologies.map((technology) => <span key={technology}>{technology}</span>)}
+            </div>
+          </div>
+
+          {historyOpen ? (
+            <section className="help-release-history" id="release-history-panel">
+              <div className="help-release-heading">
+                <div>
+                  <p className="eyebrow">Trazabilidad de revisiones</p>
+                  <h3>Historial de cambios</h3>
+                  <p>Versiones ordenadas desde la más reciente. Cada registro identifica fecha, estado, resumen, referencia Git y responsable.</p>
+                </div>
+                <button
+                  aria-controls="iso-version-help"
+                  aria-expanded={isoHelpOpen}
+                  className="button button-secondary"
+                  onClick={() => setIsoHelpOpen((current) => !current)}
+                  type="button"
+                >
+                  {isoHelpOpen ? "Ocultar ayuda ISO 9001" : "¿Cómo aporta a ISO 9001?"}
+                </button>
+              </div>
+
+              {isoHelpOpen ? (
+                <aside className="help-iso-version-guide" id="iso-version-help">
+                  <h4>Control de cambios e información documentada</h4>
+                  <p>
+                    ISO 9001 requiere controlar la información documentada y gestionar los cambios de manera planificada. Este historial ayuda a identificar la revisión vigente, qué cambió, cuándo, quién la registró y qué evidencia Git la respalda.
+                  </p>
+                  <p>
+                    Para una trazabilidad completa debe complementarse con prueba, aprobación, tag o commit definitivo, respaldo y registro del despliegue. La existencia de esta pantalla por sí sola no certifica el cumplimiento de la norma.
+                  </p>
+                  <ul>
+                    <li>Una versión en preparación no debe presentarse como liberada o productiva.</li>
+                    <li>Al aprobar una versión deben completarse su commit/tag, responsable y estado real.</li>
+                    <li>Las versiones obsoletas se conservan como historial, pero se identifica claramente cuál está vigente.</li>
+                  </ul>
+                  <div className="help-iso-links">
+                    <a href="https://www.iso.org/files/live/sites/isoorg/files/archive/pdf/en/documented_information.pdf" rel="noreferrer" target="_blank">Guía oficial sobre información documentada</a>
+                    <a href="https://www.iso.org/standard/75736.html" rel="noreferrer" target="_blank">ISO 10013:2021</a>
+                  </div>
+                </aside>
+              ) : null}
+
+              <div className="help-release-list">
+                {RELEASE_HISTORY.map((release) => (
+                  <article className={`help-release-entry ${release.status}`} key={release.version}>
+                    <div className="help-release-entry-head">
+                      <div>
+                        <strong>{release.version}</strong>
+                        <time dateTime={release.date}>{new Intl.DateTimeFormat("es-AR", { dateStyle: "long" }).format(new Date(`${release.date}T12:00:00`))}</time>
+                      </div>
+                      <span>{release.statusLabel}</span>
+                    </div>
+                    <ul>
+                      {release.summary.map((item) => <li key={item}>{item}</li>)}
+                    </ul>
+                    <footer>
+                      <span>Git: <strong>{release.commit}</strong></span>
+                      <span>Responsable: <strong>{release.responsible}</strong></span>
+                    </footer>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="help-progress-panel" aria-labelledby="help-progress-title">
         <div className="help-progress-summary">

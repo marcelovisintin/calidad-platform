@@ -12,6 +12,18 @@ export type GuidedTourDefinition = {
 };
 
 const TOURS: Record<string, GuidedTourDefinition> = {
+  quickSummary: {
+    id: "quick-summary",
+    title: "Consultar el Resumen rápido",
+    description: "Interpreta los totales históricos, los estados y el detalle por usuario.",
+    steps: [
+      { selector: ".contextual-toolbar", title: "Resumen rápido", content: "Esta vista concentra el estado general del sistema para Administrador y Desarrollador. Los datos se obtienen del resumen histórico vigente." },
+      { selector: ".contextual-current", title: "Vista activa", content: "El encabezado confirma que estás consultando Resumen rápido. Desde el Menú contextual puedes abrir otros bloques o el Centro de Ayuda." },
+      { selector: ".dashboard-summary-grid", title: "Tarjetas de resumen", content: "Cada tarjeta muestra el total de un proceso y su distribución por estados. Los registros históricos y terminales forman parte de los cálculos definidos." },
+      { selector: ".dashboard-summary-card", title: "Leer una tarjeta", content: "Revisa el total principal y el desglose compacto. Usa Ver detalle por usuario para identificar la distribución individual y el total general." },
+      { selector: ".dashboard-detail-toggle", title: "Detalle por usuario y seguimiento", content: "Al finalizar el recorrido, selecciona Ver detalle por usuario para comparar totales y estados de cada persona. Si necesitas investigar una anomalía concreta, abre Seguimiento de anomalías desde el panel lateral y consulta allí su detalle, responsable e historial." },
+    ],
+  },
   newAnomaly: {
     id: "new-anomaly",
     title: "Registrar una anomalía",
@@ -166,6 +178,7 @@ const TOURS: Record<string, GuidedTourDefinition> = {
 };
 
 export function getGuidedTour(pathname: string, access: { isAdmin: boolean; isManagement: boolean }) {
+  if (pathname === "/dashboard/summary" && access.isAdmin) return TOURS.quickSummary;
   if (pathname === "/anomalies/new") return TOURS.newAnomaly;
   if (pathname === "/anomalies") return TOURS.anomalyTracking;
   if (pathname === "/anomalies/observations" || pathname === "/anomalies/immediate-actions") return TOURS.observations;

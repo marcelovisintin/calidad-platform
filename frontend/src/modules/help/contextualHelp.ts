@@ -19,6 +19,9 @@ export function getContextualHelp(
     return null;
   }
 
+  if (pathname === "/dashboard/summary") {
+    return access.isAdmin ? context("consultar-resumen-rapido", "Resumen rápido") : null;
+  }
   if (pathname === "/dashboard") {
     return context("orientarse-en-el-sistema", "Panel principal");
   }
