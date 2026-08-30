@@ -1,0 +1,53 @@
+name: Versionado automatico
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: automatic-release-tag-main
+  cancel-in-progress: false
+
+jobs:
+  tag-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obtener repositorio e historial completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calcular siguiente version diaria
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_date=$(TZ=America/Argentina/Buenos_Aires date +%F)
+          prefix="release-${release_date}."
+          maximum=0
+
+          while IFS= read -r tag; do
+            suffix=${tag#"$prefix"}
+            if [[ "$suffix" =~ ^[0-9]+$ ]] && (( suffix > maximum )); then
+              maximum=$suffix
+            fi
+          done < <(git tag --list "${prefix}*")
+
+          release_tag="${prefix}$((maximum + 1))"
+          echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Etiquetar commit publicado
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          subject=$(git log -1 --pretty=%s "$GITHUB_SHA")
+          git tag -a "$RELEASE_TAG" "$GITHUB_SHA" -m "$RELEASE_TAG - $subject"
+          git push origin "$RELEASE_TAG"

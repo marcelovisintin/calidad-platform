@@ -79,6 +79,15 @@ $composePath = Get-AbsolutePath -PathValue $ComposeFile
 
 Import-DotEnv -PathValue $envPath
 
+$env:APP_GIT_COMMIT = (& git -C $projectRoot rev-parse HEAD).Trim()
+Assert-NativeCommandSucceeded -ExitCode $LASTEXITCODE -Operation "La lectura del commit Git"
+$env:APP_GIT_SHORT_COMMIT = (& git -C $projectRoot rev-parse --short HEAD).Trim()
+$env:APP_GIT_BRANCH = (& git -C $projectRoot branch --show-current).Trim()
+$env:APP_GIT_DIRTY = if ((& git -C $projectRoot status --porcelain)) { "true" } else { "false" }
+$env:APP_DEPLOYMENT_ENV = "local"
+$gitHistory = (& git -C $projectRoot log -n 30 --date=iso-strict "--pretty=format:%H`t%h`t%aI`t%an`t%s`t%D") -join "`n"
+$env:APP_GIT_HISTORY_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($gitHistory))
+
 $requiredDirs = @(
     $env:HOST_POSTGRES_DATA,
     $env:HOST_MEDIA_ROOT,
@@ -126,7 +135,7 @@ if ($PackageCaCertificate) {
 
     docker build --secret "id=pip_ca,src=$packageCaPath" -f deploy/docker/backend.Dockerfile -t docker-backend .
     Assert-NativeCommandSucceeded -ExitCode $LASTEXITCODE -Operation "La construccion del backend"
-    docker build --secret "id=npm_ca,src=$packageCaPath" -f deploy/docker/frontend.Dockerfile -t docker-frontend .
+    docker build --secret "id=npm_ca,src=$packageCaPath" --build-arg "APP_GIT_COMMIT=$env:APP_GIT_COMMIT" --build-arg "APP_GIT_SHORT_COMMIT=$env:APP_GIT_SHORT_COMMIT" --build-arg "APP_GIT_BRANCH=$env:APP_GIT_BRANCH" --build-arg "APP_GIT_DIRTY=$env:APP_GIT_DIRTY" --build-arg "APP_DEPLOYMENT_ENV=$env:APP_DEPLOYMENT_ENV" --build-arg "APP_GIT_HISTORY_B64=$env:APP_GIT_HISTORY_B64" -f deploy/docker/frontend.Dockerfile -t docker-frontend .
     Assert-NativeCommandSucceeded -ExitCode $LASTEXITCODE -Operation "La construccion del frontend"
     docker compose --env-file $envPath -f $composePath up -d --no-build
     Assert-NativeCommandSucceeded -ExitCode $LASTEXITCODE -Operation "El inicio del stack"

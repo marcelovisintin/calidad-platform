@@ -303,7 +303,8 @@ Sistema de Gestión de Calidad
 │   │   └── Criterios recomendados para el sistema
 │   └── Acerca de
 │       ├── Información del sistema y tecnologías
-│       ├── Historial controlado de cambios
+│       ├── Identificación automática de commit, rama, entorno y compilación
+│       ├── Historial automático de los últimos commits de Git
 │       └── Ayuda de trazabilidad ISO 9001
 │
 └── Configuración y maestros [Admin]

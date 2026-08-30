@@ -2,6 +2,7 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 COMPOSE_FILE="${COMPOSE_FILE:-$SCRIPT_DIR/../docker/docker-compose.local.yml}"
 LOCAL_ENV="$SCRIPT_DIR/../docker/.env.server.local"
 DEFAULT_ENV="$SCRIPT_DIR/../docker/.env.server"
@@ -23,6 +24,17 @@ fi
 set -a
 . "$ENV_FILE"
 set +a
+
+APP_GIT_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse HEAD)
+APP_GIT_SHORT_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse --short HEAD)
+APP_GIT_BRANCH=$(git -C "$PROJECT_ROOT" branch --show-current)
+APP_GIT_DIRTY=false
+if [ -n "$(git -C "$PROJECT_ROOT" status --porcelain)" ]; then
+  APP_GIT_DIRTY=true
+fi
+APP_DEPLOYMENT_ENV=production
+APP_GIT_HISTORY_B64=$(git -C "$PROJECT_ROOT" log -n 30 --date=iso-strict --pretty=format:'%H%x09%h%x09%aI%x09%an%x09%s%x09%D' | base64 | tr -d '\n\r')
+export APP_GIT_COMMIT APP_GIT_SHORT_COMMIT APP_GIT_BRANCH APP_GIT_DIRTY APP_DEPLOYMENT_ENV APP_GIT_HISTORY_B64
 
 UPDATE_STATUS_ROOT="${HOST_UPDATE_STATUS_ROOT:-/srv/calidad-platform/runtime/update}"
 STATUS_FILE="$UPDATE_STATUS_ROOT/status.json"

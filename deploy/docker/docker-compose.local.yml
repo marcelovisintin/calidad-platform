@@ -121,6 +121,12 @@
       args:
         VITE_API_BASE_URL: /api/v1
         VITE_CATALOG_BOOTSTRAP_URL: /catalog.bootstrap.json
+        APP_GIT_COMMIT: ${APP_GIT_COMMIT:-no-disponible}
+        APP_GIT_SHORT_COMMIT: ${APP_GIT_SHORT_COMMIT:-no-disponible}
+        APP_GIT_BRANCH: ${APP_GIT_BRANCH:-no-disponible}
+        APP_GIT_DIRTY: ${APP_GIT_DIRTY:-false}
+        APP_DEPLOYMENT_ENV: ${APP_DEPLOYMENT_ENV:-local}
+        APP_GIT_HISTORY_B64: ${APP_GIT_HISTORY_B64:-}
     restart: unless-stopped
     depends_on:
       backend:

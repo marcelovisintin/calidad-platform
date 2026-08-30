@@ -1,7 +1,8 @@
-﻿#!/usr/bin/env sh
+#!/usr/bin/env sh
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 COMPOSE_FILE="${COMPOSE_FILE:-$SCRIPT_DIR/../docker/docker-compose.local.yml}"
 LOCAL_ENV="$SCRIPT_DIR/../docker/.env.server.local"
 DEFAULT_ENV="$SCRIPT_DIR/../docker/.env.server"
@@ -24,6 +25,17 @@ fi
 set -a
 . "$ENV_FILE"
 set +a
+
+APP_GIT_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse HEAD)
+APP_GIT_SHORT_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse --short HEAD)
+APP_GIT_BRANCH=$(git -C "$PROJECT_ROOT" branch --show-current)
+APP_GIT_DIRTY=false
+if [ -n "$(git -C "$PROJECT_ROOT" status --porcelain)" ]; then
+  APP_GIT_DIRTY=true
+fi
+APP_DEPLOYMENT_ENV=local
+APP_GIT_HISTORY_B64=$(git -C "$PROJECT_ROOT" log -n 30 --date=iso-strict --pretty=format:'%H%x09%h%x09%aI%x09%an%x09%s%x09%D' | base64 | tr -d '\n\r')
+export APP_GIT_COMMIT APP_GIT_SHORT_COMMIT APP_GIT_BRANCH APP_GIT_DIRTY APP_DEPLOYMENT_ENV APP_GIT_HISTORY_B64
 
 mkdir -p "$HOST_POSTGRES_DATA" "$HOST_MEDIA_ROOT" "$HOST_TMP_ROOT" "$HOST_STATIC_ROOT" "$HOST_LOG_ROOT" "$HOST_BACKUP_ROOT" "$HOST_TLS_CERTS"
 

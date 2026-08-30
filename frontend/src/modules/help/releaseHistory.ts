@@ -8,23 +8,10 @@ export type ReleaseHistoryEntry = {
   summary: string[];
   commit: string;
   responsible: string;
+  branch?: string;
 };
 
-export const RELEASE_HISTORY: ReleaseHistoryEntry[] = [
-  {
-    version: "release-2026-08-30.1",
-    date: "2026-08-30",
-    status: "preparation",
-    statusLabel: "En preparación local",
-    summary: [
-      "Incorporación del Centro de Ayuda, ayuda contextual, recorridos interactivos y progreso personal.",
-      "Indicadores, reportes por correo y Resumen rápido con orientación específica.",
-      "Simplificación del Panel de gestión y alineación de sus accesos con el menú lateral.",
-      "Incorporación de Acerca de y del historial controlado de versiones.",
-    ],
-    commit: "d2d52b2 + cambios locales",
-    responsible: "Marcelo",
-  },
+const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
   {
     version: "release-2026-08-28.2",
     date: "2026-08-28",
@@ -72,4 +59,48 @@ export const RELEASE_HISTORY: ReleaseHistoryEntry[] = [
   },
 ];
 
-export const CURRENT_RELEASE = RELEASE_HISTORY[0];
+function currentStatus(): Pick<ReleaseHistoryEntry, "status" | "statusLabel"> {
+  if (__APP_BUILD_INFO__.dirty) {
+    return { status: "preparation", statusLabel: "En preparación local" };
+  }
+  if (__APP_BUILD_INFO__.environment === "production") {
+    return { status: "production", statusLabel: "Desplegada en producción" };
+  }
+  return { status: "versioned", statusLabel: "Versionada en Git" };
+}
+
+function releaseTag(decorations: string) {
+  return decorations.match(/(?:^|, )tag: (release-[^,]+)/)?.[1];
+}
+
+const automatedHistory: ReleaseHistoryEntry[] = __APP_BUILD_INFO__.history.map((entry, index) => {
+  const status = index === 0
+    ? currentStatus()
+    : { status: "versioned" as const, statusLabel: "Versionada en Git" };
+  return {
+    version: releaseTag(entry.decorations) ?? `commit-${entry.shortCommit}`,
+    date: entry.date.slice(0, 10),
+    ...status,
+    summary: [entry.subject],
+    commit: entry.shortCommit,
+    responsible: entry.author,
+    branch: index === 0 ? __APP_BUILD_INFO__.branch : undefined,
+  };
+});
+
+const knownCommits = new Set(automatedHistory.map((entry) => entry.commit));
+
+export const RELEASE_HISTORY: ReleaseHistoryEntry[] = [
+  ...automatedHistory,
+  ...HISTORICAL_RELEASES.filter((entry) => !knownCommits.has(entry.commit)),
+];
+
+export const CURRENT_RELEASE = RELEASE_HISTORY[0] ?? {
+  version: "compilación-sin-git",
+  date: __APP_BUILD_INFO__.buildDate.slice(0, 10),
+  ...currentStatus(),
+  summary: ["No se pudo obtener el historial de Git durante la compilación."],
+  commit: __APP_BUILD_INFO__.shortCommit,
+  responsible: "Sistema",
+  branch: __APP_BUILD_INFO__.branch,
+};

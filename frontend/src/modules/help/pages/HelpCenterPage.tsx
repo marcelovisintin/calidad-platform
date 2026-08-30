@@ -292,7 +292,8 @@ export function HelpCenterPage() {
                 {historyOpen ? "Ocultar historial" : "Historial de cambios"}
               </button>
             </div>
-            <div><dt>Fecha de compilación</dt><dd>{buildDate}</dd></div>
+            <div><dt>Commit de la compilación</dt><dd>{ABOUT_SYSTEM.commit}</dd><small>Rama {ABOUT_SYSTEM.branch}</small></div>
+            <div><dt>Fecha de compilación</dt><dd>{buildDate}</dd><small>Entorno: {ABOUT_SYSTEM.deploymentEnvironment}</small></div>
           </dl>
           <div className="help-about-technologies">
             <h3>Tecnologías utilizadas</h3>
@@ -307,7 +308,7 @@ export function HelpCenterPage() {
                 <div>
                   <p className="eyebrow">Trazabilidad de revisiones</p>
                   <h3>Historial de cambios</h3>
-                  <p>Versiones ordenadas desde la más reciente. Cada registro identifica fecha, estado, resumen, referencia Git y responsable.</p>
+                  <p>Registro automático de los últimos commits, ordenados desde el más reciente. Cada entrada identifica fecha, estado, resumen, referencia Git y responsable.</p>
                 </div>
                 <button
                   aria-controls="iso-version-help"
@@ -356,6 +357,7 @@ export function HelpCenterPage() {
                     </ul>
                     <footer>
                       <span>Git: <strong>{release.commit}</strong></span>
+                      {release.branch ? <span>Rama: <strong>{release.branch}</strong></span> : null}
                       <span>Responsable: <strong>{release.responsible}</strong></span>
                     </footer>
                   </article>

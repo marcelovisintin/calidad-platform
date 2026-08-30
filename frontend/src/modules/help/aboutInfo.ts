@@ -13,6 +13,10 @@ export const ABOUT_SYSTEM = {
   versionStatus: CURRENT_RELEASE.statusLabel,
   technicalVersion: frontendPackage.version,
   buildDate: __APP_VERSION__,
+  commit: __APP_BUILD_INFO__.shortCommit,
+  branch: __APP_BUILD_INFO__.branch,
+  deploymentEnvironment: __APP_BUILD_INFO__.environment,
+  hasUncommittedChanges: __APP_BUILD_INFO__.dirty,
   createdBy: "Marcelo",
   technologies: [
     `React ${cleanVersion(frontendPackage.dependencies.react)}`,
