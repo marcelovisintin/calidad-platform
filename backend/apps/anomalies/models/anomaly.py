@@ -60,6 +60,7 @@ STAGE_STATUS_MAP = {
 
 class AnalysisMethod(models.TextChoices):
     FIVE_WHYS = "five_whys", "5 Why"
+    SIX_M = "6m", "6M"
     ISHIKAWA = "ishikawa", "Ishikawa"
     A3 = "a3", "A3"
     EIGHT_D = "8d", "8D"

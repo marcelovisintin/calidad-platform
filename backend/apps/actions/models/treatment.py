@@ -297,3 +297,43 @@ class TreatmentLearnedLessonEvidence(AuditBaseModel):
         ordering = ("-created_at",)
         verbose_name = "Evidencia de leccion aprendida"
         verbose_name_plural = "Evidencias de lecciones aprendidas"
+
+
+class TreatmentLearnedLessonRevision(AuditBaseModel):
+    learned_lesson = models.ForeignKey(
+        "actions.TreatmentLearnedLesson",
+        on_delete=models.CASCADE,
+        related_name="revisions",
+    )
+    revision_number = models.PositiveIntegerField()
+    has_learning = models.BooleanField(null=True, blank=True)
+    learned_text = models.TextField(blank=True)
+    no_learning_reason = models.TextField(blank=True)
+    procedure_modified = models.BooleanField(null=True, blank=True)
+    procedure_modification_notes = models.TextField(blank=True)
+    changed_fields = models.JSONField(default=list, blank=True)
+    changed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="treatment_learned_lesson_revisions",
+    )
+    changed_at = models.DateTimeField(default=timezone.now)
+    evidences = models.ManyToManyField(
+        "actions.TreatmentLearnedLessonEvidence",
+        related_name="lesson_revisions",
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ("-revision_number",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("learned_lesson", "revision_number"),
+                name="unique_treatment_lesson_revision",
+            )
+        ]
+        verbose_name = "Revision de leccion aprendida"
+        verbose_name_plural = "Revisiones de lecciones aprendidas"
+
+    def __str__(self) -> str:
+        return f"{self.learned_lesson} - revision {self.revision_number}"

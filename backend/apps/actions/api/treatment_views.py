@@ -44,6 +44,7 @@ from apps.actions.models import (
     TreatmentEffectivenessValidationResult,
     TreatmentEvidence,
     TreatmentLearnedLessonEvidence,
+    TreatmentLearnedLessonRevision,
     TreatmentParticipant,
     TreatmentRootCause,
     TreatmentStatus,
@@ -981,7 +982,18 @@ class TreatmentLearnedLessonViewSet(viewsets.ReadOnlyModelViewSet):
                 Prefetch(
                     "learned_lesson__evidences",
                     queryset=TreatmentLearnedLessonEvidence.objects.select_related("uploaded_by").order_by("-created_at"),
-                )
+                ),
+                Prefetch(
+                    "learned_lesson__revisions",
+                    queryset=TreatmentLearnedLessonRevision.objects.select_related("changed_by").prefetch_related(
+                        Prefetch(
+                            "evidences",
+                            queryset=TreatmentLearnedLessonEvidence.objects.select_related("uploaded_by").order_by(
+                                "-created_at"
+                            ),
+                        )
+                    ),
+                ),
             )
         )
 

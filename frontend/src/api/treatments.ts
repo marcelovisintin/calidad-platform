@@ -69,6 +69,7 @@ export function saveTreatmentLearnedLesson(treatmentId: string, payload: Treatme
   formData.append("no_learning_reason", payload.no_learning_reason ?? "");
   formData.append("procedure_modified", String(payload.procedure_modified));
   formData.append("procedure_modification_notes", payload.procedure_modification_notes ?? "");
+  formData.append("confirm_modification", String(payload.confirm_modification ?? false));
   (payload.evidences ?? []).forEach((file) => {
     formData.append("evidences", file);
   });

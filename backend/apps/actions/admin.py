@@ -8,6 +8,7 @@ from apps.actions.models import (
     Treatment,
     TreatmentAnomaly,
     TreatmentEvidence,
+    TreatmentLearnedLessonRevision,
     TreatmentParticipant,
     TreatmentRootCause,
     TreatmentTask,
@@ -118,6 +119,40 @@ class TreatmentTaskEvidenceInline(admin.TabularInline):
     extra = 0
     fields = ("original_name", "content_type", "note", "file", "uploaded_by", "created_at")
     readonly_fields = ("created_at",)
+
+
+@admin.register(TreatmentLearnedLessonRevision)
+class TreatmentLearnedLessonRevisionAdmin(admin.ModelAdmin):
+    list_display = ("learned_lesson", "revision_number", "changed_by", "changed_at")
+    list_select_related = ("learned_lesson", "learned_lesson__treatment", "changed_by")
+    search_fields = ("learned_lesson__treatment__code", "learned_text", "changed_by__username")
+    readonly_fields = (
+        "learned_lesson",
+        "revision_number",
+        "has_learning",
+        "learned_text",
+        "no_learning_reason",
+        "procedure_modified",
+        "procedure_modification_notes",
+        "changed_fields",
+        "changed_by",
+        "changed_at",
+        "evidences",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at",
+        "row_version",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Treatment)

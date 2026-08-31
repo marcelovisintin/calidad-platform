@@ -19,6 +19,7 @@ from apps.actions.models import (
     TreatmentEvidence,
     TreatmentLearnedLesson,
     TreatmentLearnedLessonEvidence,
+    TreatmentLearnedLessonRevision,
     TreatmentParticipant,
     TreatmentParticipantRole,
     TreatmentRootCause,
@@ -29,6 +30,7 @@ from apps.actions.models import (
 )
 from apps.audit.services import record_audit_event
 from apps.anomalies.models import (
+    AnalysisMethod,
     Anomaly,
     AnomalyCauseAnalysis,
     AnomalyStage,
@@ -385,7 +387,34 @@ def save_treatment_learned_lesson(*, treatment: Treatment, user, data: dict, fil
 
     lesson = TreatmentLearnedLesson.objects.select_for_update().filter(treatment=locked).first()
     is_first_publication = lesson is None
+    if lesson and not data.get("confirm_modification", False):
+        raise ValidationError(
+            {"confirm_modification": "Debe confirmar la modificacion de la leccion aprendida existente."}
+        )
     before = snapshot_learned_lesson(lesson) if lesson else {}
+    tracked_fields = (
+        "has_learning",
+        "learned_text",
+        "no_learning_reason",
+        "procedure_modified",
+        "procedure_modification_notes",
+    )
+    if lesson and not lesson.revisions.exists():
+        baseline_revision = TreatmentLearnedLessonRevision.objects.create(
+            learned_lesson=lesson,
+            revision_number=1,
+            has_learning=lesson.has_learning,
+            learned_text=lesson.learned_text,
+            no_learning_reason=lesson.no_learning_reason,
+            procedure_modified=lesson.procedure_modified,
+            procedure_modification_notes=lesson.procedure_modification_notes,
+            changed_fields=list(tracked_fields),
+            changed_by=lesson.saved_by or user,
+            changed_at=lesson.saved_at or timezone.now(),
+            created_by=lesson.saved_by or user,
+            updated_by=lesson.saved_by or user,
+        )
+        baseline_revision.evidences.set(lesson.evidences.all())
     if not lesson:
         lesson = TreatmentLearnedLesson(treatment=locked, created_by=user)
 
@@ -413,18 +442,44 @@ def save_treatment_learned_lesson(*, treatment: Treatment, user, data: dict, fil
             updated_by=user,
         )
 
+    after = snapshot_learned_lesson(lesson)
+    changed_fields = [
+        field
+        for field in tracked_fields
+        if is_first_publication or before.get(field) != after.get(field)
+    ]
+    latest_revision = lesson.revisions.aggregate(maximum=models.Max("revision_number"))["maximum"] or 0
+    revision = TreatmentLearnedLessonRevision.objects.create(
+        learned_lesson=lesson,
+        revision_number=latest_revision + 1,
+        has_learning=lesson.has_learning,
+        learned_text=lesson.learned_text,
+        no_learning_reason=lesson.no_learning_reason,
+        procedure_modified=lesson.procedure_modified,
+        procedure_modification_notes=lesson.procedure_modification_notes,
+        changed_fields=changed_fields,
+        changed_by=user,
+        changed_at=lesson.saved_at,
+        created_by=user,
+        updated_by=user,
+    )
+    revision.evidences.set(lesson.evidences.all())
+
     record_audit_event(
         entity=locked,
         action="treatment.learned_lesson.saved",
         actor=user,
         before_data=before,
-        after_data=snapshot_learned_lesson(lesson),
+        after_data={**after, "revision_number": revision.revision_number},
         request_id=_request_id(request_id),
     )
     _register_history_for_treatment(
         treatment=locked,
         user=user,
-        comment=f"Tratamiento {locked.code}: se registra o actualiza la leccion aprendida.",
+        comment=(
+            f"Tratamiento {locked.code}: se registra la revision {revision.revision_number} "
+            "de la leccion aprendida."
+        ),
     )
     if is_first_publication:
         notify_treatment_learned_lesson_published(
@@ -552,7 +607,16 @@ def _sync_treatment_analysis_to_anomalies(*, treatment: Treatment, user) -> None
     if not method_used and not observations:
         return
 
-    method_value = method_used or "other"
+    method_value = method_used or AnalysisMethod.OTHER
+    if method_value not in AnalysisMethod.values:
+        raise ValidationError(
+            {
+                "method_used": (
+                    "El metodo seleccionado para el tratamiento no es compatible "
+                    "con el analisis de anomalías."
+                )
+            }
+        )
     summary_value = observations or f"Analisis registrado desde tratamiento {treatment.code}."
     now = timezone.now()
 

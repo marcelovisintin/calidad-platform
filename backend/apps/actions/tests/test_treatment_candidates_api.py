@@ -14,15 +14,20 @@ from apps.actions.models import (
     Treatment,
     TreatmentAnomaly,
     TreatmentCodeSequence,
+    TreatmentLearnedLesson,
+    TreatmentLearnedLessonRevision,
     TreatmentParticipant,
     TreatmentRootCause,
     TreatmentTask,
     TreatmentTaskStatus,
+    TreatmentMethod,
 )
 from apps.actions.services import can_manage_treatment, create_configured_treatment
 from apps.actions.services.treatment_service import _next_treatment_code
 from apps.anomalies.models import (
+    AnalysisMethod,
     Anomaly,
+    AnomalyCauseAnalysis,
     AnomalyClassification,
     AnomalyInitialVerification,
     AnomalyStage,
@@ -1127,6 +1132,35 @@ class TreatmentCandidatesApiTests(APITestCase):
             "Analisis editable antes de cargar evidencias y causas.",
         )
 
+    def test_six_m_method_is_synced_to_anomaly_analysis(self):
+        AnomalyCauseAnalysis.objects.create(
+            anomaly=self.anomaly_one,
+            analyzed_by=self.admin,
+            analyzed_at=timezone.now(),
+            method_used=AnalysisMethod.FIVE_WHYS,
+            immediate_cause="Analisis inicial.",
+            root_cause="Causa inicial.",
+            summary="Resumen inicial.",
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+
+        response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/",
+            {
+                "method_used": TreatmentMethod.SIX_M,
+                "observations": "Analisis realizado con las seis M.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        analysis = AnomalyCauseAnalysis.objects.get(anomaly=self.anomaly_one)
+        self.assertEqual(analysis.method_used, AnalysisMethod.SIX_M)
+
+    def test_all_treatment_methods_are_supported_by_anomaly_analysis(self):
+        self.assertTrue(set(TreatmentMethod.values).issubset(set(AnalysisMethod.values)))
+
     def test_save_analysis_requires_effectiveness_responsible(self):
         response = self.client.patch(
             f"/api/v1/actions/treatments/{self.treatment_one.pk}/",
@@ -1438,6 +1472,111 @@ class TreatmentCandidatesApiTests(APITestCase):
                 notification__source_id=treatment.pk,
             ).exists()
         )
+
+    def test_learned_lesson_requires_confirmation_and_keeps_revision_history(self):
+        treatment = self._prepare_treatment_for_validation()
+        self.client.force_authenticate(user=self.task_user)
+        validation_response = self.client.post(
+            f"/api/v1/actions/treatments/{treatment.pk}/validation/",
+            {"result": "effective", "comment": "Resultado conforme."},
+            format="json",
+        )
+        self.assertEqual(validation_response.status_code, status.HTTP_200_OK)
+        self.client.force_authenticate(user=self.admin)
+
+        first_evidence = SimpleUploadedFile(
+            "aprendizaje-inicial.pdf",
+            b"%PDF-1.4 evidencia inicial",
+            content_type="application/pdf",
+        )
+        first_response = self.client.patch(
+            f"/api/v1/actions/learned-lessons/{treatment.pk}/",
+            {
+                "has_learning": "true",
+                "learned_text": "Se ajusto el control de inicio.",
+                "no_learning_reason": "",
+                "procedure_modified": "false",
+                "procedure_modification_notes": "",
+                "confirm_modification": "false",
+                "evidences": first_evidence,
+            },
+            format="multipart",
+        )
+        self.assertEqual(first_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(first_response.data["learned_lesson"]["revisions"]), 1)
+        self.assertEqual(first_response.data["learned_lesson"]["revisions"][0]["revision_number"], 1)
+        lesson = TreatmentLearnedLesson.objects.get(treatment=treatment)
+        self.assertEqual(lesson.revisions.count(), 1)
+        first_revision = lesson.revisions.get(revision_number=1)
+        self.assertEqual(first_revision.learned_text, "Se ajusto el control de inicio.")
+        self.assertEqual(first_revision.evidences.count(), 1)
+
+        rejected_response = self.client.patch(
+            f"/api/v1/actions/learned-lessons/{treatment.pk}/",
+            {
+                "has_learning": "true",
+                "learned_text": "Se agrego una verificacion final.",
+                "procedure_modified": "false",
+            },
+            format="multipart",
+        )
+        self.assertEqual(rejected_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("confirm_modification", rejected_response.data)
+        self.assertEqual(lesson.revisions.count(), 1)
+
+        confirmed_response = self.client.patch(
+            f"/api/v1/actions/learned-lessons/{treatment.pk}/",
+            {
+                "has_learning": "true",
+                "learned_text": "Se agrego una verificacion final.",
+                "procedure_modified": "false",
+                "confirm_modification": "true",
+            },
+            format="multipart",
+        )
+        self.assertEqual(confirmed_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(confirmed_response.data["learned_lesson"]["revisions"]), 2)
+        revisions = TreatmentLearnedLessonRevision.objects.filter(learned_lesson=lesson).order_by("revision_number")
+        self.assertEqual(revisions.count(), 2)
+        self.assertEqual(revisions[0].learned_text, "Se ajusto el control de inicio.")
+        self.assertEqual(revisions[1].learned_text, "Se agrego una verificacion final.")
+        self.assertIn("learned_text", revisions[1].changed_fields)
+        self.assertEqual(revisions[1].changed_by, self.admin)
+        self.assertEqual(revisions[1].evidences.count(), 1)
+
+    def test_existing_learned_lesson_gets_baseline_before_first_confirmed_change(self):
+        treatment = self._prepare_treatment_for_validation()
+        treatment.effectiveness_validation_result = "effective"
+        treatment.status = "completed"
+        treatment.save(update_fields=["effectiveness_validation_result", "status", "updated_at"])
+        lesson = TreatmentLearnedLesson.objects.create(
+            treatment=treatment,
+            has_learning=True,
+            learned_text="Contenido anterior a la trazabilidad.",
+            procedure_modified=False,
+            saved_by=self.task_user,
+            saved_at=timezone.now() - timedelta(days=1),
+            created_by=self.task_user,
+            updated_by=self.task_user,
+        )
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.patch(
+            f"/api/v1/actions/learned-lessons/{treatment.pk}/",
+            {
+                "has_learning": "true",
+                "learned_text": "Contenido nuevo y trazable.",
+                "procedure_modified": "false",
+                "confirm_modification": "true",
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        revisions = lesson.revisions.order_by("revision_number")
+        self.assertEqual(revisions.count(), 2)
+        self.assertEqual(revisions[0].learned_text, "Contenido anterior a la trazabilidad.")
+        self.assertEqual(revisions[1].learned_text, "Contenido nuevo y trazable.")
 
     def test_effective_validation_closes_all_linked_anomalies_and_registers_history(self):
         treatment = self._prepare_treatment_for_validation()

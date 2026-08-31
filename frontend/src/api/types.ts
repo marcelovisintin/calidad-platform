@@ -492,6 +492,20 @@ export interface TreatmentLearnedLessonEvidence {
   created_at: string;
 }
 
+export interface TreatmentLearnedLessonRevision {
+  id: UUID;
+  revision_number: number;
+  has_learning: boolean | null;
+  learned_text: string;
+  no_learning_reason: string;
+  procedure_modified: boolean | null;
+  procedure_modification_notes: string;
+  changed_fields: string[];
+  changed_by: UserSummary;
+  changed_at: string;
+  evidences: TreatmentLearnedLessonEvidence[];
+}
+
 export interface TreatmentLearnedLesson {
   id: UUID;
   has_learning: boolean | null;
@@ -502,6 +516,7 @@ export interface TreatmentLearnedLesson {
   saved_by?: UserSummary | null;
   saved_at?: string | null;
   evidences: TreatmentLearnedLessonEvidence[];
+  revisions: TreatmentLearnedLessonRevision[];
   created_at: string;
   updated_at: string;
 }
@@ -513,6 +528,7 @@ export interface TreatmentLearnedLessonPayload {
   procedure_modified: boolean;
   procedure_modification_notes?: string;
   evidences?: File[];
+  confirm_modification?: boolean;
 }
 
 export interface TreatmentTaskEvidence {

@@ -9,6 +9,7 @@ from apps.actions.models import (
     TreatmentEvidence,
     TreatmentLearnedLesson,
     TreatmentLearnedLessonEvidence,
+    TreatmentLearnedLessonRevision,
     TreatmentMethod,
     TreatmentParticipant,
     TreatmentParticipantRole,
@@ -112,9 +113,31 @@ class TreatmentLearnedLessonEvidenceSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(url) if request else url
 
 
+class TreatmentLearnedLessonRevisionSerializer(serializers.ModelSerializer):
+    changed_by = UserSummarySerializer(read_only=True)
+    evidences = TreatmentLearnedLessonEvidenceSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = TreatmentLearnedLessonRevision
+        fields = (
+            "id",
+            "revision_number",
+            "has_learning",
+            "learned_text",
+            "no_learning_reason",
+            "procedure_modified",
+            "procedure_modification_notes",
+            "changed_fields",
+            "changed_by",
+            "changed_at",
+            "evidences",
+        )
+
+
 class TreatmentLearnedLessonSerializer(serializers.ModelSerializer):
     saved_by = UserSummarySerializer(read_only=True)
     evidences = TreatmentLearnedLessonEvidenceSerializer(many=True, read_only=True)
+    revisions = TreatmentLearnedLessonRevisionSerializer(many=True, read_only=True)
 
     class Meta:
         model = TreatmentLearnedLesson
@@ -128,6 +151,7 @@ class TreatmentLearnedLessonSerializer(serializers.ModelSerializer):
             "saved_by",
             "saved_at",
             "evidences",
+            "revisions",
             "created_at",
             "updated_at",
         )
@@ -582,6 +606,7 @@ class TreatmentLearnedLessonWriteSerializer(serializers.Serializer):
     no_learning_reason = serializers.CharField(required=False, allow_blank=True)
     procedure_modified = serializers.BooleanField(required=True)
     procedure_modification_notes = serializers.CharField(required=False, allow_blank=True)
+    confirm_modification = serializers.BooleanField(required=False, default=False, write_only=True)
 
     def validate(self, attrs):
         has_learning = attrs.get("has_learning")

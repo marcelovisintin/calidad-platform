@@ -29,6 +29,14 @@ const emptyForm: LessonFormState = {
   evidences: [],
 };
 
+const learnedLessonFieldLabels: Record<string, string> = {
+  has_learning: "Existencia de aprendizaje",
+  learned_text: "Aprendizaje registrado",
+  no_learning_reason: "Motivo sin aprendizaje",
+  procedure_modified: "Modificación de procedimiento",
+  procedure_modification_notes: "Detalle de modificación del procedimiento",
+};
+
 function formFromTreatment(treatment: TreatmentSummary): LessonFormState {
   const lesson = treatment.learned_lesson;
   if (!lesson) {
@@ -95,6 +103,10 @@ function LearnedLessonCard({
       return;
     }
 
+    if (lesson && !window.confirm("¿Está seguro de modificar la lección aprendida?")) {
+      return;
+    }
+
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -106,6 +118,7 @@ function LearnedLessonCard({
         procedure_modified: form.procedureModified === "yes",
         procedure_modification_notes: form.procedureModificationNotes,
         evidences: form.evidences,
+        confirm_modification: Boolean(lesson),
       });
       setMessage("Leccion aprendida guardada.");
       await onSaved();
@@ -232,6 +245,62 @@ function LearnedLessonCard({
           </button>
         </div>
       </form>
+
+      {lesson?.revisions?.length ? (
+        <details className="learned-lesson-history">
+          <summary>Historial de modificaciones ({lesson.revisions.length})</summary>
+          <div className="learned-lesson-revision-list">
+            {lesson.revisions.map((revision) => (
+              <article className="learned-lesson-revision" key={revision.id}>
+                <div className="learned-lesson-revision-head">
+                  <div>
+                    <strong>Revisión {revision.revision_number}</strong>
+                    <small>
+                      {formatDateTime(revision.changed_at)} · {revision.changed_by?.full_name || revision.changed_by?.username || "-"}
+                    </small>
+                  </div>
+                  <span className="status-pill">
+                    {revision.revision_number === 1 ? "Registro inicial" : "Modificación"}
+                  </span>
+                </div>
+
+                <div className="learned-lesson-change-list">
+                  {(revision.changed_fields?.length ? revision.changed_fields : ["Sin cambios de contenido"]).map((field) => (
+                    <span className="learned-lesson-change" key={field}>
+                      {learnedLessonFieldLabels[field] || field}
+                    </span>
+                  ))}
+                </div>
+
+                <dl className="learned-lesson-snapshot">
+                  <div><dt>¿Hubo aprendizaje?</dt><dd>{revision.has_learning === true ? "Sí" : revision.has_learning === false ? "No" : "-"}</dd></div>
+                  <div><dt>¿Modifica procedimiento?</dt><dd>{revision.procedure_modified === true ? "Sí" : revision.procedure_modified === false ? "No" : "-"}</dd></div>
+                  {revision.has_learning ? <div><dt>Aprendizaje</dt><dd>{revision.learned_text || "-"}</dd></div> : null}
+                  {revision.has_learning === false ? <div><dt>Motivo</dt><dd>{revision.no_learning_reason || "-"}</dd></div> : null}
+                  {revision.procedure_modified ? <div><dt>Detalle del procedimiento</dt><dd>{revision.procedure_modification_notes || "-"}</dd></div> : null}
+                </dl>
+
+                {revision.evidences?.length ? (
+                  <div className="learned-lesson-revision-evidence">
+                    <strong>Evidencias conservadas en esta revisión</strong>
+                    {revision.evidences.map((evidence) => (
+                      <a
+                        href={normalizeProtectedFileUrl(evidence.file_url)}
+                        key={evidence.id}
+                        onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)}
+                        rel="noopener noreferrer"
+                        target="_blank"
+                      >
+                        {evidence.original_name}
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </article>
   );
 }

@@ -2451,6 +2451,94 @@ small {
   min-height: 110px;
 }
 
+.learned-lesson-history {
+  grid-column: 1 / -1;
+  border-top: 1px solid rgba(15, 44, 53, 0.16);
+  padding-top: 0.85rem;
+}
+
+.learned-lesson-history > summary {
+  color: var(--primary-strong);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.learned-lesson-revision-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.learned-lesson-revision {
+  background: rgba(255, 255, 255, 0.48);
+  border: 1px solid rgba(15, 44, 53, 0.14);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.85rem;
+}
+
+.learned-lesson-revision-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.learned-lesson-revision-head small {
+  color: var(--muted);
+  display: block;
+  margin-top: 0.15rem;
+}
+
+.learned-lesson-change-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.learned-lesson-change {
+  background: rgba(21, 132, 111, 0.12);
+  border-radius: 999px;
+  color: var(--primary-strong);
+  font-size: 0.76rem;
+  font-weight: 750;
+  padding: 0.25rem 0.55rem;
+}
+
+.learned-lesson-snapshot {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.learned-lesson-snapshot div {
+  min-width: 0;
+}
+
+.learned-lesson-snapshot dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.learned-lesson-snapshot dd {
+  margin: 0.15rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.learned-lesson-revision-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.7rem;
+}
+
+.learned-lesson-revision-evidence strong {
+  flex-basis: 100%;
+}
+
 .treatment-detail-lesson {
   gap: 0.85rem;
 }
@@ -2630,6 +2718,10 @@ small {
   }
 
   .learned-lesson-card {
+    grid-template-columns: 1fr;
+  }
+
+  .learned-lesson-snapshot {
     grid-template-columns: 1fr;
   }
 
