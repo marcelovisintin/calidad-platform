@@ -120,6 +120,17 @@ ENV_FILE=/srv/calidad-platform/config/.env.server.local \
   sh deploy/scripts/deploy_update.sh
 ```
 
+El actualizador admite dos modalidades:
+
+- repositorio Git completo: obtiene automaticamente commit, rama e historial;
+- paquete de publicacion sin `.git`: lee el commit desde `/opt/calidad/app/.git-commit`.
+
+En una publicacion empaquetada se recomienda copiar tambien `.git-history.tsv`
+con las ultimas 30 entradas del historial. Si ese archivo no existe, la
+actualizacion igualmente se completa y conserva el identificador de version,
+pero la pantalla de historial solo mostrara la informacion incluida en la
+compilacion anterior.
+
 Este comando publica el estado del despliegue para que los dispositivos abiertos
 muestren el aviso de actualizacion, protege formularios con cambios sin guardar y
 habilita la recarga automatica al finalizar. Finalmente comprobar `/healthz`, la

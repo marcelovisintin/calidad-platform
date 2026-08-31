@@ -25,15 +25,37 @@ set -a
 . "$ENV_FILE"
 set +a
 
-APP_GIT_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse HEAD)
-APP_GIT_SHORT_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse --short HEAD)
-APP_GIT_BRANCH=$(git -C "$PROJECT_ROOT" branch --show-current)
-APP_GIT_DIRTY=false
-if [ -n "$(git -C "$PROJECT_ROOT" status --porcelain)" ]; then
-  APP_GIT_DIRTY=true
+RELEASE_COMMIT_FILE="${APP_GIT_COMMIT_FILE:-$PROJECT_ROOT/.git-commit}"
+RELEASE_HISTORY_FILE="${APP_GIT_HISTORY_FILE:-$PROJECT_ROOT/.git-history.tsv}"
+
+if git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  APP_GIT_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse HEAD)
+  APP_GIT_SHORT_COMMIT=$(git -C "$PROJECT_ROOT" rev-parse --short HEAD)
+  APP_GIT_BRANCH=$(git -C "$PROJECT_ROOT" branch --show-current)
+  APP_GIT_DIRTY=false
+  if [ -n "$(git -C "$PROJECT_ROOT" status --porcelain)" ]; then
+    APP_GIT_DIRTY=true
+  fi
+  APP_GIT_HISTORY_B64=$(git -C "$PROJECT_ROOT" log -n 30 --date=iso-strict --pretty=format:'%H%x09%h%x09%aI%x09%an%x09%s%x09%D' | base64 | tr -d '\n\r')
+else
+  if [ -z "${APP_GIT_COMMIT:-}" ] && [ -f "$RELEASE_COMMIT_FILE" ]; then
+    APP_GIT_COMMIT=$(sed -n '1{s/[[:space:]]//g;p;}' "$RELEASE_COMMIT_FILE")
+  fi
+  if [ -z "${APP_GIT_COMMIT:-}" ]; then
+    echo "Missing release commit metadata. Set APP_GIT_COMMIT or create $RELEASE_COMMIT_FILE"
+    exit 1
+  fi
+
+  APP_GIT_SHORT_COMMIT="${APP_GIT_SHORT_COMMIT:-$(printf '%s' "$APP_GIT_COMMIT" | cut -c1-7)}"
+  APP_GIT_BRANCH="${APP_GIT_BRANCH:-main}"
+  APP_GIT_DIRTY="${APP_GIT_DIRTY:-false}"
+  if [ -z "${APP_GIT_HISTORY_B64:-}" ] && [ -f "$RELEASE_HISTORY_FILE" ]; then
+    APP_GIT_HISTORY_B64=$(base64 "$RELEASE_HISTORY_FILE" | tr -d '\n\r')
+  fi
+  APP_GIT_HISTORY_B64="${APP_GIT_HISTORY_B64:-}"
+  echo "Using packaged release metadata: $APP_GIT_SHORT_COMMIT ($APP_GIT_BRANCH)"
 fi
 APP_DEPLOYMENT_ENV=production
-APP_GIT_HISTORY_B64=$(git -C "$PROJECT_ROOT" log -n 30 --date=iso-strict --pretty=format:'%H%x09%h%x09%aI%x09%an%x09%s%x09%D' | base64 | tr -d '\n\r')
 export APP_GIT_COMMIT APP_GIT_SHORT_COMMIT APP_GIT_BRANCH APP_GIT_DIRTY APP_DEPLOYMENT_ENV APP_GIT_HISTORY_B64
 
 UPDATE_STATUS_ROOT="${HOST_UPDATE_STATUS_ROOT:-/srv/calidad-platform/runtime/update}"
