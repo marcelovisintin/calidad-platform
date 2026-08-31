@@ -4,6 +4,7 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from apps.accounts.models import User
+from apps.actions.models import TreatmentCodeSequence
 from apps.anomalies.models import AnomalyCodeReservation
 from apps.audit.models import AuditEvent
 from apps.catalog.models import Area, Site
@@ -41,6 +42,7 @@ class ClearOperationalDataCommandTests(TestCase):
             sequence=1,
             reserved_by=self.user,
         )
+        TreatmentCodeSequence.objects.create(year=2026, last_sequence=17)
 
     def test_default_mode_is_dry_run(self):
         call_command("clear_operational_data", stdout=StringIO())
@@ -48,6 +50,7 @@ class ClearOperationalDataCommandTests(TestCase):
         self.assertTrue(Notification.objects.exists())
         self.assertTrue(AuditEvent.objects.exists())
         self.assertTrue(AnomalyCodeReservation.objects.exists())
+        self.assertTrue(TreatmentCodeSequence.objects.exists())
 
     def test_confirm_clears_activity_and_preserves_configuration(self):
         call_command("clear_operational_data", "--confirm", stdout=StringIO())
@@ -55,6 +58,7 @@ class ClearOperationalDataCommandTests(TestCase):
         self.assertFalse(Notification.objects.exists())
         self.assertFalse(AuditEvent.objects.exists())
         self.assertFalse(AnomalyCodeReservation.objects.exists())
+        self.assertFalse(TreatmentCodeSequence.objects.exists())
         self.assertTrue(User.objects.filter(pk=self.user.pk).exists())
         self.assertTrue(Site.objects.filter(pk=self.site.pk).exists())
         self.assertTrue(Area.objects.filter(pk=self.area.pk).exists())
