@@ -138,6 +138,24 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(response.data["affected_orders"][0]["number"], "OF-001")
         self.assertRegex(response.data["code"], rf"^{timezone.localdate().year}\d{{4}}$")
 
+    def test_update_anomaly_with_area_from_another_site_returns_controlled_error(self):
+        create_response = self.client.post("/api/v1/anomalies/", self._build_payload("AREA"), format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        other_site = Site.objects.create(code="S02", name="Sitio 2")
+        other_area = Area.objects.create(site=other_site, code="A02", name="Area 2")
+
+        response = self.client.patch(
+            f"/api/v1/anomalies/{create_response.data['id']}/",
+            {"area": str(other_area.pk)},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("area", response.data)
+        self.assertIn("no pertenece al sitio", str(response.data["area"][0]))
+        anomaly = Anomaly.objects.get(pk=create_response.data["id"])
+        self.assertEqual(anomaly.area_id, self.area.pk)
+
     def test_create_anomaly_accepts_multiple_affected_orders(self):
         payload = self._build_payload("MULTI")
         payload.pop("manufacturing_order_number")

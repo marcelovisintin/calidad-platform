@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from django.conf import settings
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -646,7 +646,11 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
             transition_comment = f"Se registra verificacion inicial y Revisión de hallazgos: {severity_name}."
     locked.updated_by = user
     _bump_version(locked)
-    locked.full_clean()
+    try:
+        locked.full_clean()
+    except DjangoValidationError as exc:
+        detail = exc.message_dict if hasattr(exc, "message_dict") else {"detail": exc.messages}
+        raise ValidationError(detail) from exc
     locked.save()
     if affected_orders is not None:
         _replace_affected_orders(anomaly=locked, affected_orders=affected_orders, user=user)

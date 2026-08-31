@@ -1,5 +1,4 @@
 ﻿from django.db.models import Q
-from django.db.models.deletion import ProtectedError
 from django.db.models.functions import Lower
 from django.utils import timezone
 from rest_framework import viewsets
@@ -22,6 +21,7 @@ from apps.catalog.api.serializers import (
     SiteManagementSerializer,
 )
 from apps.catalog.models import ActionType, AnomalyOrigin, AnomalyType, Area, Line, OrderType, Priority, Severity, Site
+from common.deletion import delete_or_raise_protected
 
 
 class CatalogManagementPermission(BasePermission):
@@ -63,10 +63,13 @@ class CatalogManagementViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_destroy(self, instance):
-        try:
-            instance.delete()
-        except ProtectedError as exc:
-            raise ValidationError({"detail": "No se puede eliminar porque tiene registros relacionados."}) from exc
+        delete_or_raise_protected(
+            instance,
+            message=(
+                "No se puede eliminar porque esta siendo utilizado por usuarios "
+                "u otros registros del sistema. Puede desactivarlo para conservar la trazabilidad."
+            ),
+        )
 
 
 class SiteManagementViewSet(CatalogManagementViewSet):

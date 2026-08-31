@@ -1,3 +1,7 @@
+import uuid
+
+from django.db import connection
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -56,3 +60,44 @@ class CatalogBootstrapApiTests(APITestCase):
             [item["code"] for item in response.data["areas"] if item["name"].startswith("sort-bootstrap")],
             ["902", "101"],
         )
+
+    def test_delete_site_with_archived_user_scope_returns_controlled_error(self):
+        admin = User.objects.create_superuser(
+            username="catalog_delete_admin",
+            email="catalog-delete-admin@example.com",
+            password="test-password-123",
+        )
+        target_user = User.objects.create_user(
+            username="catalog_scope_user",
+            email="catalog-scope-user@example.com",
+            password="test-password-123",
+        )
+        site = Site.objects.create(code="DEL-SITE", name="Sitio con alcance historico")
+        now = timezone.now()
+        role_id = uuid.uuid4()
+        scope_id = uuid.uuid4()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO accounts_role
+                    (id, created_at, updated_at, row_version, code, name, description, is_active)
+                VALUES (%s, %s, %s, 1, %s, %s, '', TRUE)
+                """,
+                [role_id, now, now, f"LEG-{role_id.hex[:8]}", "Rol historico"],
+            )
+            cursor.execute(
+                """
+                INSERT INTO accounts_userrolescope
+                    (id, created_at, updated_at, row_version, area_id, created_by_id,
+                     role_id, site_id, updated_by_id, user_id)
+                VALUES (%s, %s, %s, 1, NULL, NULL, %s, %s, NULL, %s)
+                """,
+                [scope_id, now, now, role_id, site.pk, target_user.pk],
+            )
+        self.client.force_authenticate(user=admin)
+
+        response = self.client.delete(f"/api/v1/catalog/sites/{site.pk}/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("esta siendo utilizado", response.data["detail"])
+        self.assertTrue(Site.objects.filter(pk=site.pk).exists())

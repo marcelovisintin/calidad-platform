@@ -27,6 +27,7 @@ from apps.accounts.services.authorization import filter_user_directory_queryset
 from apps.accounts.services.user_import import analyze_user_import, confirm_user_import
 from apps.accounts.throttling import LoginRateThrottle
 from common.permissions import IsAuthenticatedAndActive
+from common.deletion import delete_or_raise_protected
 
 
 def build_user_queryset(for_user):
@@ -161,7 +162,13 @@ class UserDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         if instance.pk == self.request.user.pk:
             raise ValidationError({"detail": "No puede eliminar su propio usuario."})
-        instance.delete()
+        delete_or_raise_protected(
+            instance,
+            message=(
+                "No se puede eliminar el usuario porque tiene informacion, alcances "
+                "o antecedentes asociados. Desactivelo para conservar la trazabilidad."
+            ),
+        )
 
 
 class UserPhotoAPIView(APIView):
