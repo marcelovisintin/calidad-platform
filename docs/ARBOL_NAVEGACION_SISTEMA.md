@@ -90,7 +90,7 @@ Sistema de Gestión de Calidad
 │   │   ├── Órdenes afectadas
 │   │   │   ├── Agregar orden
 │   │   │   └── Quitar orden
-│   │   ├── Observación
+│   │   ├── Causa asignada
 │   │   └── Evidencia objetiva múltiple
 │   └── Guardar anomalía
 │       → Confirmación de anomalía creada
@@ -140,7 +140,7 @@ Sistema de Gestión de Calidad
 │   ├── Seleccionar observación
 │   ├── Carga de Observación
 │   │   ├── Clasificar como Observación TRT
-│   │   │   └── Confirmar → Candidata para Tratamientos
+│   │   │   └── Confirmar → Tratamiento creado
 │   │   ├── Responsable fijado
 │   │   ├── Fecha límite de ejecución
 │   │   ├── Observación

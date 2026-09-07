@@ -1,12 +1,14 @@
 from datetime import timedelta
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
+from unittest import skipIf
 
 from django.contrib.auth.models import Permission
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import close_old_connections, connections, transaction
+from django.db import close_old_connections, connection, connections, transaction
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import User
@@ -217,6 +219,31 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertNotIn(str(self.anomaly_one.pk), candidate_ids)
         self.assertIn(str(self.anomaly_two.pk), candidate_ids)
 
+    def test_candidates_and_service_reject_anomaly_already_linked_as_child(self):
+        TreatmentAnomaly.objects.create(
+            treatment=self.treatment_one,
+            anomaly=self.anomaly_three,
+            is_primary=False,
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+
+        response = self.client.get(
+            f"/api/v1/actions/treatments/candidates/?anchor={self.anomaly_two.pk}"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        candidate_ids = {item["id"] for item in response.data["results"]}
+        self.assertNotIn(str(self.anomaly_three.pk), candidate_ids)
+
+        with self.assertRaisesMessage(ValidationError, "no pueden volver a asociarse"):
+            create_configured_treatment(
+                primary_anomaly=self.anomaly_two,
+                related_anomalies=[self.anomaly_three],
+                responsible=self.task_user,
+                user=self.admin,
+            )
+
     def test_candidates_support_filters_for_anomaly_area_user_and_date(self):
         date_from = (timezone.localdate() - timedelta(days=4)).isoformat()
         date_to = (timezone.localdate() - timedelta(days=1)).isoformat()
@@ -413,6 +440,7 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         self.assertEqual(treatment.code, "TRT-2026-0003")
 
+    @skipIf(connection.vendor == "sqlite", "SQLite no permite validar bloqueos de fila concurrentes.")
     def test_concurrent_treatment_code_reservations_are_distinct_and_consecutive(self):
         barrier = Barrier(2)
 
@@ -519,6 +547,49 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(Treatment.objects.count(), 2)
         self.assertFalse(TreatmentAnomaly.objects.filter(anomaly=self.anomaly_three).exists())
+
+    def test_admin_can_delete_empty_treatment_by_code(self):
+        self.anomaly_one.current_stage = AnomalyStage.TREATMENT_CREATED
+        self.anomaly_one.current_status = AnomalyStatus.IN_ANALYSIS
+        self.anomaly_one.save(update_fields=["current_stage", "current_status"])
+
+        response = self.client.post(
+            "/api/v1/actions/treatments/delete-empty/",
+            {"code": self.treatment_one.code.lower()},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(Treatment.objects.filter(pk=self.treatment_one.pk).exists())
+        self.anomaly_one.refresh_from_db()
+        self.assertEqual(self.anomaly_one.current_stage, AnomalyStage.CLASSIFICATION)
+        self.assertEqual(self.anomaly_one.current_status, AnomalyStatus.IN_EVALUATION)
+
+    def test_treatment_with_view_data_cannot_be_deleted(self):
+        self.treatment_one.treatment_location = "Sala de calidad"
+        self.treatment_one.row_version = 2
+        self.treatment_one.save(update_fields=["treatment_location", "row_version"])
+
+        response = self.client.post(
+            "/api/v1/actions/treatments/delete-empty/",
+            {"code": self.treatment_one.code},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(Treatment.objects.filter(pk=self.treatment_one.pk).exists())
+
+    def test_non_admin_cannot_delete_empty_treatment(self):
+        self.client.force_authenticate(user=self.reporter_one)
+
+        response = self.client.post(
+            "/api/v1/actions/treatments/delete-empty/",
+            {"code": self.treatment_one.code},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Treatment.objects.filter(pk=self.treatment_one.pk).exists())
 
     def test_public_create_cannot_be_forced(self):
         response = self.client.post(
@@ -651,6 +722,55 @@ class TreatmentCandidatesApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(agenda_change.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_convocation_requires_a_user_other_than_the_owner(self):
+        response = self.client.post(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/confirm-convocation/",
+            {
+                "scheduled_for": (timezone.now() + timedelta(days=2)).isoformat(),
+                "treatment_location": "Sala de Calidad",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("participants", response.data)
+        self.treatment_one.refresh_from_db()
+        self.assertIsNone(self.treatment_one.convocation_confirmed_at)
+
+    def test_manager_can_remove_convoked_user_before_confirmation(self):
+        participant = TreatmentParticipant.objects.create(
+            treatment=self.treatment_one,
+            user=self.reporter_two,
+            role="convoked",
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+
+        response = self.client.post(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/participants/{participant.pk}/remove/",
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(TreatmentParticipant.objects.filter(pk=participant.pk).exists())
+
+    def test_treatment_owner_cannot_be_removed_from_convocation(self):
+        participant = TreatmentParticipant.objects.create(
+            treatment=self.treatment_one,
+            user=self.task_user,
+            role="owner",
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+
+        response = self.client.post(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/participants/{participant.pk}/remove/",
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(TreatmentParticipant.objects.filter(pk=participant.pk).exists())
 
     def test_convoked_or_facilitator_with_assign_permission_cannot_manage_treatment(self):
         assign_permission = Permission.objects.get(
@@ -827,7 +947,7 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         self.assertEqual(create_response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_observation_trt_is_available_and_becomes_treatment_path_when_linked(self):
+    def test_observation_trt_creates_its_own_treatment_and_leaves_candidates(self):
         anomaly = self._create_observation_anomaly(code="20269012")
 
         mark_response = self.client.post(
@@ -842,21 +962,15 @@ class TreatmentCandidatesApiTests(APITestCase):
         )
 
         self.assertEqual(mark_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(mark_response.data["observation_resolution_path"], ObservationResolutionPath.TREATMENT_PENDING)
+        self.assertEqual(mark_response.data["observation_resolution_path"], ObservationResolutionPath.TREATMENT)
         self.assertEqual(mark_response.data["severity"]["id"], str(self.observation_severity.pk))
         self.assertEqual(mark_response.data["code"], "20269012-OBS")
 
         candidates_response = self.client.get("/api/v1/actions/treatments/candidates/")
         candidate_ids = {item["id"] for item in candidates_response.data["results"]}
-        self.assertIn(str(anomaly.pk), candidate_ids)
+        self.assertNotIn(str(anomaly.pk), candidate_ids)
 
-        treatment = create_configured_treatment(
-            primary_anomaly=self.anomaly_three,
-            related_anomalies=[anomaly],
-            responsible=self.admin,
-            user=self.admin,
-        )
-
+        treatment = Treatment.objects.get(primary_anomaly=anomaly)
         self.assertTrue(TreatmentAnomaly.objects.filter(treatment=treatment, anomaly=anomaly).exists())
         anomaly.refresh_from_db()
         self.assertEqual(anomaly.observation_resolution_path, ObservationResolutionPath.TREATMENT)
@@ -1347,8 +1461,8 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertEqual(ids, {str(ready_treatment.pk)})
 
     def test_validation_ready_list_admin_only_sees_own_assignments(self):
-        treatment_one = self._prepare_treatment_for_validation(treatment=self.treatment_one, responsible=self.task_user)
-        treatment_two = self._prepare_treatment_for_validation(treatment=self.treatment_two, responsible=self.other_task_user)
+        self._prepare_treatment_for_validation(treatment=self.treatment_one, responsible=self.task_user)
+        self._prepare_treatment_for_validation(treatment=self.treatment_two, responsible=self.other_task_user)
         self.client.force_authenticate(user=self.admin)
 
         response = self.client.get("/api/v1/actions/treatments/?validation_ready=1")

@@ -7,17 +7,20 @@ import {
   addTreatmentEvidence,
   addTreatmentTaskEvidence,
   confirmTreatmentConvocation,
+  deleteEmptyTreatment,
   fetchTreatmentCandidates,
   fetchTreatmentDetail,
   fetchTreatmentParticipantOptions,
   fetchTreatments,
   reconfigureTreatment,
+  removeTreatmentParticipant,
   updateTreatment,
   updateTreatmentTask,
 } from "../../../api/treatments";
 import type { TreatmentCandidate, TreatmentParticipantOption, TreatmentTask } from "../../../api/types";
 import { readStoredSession } from "../../../api/http";
 import { formatDate, formatDateTime, toDateTimeLocalValue, toOffsetIso } from "../../../app/utils";
+import { useAuth } from "../../../app/providers/AuthProvider";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
@@ -160,6 +163,8 @@ function extractFilenameFromDisposition(contentDisposition: string | null, fallb
 
 export function TreatmentsPage() {
   usePageTitle("Tratamientos");
+  const { user } = useAuth();
+  const canDeleteTreatment = user?.access_level === "administrador" || user?.access_level === "desarrollador";
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -174,6 +179,8 @@ export function TreatmentsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [deletePanelOpen, setDeletePanelOpen] = useState(false);
+  const [deleteTreatmentCode, setDeleteTreatmentCode] = useState("");
 
   const [scheduledFor, setScheduledFor] = useState("");
   const [treatmentLocation, setTreatmentLocation] = useState("");
@@ -365,6 +372,10 @@ export function TreatmentsPage() {
   const treatmentClosed = Boolean(selectedTreatment?.is_locked);
   const treatmentLocked = treatmentClosed || !selectedTreatment?.can_manage;
   const convocationConfirmed = Boolean(selectedTreatment?.convocation_confirmed_at);
+  const hasConvokedUsers = Boolean(
+    selectedTreatment?.participants.some((participant) => participant.role !== "owner"),
+  );
+  const agendaFieldsDisabled = treatmentLocked || convocationConfirmed || !hasConvokedUsers;
   usePublishHelpWorkContext(selectedTreatment ? resolveTreatmentHelpWorkContext(selectedTreatment) : null);
 
   useEffect(() => {
@@ -539,6 +550,19 @@ export function TreatmentsPage() {
       });
       setParticipantNote("");
     }, "Participante convocado al tratamiento.");
+  };
+
+  const handleRemoveParticipant = async (participantId: string, participantName: string) => {
+    if (!selectedTreatment || convocationConfirmed) {
+      return;
+    }
+    if (!window.confirm(`¿Está seguro de eliminar a ${participantName} de la convocatoria?`)) {
+      return;
+    }
+
+    await runMutation(async () => {
+      await removeTreatmentParticipant(selectedTreatment.id, participantId);
+    }, "Usuario eliminado de la convocatoria.");
   };
 
   const handleOpenCompositionCorrection = async () => {
@@ -821,12 +845,87 @@ export function TreatmentsPage() {
       true,
     );
   };
+
+  const handleDeleteTreatment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const code = deleteTreatmentCode.trim().toUpperCase();
+    if (!code) {
+      setFormError("Debe ingresar el numero de tratamiento a eliminar.");
+      return;
+    }
+    if (!window.confirm(`¿Está seguro de eliminar el tratamiento ${code}?`)) {
+      return;
+    }
+
+    setBusy(true);
+    setFormError(null);
+    setMessage(null);
+    try {
+      const result = await deleteEmptyTreatment(code);
+      if (selectedTreatment?.code.toUpperCase() === result.code.toUpperCase()) {
+        setSelectedTreatmentId("");
+      }
+      setDeleteTreatmentCode("");
+      setDeletePanelOpen(false);
+      await reloadSupport();
+      setMessage(`Tratamiento ${result.code} eliminado correctamente.`);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "No se pudo eliminar el tratamiento.");
+    } finally {
+      setBusy(false);
+    }
+  };
 return (
     <section className="page-shell">
       <PageHeader
         title="Tratamientos"
       description="Gestion de tratamientos por anomalia con Revisión de hallazgos: convocatoria, analisis de causa y acciones asociadas."
       />
+
+      {canDeleteTreatment ? (
+        <div className="form-actions">
+          <button
+            className="button button-danger"
+            onClick={() => setDeletePanelOpen((current) => !current)}
+            type="button"
+          >
+            ELIMINAR
+          </button>
+        </div>
+      ) : null}
+
+      {canDeleteTreatment && deletePanelOpen ? (
+        <form className="panel form-section compact" onSubmit={handleDeleteTreatment}>
+          <div className="section-head compact">
+            <div>
+              <p className="eyebrow">Eliminar tratamiento</p>
+              <h2>Ingrese el número de tratamiento</h2>
+            </div>
+          </div>
+          <label className="field">
+            <span>Número de tratamiento</span>
+            <input
+              autoFocus
+              onChange={(event) => setDeleteTreatmentCode(event.target.value)}
+              placeholder="Ej.: TRT-2026-0001"
+              required
+              type="text"
+              value={deleteTreatmentCode}
+            />
+          </label>
+          <p className="muted-copy">
+            Sólo pueden eliminarse tratamientos que no tengan datos agregados ni modificados en las vistas 1 o 2.
+          </p>
+          <div className="form-actions">
+            <button className="button button-danger" disabled={busy} type="submit">
+              {busy ? "Eliminando..." : "Confirmar eliminación"}
+            </button>
+            <button className="button button-secondary" disabled={busy} onClick={() => setDeletePanelOpen(false)} type="button">
+              Cancelar
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       <TabbedFilters
         ariaLabel="Filtros de tratamientos"
@@ -931,15 +1030,15 @@ return (
                       <form className="form-section" onSubmit={handleSaveAgenda}>
                         <div className="section-head compact">
                           <h3>Fecha de tratamiento</h3>
-                          <button className="button button-primary" disabled={busy || treatmentLocked || convocationConfirmed} type="submit">
-                            {convocationConfirmed ? "Agenda confirmada" : "Guardar agenda"}
+                          <button className="button button-primary" disabled={busy || agendaFieldsDisabled} type="submit">
+                            {convocationConfirmed ? "Agenda confirmada" : "Confirmar agenda"}
                           </button>
                         </div>
                         <label className="field">
                           <span>Fecha y hora programada</span>
                           <input
                             name="scheduled_for"
-                            disabled={treatmentLocked || convocationConfirmed}
+                            disabled={agendaFieldsDisabled}
                             onChange={(event) => setScheduledFor(event.target.value)}
                             type="datetime-local"
                             required
@@ -950,7 +1049,7 @@ return (
                           <span>Lugar de tratamiento</span>
                           <input
                             name="treatment_location"
-                            disabled={treatmentLocked || convocationConfirmed}
+                            disabled={agendaFieldsDisabled}
                             maxLength={200}
                             onChange={(event) => setTreatmentLocation(event.target.value)}
                             placeholder="Ej: Sala de reuniones, linea 1, sector pintura"
@@ -958,6 +1057,11 @@ return (
                             value={treatmentLocation}
                           />
                         </label>
+                        {!convocationConfirmed && !hasConvokedUsers ? (
+                          <div className="panel info compact-inline-panel">
+                            <p>Primero debe cargar al menos un usuario convocado. Luego se habilitarán la fecha, el lugar y la confirmación de la agenda.</p>
+                          </div>
+                        ) : null}
                         {convocationConfirmed ? (
                           <div className="panel info compact-inline-panel">
                             <p>
@@ -1022,7 +1126,22 @@ return (
                                 <strong>{participant.user?.full_name || participant.user?.username || "Usuario"}</strong>
                                 <p>{participant.note || "Sin observaciones"}</p>
                               </div>
-                              <StatusBadge compact value={participant.role} />
+                              <div className="badge-stack align-end">
+                                <StatusBadge compact value={participant.role} />
+                                {participant.role !== "owner" ? (
+                                  <button
+                                    className="button button-danger"
+                                    disabled={busy || treatmentLocked || convocationConfirmed}
+                                    onClick={() => void handleRemoveParticipant(
+                                      participant.id,
+                                      participant.user?.full_name || participant.user?.username || "este usuario",
+                                    )}
+                                    type="button"
+                                  >
+                                    Eliminar convocado
+                                  </button>
+                                ) : null}
+                              </div>
                             </div>
                           ))}
                           {!selectedTreatment.participants.length ? <p className="muted-copy">Todavia no hay convocados.</p> : null}

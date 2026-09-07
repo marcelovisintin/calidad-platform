@@ -517,6 +517,13 @@ class TreatmentCreateSerializer(serializers.Serializer):
     observations = serializers.CharField(required=False, allow_blank=True)
 
 
+class TreatmentDeleteEmptySerializer(serializers.Serializer):
+    code = serializers.CharField(max_length=40)
+
+    def validate_code(self, value):
+        return value.strip().upper()
+
+
 class TreatmentUpdateSerializer(serializers.Serializer):
     scheduled_for = serializers.DateTimeField(required=False, allow_null=True)
     treatment_location = serializers.CharField(required=False, allow_blank=True, max_length=200)

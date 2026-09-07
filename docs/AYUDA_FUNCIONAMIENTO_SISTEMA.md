@@ -229,9 +229,10 @@ Cuando el criterio es reconocido como No conformidad (`NC` o texto equivalente):
 
 1. El Administrador selecciona el **Responsable único del tratamiento**.
 2. Puede seleccionar opcionalmente **Anomalías relacionadas**.
-3. Las candidatas deben estar clasificadas para tratamiento, no estar cerradas/anuladas y no integrar ya otro tratamiento. Pueden ser otras NC u Observaciones marcadas como **Observación TRT (con tratamiento)**.
-4. La vista **Sugeridas por repitencia** prioriza coincidencias; **Todas las elegibles** muestra el conjunto disponible.
-5. Al confirmar, Calidad crea o consolida un único tratamiento. El responsable no puede agregar o quitar anomalías.
+3. Las candidatas deben estar clasificadas para tratamiento, no estar cerradas/anuladas y no estar asociadas como hijas de otro tratamiento. Pueden ser otras NC u Observaciones marcadas como **Observación TRT (con tratamiento)**.
+4. La vista **Coincidencias por tipo y proceso** muestra solamente las candidatas que coinciden simultáneamente con la anomalía principal en el tipo de desvío y el proceso afectado. Es una ayuda de selección: no compara títulos, descripciones, causas, productos ni fechas.
+5. **Todas las elegibles** muestra el resto del conjunto disponible. La búsqueda filtra por código, tipo de desvío, proceso o clasificación; el título no interviene.
+6. Al confirmar, Calidad crea o consolida un único tratamiento. El responsable no puede agregar o quitar anomalías.
 
 La numeración `TRT-AAAA-####` se reserva solo al crear un tratamiento. La consolidación de tratamientos pendientes preserva el código cancelado en auditoría y no pisa códigos existentes.
 
@@ -281,51 +282,44 @@ Filtros: búsqueda por código, título, área o usuario, e **Incluir observacio
 
 ### 9.1 Carga de Observación directa
 
-Campos obligatorios:
-
-- **Responsable:** queda fijado al responsable asignado en Revisión de hallazgos; no puede cambiarse.
-- **Fecha límite de ejecución**.
-- **Observación**.
-
-Al seleccionar **Cargar observación**, se conserva el caso abierto y se habilita **Acciones tomadas**.
+La primera tarjeta muestra el responsable, la fecha límite de ejecución y la **Causa asignada** confirmados en Revisión de hallazgos. Estos datos quedan en modo solo lectura. El responsable analiza allí si corresponde una resolución directa o una Observación TRT. Al seleccionar **Siguiente** sin marcar TRT se habilita la tarjeta **Acciones tomadas** sin perder la observación elegida.
 
 ### 9.2 Observación TRT
 
-Antes de confirmar acciones, se puede marcar **Clasificar como Observación TRT (con tratamiento)**. En ese caso:
+La opción **Clasificar como Observación TRT (con tratamiento)** la define el responsable desde la primera tarjeta de Observaciones, antes de registrar acciones. En ese caso:
 
 - el caso sigue clasificado como Observación;
-- el camino queda `TREATMENT_PENDING`;
-- la etapa vuelve a Revisión de hallazgos y el estado a En evaluación;
+- el sistema crea inmediatamente un tratamiento con el responsable asignado;
+- el camino queda derivado a Tratamiento y aparece en su listado;
 - no se deben cargar acciones tomadas en Observaciones;
-- queda disponible para ser incluida por Calidad en un tratamiento;
-- al vincularla, el camino cambia a `TREATMENT` y sale del circuito directo.
-
-Si ya se confirmaron acciones tomadas, la casilla TRT queda bloqueada.
+- se conserva la trazabilidad con la anomalía original.
 
 ### 9.3 Acciones tomadas
 
-Campos obligatorios:
+Cada acción exige:
 
-- **Fecha de realizado**.
-- **Fecha de verificación de eficacia**.
 - **Detalle de la acción**.
+- **Fecha estimada de realización**.
+- **Fecha estimada de verificación de eficacia**.
 
-Las evidencias objetivas son opcionales y múltiples. Al confirmar, la anomalía pasa a **Pendiente de verificación / Verificación de eficacia**, se crea el pendiente del responsable y se envía la notificación correspondiente.
+Las acciones guardadas son de solo lectura y pueden agregarse varias. Cada una se finaliza indicando su fecha real. Al completar la última acción, la anomalía pasa a **Pendiente de verificación / Verificación de eficacia** y se notifica al responsable. Las evidencias objetivas son opcionales y múltiples.
 
 ### 9.4 Verificación de eficacia de Observación
 
-Solo el responsable asignado puede confirmar:
+La tarjeta aparece cuando existe al menos una acción y muestra:
 
-- fecha de verificación;
-- resultado **Eficaz: Sí/No**;
-- observación opcional.
+- la fecha estimada de eficacia más lejana entre todas las acciones;
+- la acción correspondiente tomada como referencia;
+- resultado **Eficaz / No eficaz**;
+- fecha real y detalle de la verificación.
 
-Resultado real:
+Solo el responsable asignado puede registrar la verificación. Cada intento conserva fecha, usuario, resultado, referencia e historial.
 
-- **Eficaz:** la anomalía pasa directamente a **Cerrada / Cierre** y se notifica al registrador.
-- **No eficaz:** permanece **Pendiente de verificación**, abierta para registrar una nueva acción tomada. No cambia al estado Reabierta.
+- **Eficaz y todas las acciones finalizadas:** la anomalía pasa a **Cerrada / Cierre** y se notifica al registrador.
+- **Eficaz con acciones pendientes:** no se cierra y vuelve a ejecución hasta completar las acciones y realizar una nueva verificación.
+- **No eficaz:** vuelve a **En tratamiento / Ejecución y seguimiento**, permite una nueva ronda de acciones y conserva todas las verificaciones anteriores.
 
-No existe una segunda aprobación de Calidad/Administrador después de que el responsable confirma eficacia. Por lo tanto, la política “el responsable cierra a su nivel y Calidad realiza cierre definitivo” está **pendiente / no verificada en código**.
+No existe una segunda aprobación de Calidad/Administrador después de que el responsable confirma una eficacia válida con todas las acciones finalizadas.
 
 ## 10. Tratamientos
 
@@ -335,7 +329,7 @@ Gestionar el tratamiento de una o varias anomalías conformadas por Calidad, con
 
 ### Creación y visibilidad
 
-- Los tratamientos se crean exclusivamente al confirmar una No conformidad en Revisión de hallazgos. La API de creación directa rechaza el alta manual.
+- Los tratamientos se crean al confirmar una No conformidad en Revisión de hallazgos o cuando el Mando Medio Activo responsable marca una Observación como TRT. La API de creación manual continúa rechazada.
 - Administrador/Desarrollador ve todos.
 - Otros usuarios ven tratamientos en los que sean creador, registrador o responsable de la anomalía principal, responsable del tratamiento, participante, responsable de acción o verificador.
 - Solo el responsable con nivel de gestión o un usuario global puede editar el tratamiento. Ser convocado no concede edición del análisis.
@@ -798,9 +792,9 @@ La API genérica permite Reabrir desde Cerrada o Pendiente de verificación haci
 
 ### 24.4 Derivar una Observación a tratamiento
 
-1. Antes de acciones, marcar **Observación TRT** y documentar motivo.
-2. Calidad la incluye al clasificar una NC o corrige un tratamiento pendiente elegible.
-3. Desde entonces se gestiona dentro del tratamiento; no desde Acciones tomadas de Observaciones.
+1. Antes de cargar acciones, el Mando Medio Activo responsable marca **Observación TRT**.
+2. El sistema crea automáticamente el tratamiento individual con ese responsable.
+3. La Observación conserva su clasificación, pasa al camino `TREATMENT` y se gestiona desde Tratamientos.
 
 ### 24.5 Realizar un tratamiento de NC
 
@@ -823,7 +817,7 @@ No hay acción visible. La reapertura solo está implementada en la API genéric
 
 1. Toda operación utiliza al usuario autenticado; los enlaces de correo no deben transferir una sesión ajena.
 2. Todos los usuarios activos pueden registrar anomalías.
-3. Solo Administrador/Desarrollador clasifica hallazgos y conforma tratamientos.
+3. Administrador/Desarrollador clasifica hallazgos y conforma tratamientos de No Conformidades; el Mando Medio Activo asignado puede conformar el tratamiento de su propia Observación TRT.
 4. El responsable de clasificación debe ser Mando medio, Administrador o Desarrollador.
 5. Las anomalías de un tratamiento las define Calidad; el responsable no cambia la composición.
 6. Una Observación debe elegir resolución directa o TRT antes de confirmar acciones.

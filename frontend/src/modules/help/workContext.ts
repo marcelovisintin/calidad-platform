@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { CurrentUser, AnomalyDetail, TreatmentDetail, TreatmentTaskHistory } from "../../api/types";
+import type { ActionWorkItem, CurrentUser, AnomalyDetail, TreatmentDetail, TreatmentTaskHistory } from "../../api/types";
 import { humanizeToken } from "../../app/utils";
 
 export type HelpWorkContext = {
@@ -172,6 +172,10 @@ export function getDefaultHelpWorkContext(pathname: string, user?: CurrentUser |
 
 export function resolveAnomalyHelpWorkContext(anomaly: AnomalyDetail, isAdmin: boolean): HelpWorkContext {
   const immediateAction = anomaly.immediate_action;
+  const observationActions = anomaly.observation_actions ?? [];
+  const hasObservationActions = observationActions.length > 0;
+  const hasPendingObservationActions = observationActions.some((action) => action.status !== "completed");
+  const hasDirectActions = hasObservationActions || Boolean(immediateAction?.actions_taken);
   const status = humanizeToken(anomaly.current_status);
   const stage = humanizeToken(anomaly.current_stage);
   const responsible = userLabel(immediateAction?.responsible || anomaly.current_responsible || anomaly.owner);
@@ -187,12 +191,14 @@ export function resolveAnomalyHelpWorkContext(anomaly: AnomalyDetail, isAdmin: b
     nextAction = "El hallazgo espera la Revisión de Calidad. Puedes consultar su evolución en Seguimiento.";
   } else if (anomaly.observation_resolution_path === "TREATMENT_PENDING") {
     nextAction = "La Observación TRT está disponible para que Calidad la asocie a un tratamiento elegible.";
-  } else if (immediateAction && !immediateAction.actions_taken) {
+  } else if (immediateAction && !hasDirectActions) {
     nextAction = "Registra y confirma las acciones tomadas en el módulo Observaciones.";
   } else if (immediateAction?.effectiveness_is_effective === false) {
     nextAction = "Revisa el resultado no eficaz y registra nuevas acciones tomadas.";
     tone = "warning";
-  } else if (immediateAction?.actions_taken && immediateAction.effectiveness_is_effective == null) {
+  } else if (hasPendingObservationActions) {
+    nextAction = "Finaliza las acciones pendientes para continuar con la verificación de eficacia.";
+  } else if (hasDirectActions && immediateAction?.effectiveness_is_effective == null) {
     nextAction = "El responsable asignado debe verificar la eficacia en la fecha prevista.";
   } else if (anomaly.current_stage === "effectiveness_verification") {
     nextAction = "Consulta Validaciones y espera la evaluación del responsable designado.";
@@ -258,7 +264,7 @@ export function resolveTreatmentHelpWorkContext(treatment: TreatmentDetail): Hel
   };
 }
 
-export function resolveTaskHelpWorkContext(task: TreatmentTaskHistory): HelpWorkContext {
+export function resolveTaskHelpWorkContext(task: TreatmentTaskHistory | ActionWorkItem): HelpWorkContext {
   const complete = task.status === "completed";
   const canWork = task.can_update_status || task.can_add_evidence;
   return {

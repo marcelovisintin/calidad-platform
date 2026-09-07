@@ -349,4 +349,7 @@ class ActionsApiRootSerializer(serializers.Serializer):
     items = serializers.CharField()
     my_actions = serializers.CharField()
     pending = serializers.CharField()
+    treatments = serializers.CharField()
+    work_items = serializers.CharField()
+    validation_items = serializers.CharField()
 

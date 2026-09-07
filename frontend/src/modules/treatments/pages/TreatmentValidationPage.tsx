@@ -1,7 +1,8 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { fetchTreatmentDetail, fetchTreatments, validateTreatmentEffectiveness } from "../../../api/treatments";
-import type { TreatmentDetail } from "../../../api/types";
-import { useAuth } from "../../../app/providers/AuthProvider";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { fetchValidationWorkItems } from "../../../api/actions";
+import { fetchAnomalyDetail, verifyObservationEffectiveness } from "../../../api/anomalies";
+import { fetchTreatmentDetail, validateTreatmentEffectiveness } from "../../../api/treatments";
+import type { ActionWorkItemSource, ValidationWorkItem } from "../../../api/types";
 import { formatDate, formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
@@ -9,86 +10,133 @@ import { PaginationControls } from "../../../components/PaginationControls";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
-import { resolveTreatmentHelpWorkContext, usePublishHelpWorkContext } from "../../help/workContext";
+import {
+  resolveAnomalyHelpWorkContext,
+  resolveTreatmentHelpWorkContext,
+  usePublishHelpWorkContext,
+} from "../../help/workContext";
 
 type ValidationResult = "effective" | "not_effective" | "";
 
+function nowAsLocalDateTime() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function toOffsetIso(value: string) {
+  return new Date(value).toISOString();
+}
+
 function resultLabel(value?: string) {
-  if (value === "effective") {
-    return "Eficaz";
-  }
-  if (value === "not_effective") {
-    return "No eficaz";
-  }
+  if (value === "effective") return "Eficaz";
+  if (value === "not_effective") return "No eficaz";
   return "Sin validar";
+}
+
+function statusLabel(value: ValidationWorkItem["status"]) {
+  if (value === "completed") return "Realizada";
+  if (value === "blocked") return "Bloqueada";
+  return "Pendiente";
+}
+
+function itemKey(item: Pick<ValidationWorkItem, "id" | "source">) {
+  return `${item.source}:${item.id}`;
+}
+
+function SourceBadge({ source }: { source: ActionWorkItemSource }) {
+  return (
+    <span className={`action-source-badge ${source}`}>
+      {source === "treatment" ? "Tratamiento" : "Observacion"}
+    </span>
+  );
 }
 
 export function TreatmentValidationPage() {
   usePageTitle("Validacion");
-  const { user } = useAuth();
   const [page, setPage] = useState(1);
-  const [selectedTreatmentId, setSelectedTreatmentId] = useState("");
+  const [search, setSearch] = useState("");
+  const [showTreatments, setShowTreatments] = useState(true);
+  const [showObservations, setShowObservations] = useState(true);
+  const [selectedKey, setSelectedKey] = useState("");
   const [validationResult, setValidationResult] = useState<ValidationResult>("");
   const [validationComment, setValidationComment] = useState("");
+  const [verifiedAt, setVerifiedAt] = useState(nowAsLocalDateTime());
   const [message, setMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const { data, loading, error, reload } = useAsyncTask(() => fetchTreatments(page, "", { validationReady: true }), [page]);
-  const treatments = data?.results ?? [];
+  const selectedSources = useMemo<ActionWorkItemSource[]>(() => {
+    const sources: ActionWorkItemSource[] = [];
+    if (showTreatments) sources.push("treatment");
+    if (showObservations) sources.push("observation");
+    return sources;
+  }, [showTreatments, showObservations]);
+
+  const { data, loading, error, reload } = useAsyncTask(
+    () => fetchValidationWorkItems({ page, q: search, sources: selectedSources }),
+    [page, search, showTreatments, showObservations],
+  );
+  const items = data?.results ?? [];
 
   useEffect(() => {
-    if (!treatments.length) {
-      setSelectedTreatmentId("");
+    if (!items.length) {
+      setSelectedKey("");
       return;
     }
-    if (!selectedTreatmentId || !treatments.some((item) => item.id === selectedTreatmentId)) {
-      setSelectedTreatmentId(treatments[0].id);
+    if (!selectedKey || !items.some((item) => itemKey(item) === selectedKey)) {
+      setSelectedKey(itemKey(items[0]));
     }
-  }, [selectedTreatmentId, treatments]);
+  }, [items, selectedKey]);
 
+  const selectedItem = items.find((item) => itemKey(item) === selectedKey) ?? null;
   const {
-    data: selectedTreatment,
+    data: selectedDetail,
     loading: detailLoading,
     error: detailError,
     reload: reloadDetail,
   } = useAsyncTask(async () => {
-    if (!selectedTreatmentId) {
-      return null;
+    if (!selectedItem) return null;
+    if (selectedItem.source === "treatment") {
+      return { source: "treatment" as const, detail: await fetchTreatmentDetail(selectedItem.id) };
     }
-    return fetchTreatmentDetail(selectedTreatmentId);
-  }, [selectedTreatmentId]);
+    return { source: "observation" as const, detail: await fetchAnomalyDetail(selectedItem.id) };
+  }, [selectedKey]);
 
   useEffect(() => {
     setValidationResult("");
     setValidationComment("");
+    setVerifiedAt(nowAsLocalDateTime());
     setFormError(null);
     setMessage(null);
-  }, [selectedTreatmentId]);
+  }, [selectedKey]);
 
-  const canCurrentUserValidate = useMemo(() => {
-    if (!selectedTreatment || !user) {
-      return false;
-    }
-    return selectedTreatment.effectiveness_responsible?.id === user.id;
-  }, [selectedTreatment, user]);
+  const treatmentContext = selectedDetail?.source === "treatment"
+    ? resolveTreatmentHelpWorkContext(selectedDetail.detail)
+    : null;
+  const anomalyContext = selectedDetail?.source === "observation"
+    ? resolveAnomalyHelpWorkContext(selectedDetail.detail, false)
+    : null;
+  usePublishHelpWorkContext(treatmentContext ?? anomalyContext);
 
-  const blockers = selectedTreatment?.validation_state?.blockers ?? [];
-  const validationAvailable = Boolean(selectedTreatment?.validation_state?.available);
-  usePublishHelpWorkContext(selectedTreatment ? resolveTreatmentHelpWorkContext(selectedTreatment) : null);
+  const handleSourceChange = (source: ActionWorkItemSource) => (event: ChangeEvent<HTMLInputElement>) => {
+    if (source === "treatment") setShowTreatments(event.target.checked);
+    else setShowObservations(event.target.checked);
+    setPage(1);
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedTreatment || !validationResult) {
-      setFormError("Debe seleccionar si el tratamiento fue eficaz o no eficaz.");
+    if (!selectedItem || !validationResult) {
+      setFormError("Debe seleccionar si la validacion fue eficaz o no eficaz.");
       return;
     }
-    if (!validationAvailable) {
-      setFormError("El tratamiento todavia no cumple las condiciones para validacion.");
-      return;
-    }
-    if (!canCurrentUserValidate) {
-      setFormError("Solo el responsable designado puede validar la eficacia del tratamiento.");
+    if (!selectedItem.can_validate) {
+      setFormError("La validacion no esta disponible para el usuario actual.");
       return;
     }
 
@@ -96,15 +144,22 @@ export function TreatmentValidationPage() {
     setFormError(null);
     setMessage(null);
     try {
-      await validateTreatmentEffectiveness(selectedTreatment.id, {
-        result: validationResult,
-        comment: validationComment.trim(),
-      });
+      if (selectedItem.source === "treatment") {
+        await validateTreatmentEffectiveness(selectedItem.id, {
+          result: validationResult,
+          comment: validationComment.trim(),
+        });
+      } else {
+        await verifyObservationEffectiveness(selectedItem.id, {
+          effectiveness_verified_at: toOffsetIso(verifiedAt),
+          effectiveness_is_effective: validationResult === "effective",
+          effectiveness_comment: validationComment.trim() || undefined,
+        });
+      }
       setMessage("Validacion registrada correctamente.");
       setValidationResult("");
       setValidationComment("");
-      await reload();
-      await reloadDetail();
+      await Promise.all([reload(), reloadDetail()]);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "No se pudo registrar la validacion.");
     } finally {
@@ -114,137 +169,138 @@ export function TreatmentValidationPage() {
 
   return (
     <section className="page-shell">
-      <PageHeader
-        title="Validacion"
-        description="Evaluacion de eficacia de tratamientos por el responsable designado."
-      />
+      <PageHeader title="Validacion" description="Verificacion de eficacia de tratamientos y observaciones." />
 
-      {message ? <div className="panel">{message}</div> : null}
+      <section className="panel action-source-selector" aria-label="Origen de las validaciones">
+        <div><p className="eyebrow">Origen</p><h2>Mostrar validaciones de</h2></div>
+        <div className="action-source-options">
+          <label className="checkbox-line">
+            <input checked={showTreatments} onChange={handleSourceChange("treatment")} type="checkbox" />
+            <span>Tratamientos</span>
+          </label>
+          <label className="checkbox-line">
+            <input checked={showObservations} onChange={handleSourceChange("observation")} type="checkbox" />
+            <span>Observaciones</span>
+          </label>
+        </div>
+      </section>
+
+      {message ? <div className="panel success">{message}</div> : null}
       {formError ? <div className="panel danger">{formError}</div> : null}
 
       <DataState loading={loading} error={error} onRetry={reload}>
         <div className="user-management-grid">
           <section className="panel">
             <div className="section-head compact">
-              <div>
-                <p className="eyebrow">Tratamientos</p>
-                <h2>Disponibles y pendientes</h2>
-              </div>
+              <div><p className="eyebrow">Validaciones</p><h2>Todos los estados</h2></div>
             </div>
-            <div className="stack-list user-list-scroll">
-              {treatments.map((item) => (
+            <label className="field">
+              <span>Buscar</span>
+              <input
+                onChange={(event) => { setSearch(event.target.value); setPage(1); }}
+                placeholder="Codigo, titulo o responsable"
+                type="search"
+                value={search}
+              />
+            </label>
+            <div className="stack-list user-list-scroll validation-work-list">
+              {items.map((item) => (
                 <button
-                  className={`list-card selectable-card${selectedTreatmentId === item.id ? " active" : ""}`}
-                  key={item.id}
-                  onClick={() => setSelectedTreatmentId(item.id)}
+                  className={`list-card selectable-card work-list-card${selectedKey === itemKey(item) ? " active" : ""}`}
+                  key={itemKey(item)}
+                  onClick={() => setSelectedKey(itemKey(item))}
                   type="button"
                 >
-                  <div>
-                    <strong>{item.code}</strong>
-                    <p>{item.primary_anomaly.title}</p>
-                    <small>
-                      Evaluacion: {item.effectiveness_evaluation_date ? formatDate(item.effectiveness_evaluation_date) : "Sin fecha"}
-                    </small>
-                    <small>Responsable: {item.effectiveness_responsible?.full_name || "Sin responsable"}</small>
+                  <div className="work-card-main">
+                    <div className="work-card-heading"><SourceBadge source={item.source} /><strong>{item.code}</strong><span>{item.title}</span></div>
+                    <div className="work-card-meta"><small>Evaluacion: {item.due_date ? formatDate(item.due_date) : "Sin fecha"}</small><small>Responsable: {item.responsible?.full_name || item.responsible?.username || "Sin responsable"}</small></div>
                   </div>
                   <div className="badge-stack align-end">
                     <StatusBadge value={item.status} compact />
-                    <StatusBadge value="active" compact />
+                    <small>{statusLabel(item.status)}</small>
                   </div>
                 </button>
               ))}
-              {!treatments.length ? <p className="muted-copy">No hay tratamientos visibles para validar.</p> : null}
+              {!items.length ? <p className="muted-copy">No hay validaciones para los origenes seleccionados.</p> : null}
             </div>
             <PaginationControls page={page} totalCount={data?.count ?? 0} onPageChange={setPage} disabled={loading || busy} />
           </section>
 
           <section className="panel">
             <DataState loading={detailLoading} error={detailError} onRetry={reloadDetail}>
-              {selectedTreatment ? (
+              {selectedItem && selectedDetail ? (
                 <form className="form-section" onSubmit={handleSubmit}>
                   <div className="section-head compact">
                     <div>
-                      <p className="eyebrow">{selectedTreatment.code}</p>
-                      <h2>{selectedTreatment.primary_anomaly.title}</h2>
+                      <div className="badge-stack"><SourceBadge source={selectedItem.source} /></div>
+                      <p className="eyebrow">{selectedItem.code}</p>
+                      <h2>{selectedItem.title}</h2>
                     </div>
-                    <StatusBadge value={selectedTreatment.status} />
+                    <StatusBadge value={selectedItem.status} />
                   </div>
 
                   <dl className="key-grid compact">
-                    <div>
-                      <dt>Fecha tratamiento</dt>
-                      <dd>{selectedTreatment.scheduled_for ? formatDateTime(selectedTreatment.scheduled_for) : "Sin agenda"}</dd>
-                    </div>
-                    <div>
-                      <dt>Fecha evaluacion</dt>
-                      <dd>{selectedTreatment.effectiveness_evaluation_date ? formatDate(selectedTreatment.effectiveness_evaluation_date) : "Sin fecha"}</dd>
-                    </div>
-                    <div>
-                      <dt>Responsable designado</dt>
-                      <dd>{selectedTreatment.effectiveness_responsible?.full_name || "Sin responsable"}</dd>
-                    </div>
-                    <div>
-                      <dt>Resultado actual</dt>
-                      <dd>{resultLabel(selectedTreatment.effectiveness_validation_result)}</dd>
-                    </div>
+                    <div><dt>Fecha estimada</dt><dd>{selectedItem.due_date ? formatDate(selectedItem.due_date) : "Sin fecha"}</dd></div>
+                    <div><dt>Responsable</dt><dd>{selectedItem.responsible?.full_name || selectedItem.responsible?.username || "Sin responsable"}</dd></div>
+                    <div><dt>Resultado actual</dt><dd>{resultLabel(selectedItem.result)}</dd></div>
+                    <div><dt>Fecha de validacion</dt><dd>{selectedItem.validated_at ? formatDateTime(selectedItem.validated_at) : "Sin validar"}</dd></div>
                   </dl>
 
-                  {!canCurrentUserValidate ? (
-                    <div className="panel warning compact-inline-panel">
-                      <p>Solo el responsable designado puede validar la eficacia del tratamiento.</p>
-                    </div>
+                  {selectedItem.validation_comment ? (
+                    <div className="readonly-block"><strong>Comentario registrado</strong><p>{selectedItem.validation_comment}</p></div>
                   ) : null}
 
-                  {blockers.length ? (
+                  {selectedItem.blockers.length ? (
                     <div className="panel warning">
                       <h3>Falta completar</h3>
                       <ul className="help-list">
-                        {blockers.map((blocker) => (
-                          <li key={blocker}>{blocker}</li>
-                        ))}
+                        {selectedItem.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
                       </ul>
                     </div>
+                  ) : selectedItem.status === "pending" ? (
+                    <div className="panel info">El caso cumple las condiciones para validar.</div>
+                  ) : null}
+
+                  {!selectedItem.can_validate && selectedItem.status !== "completed" ? (
+                    <div className="panel warning compact-inline-panel">
+                      <p>Solo el responsable designado puede registrar esta validacion.</p>
+                    </div>
+                  ) : null}
+
+                  {selectedItem.status === "completed" ? (
+                    <div className="panel muted">Esta validacion ya fue realizada y se muestra en modo consulta.</div>
                   ) : (
-                    <div className="panel info">El tratamiento cumple las condiciones para validacion.</div>
+                    <>
+                      <div className="form-grid">
+                        {selectedItem.source === "observation" ? (
+                          <label className="field">
+                            <span>Fecha de realizacion</span>
+                            <input disabled={!selectedItem.can_validate || busy} onChange={(event) => setVerifiedAt(event.target.value)} required type="datetime-local" value={verifiedAt} />
+                          </label>
+                        ) : null}
+                        <label className="field">
+                          <span>Resultado</span>
+                          <select disabled={!selectedItem.can_validate || busy} onChange={(event) => setValidationResult(event.target.value as ValidationResult)} required value={validationResult}>
+                            <option value="">Seleccionar...</option>
+                            <option value="effective">Eficaz</option>
+                            <option value="not_effective">No eficaz</option>
+                          </select>
+                        </label>
+                        <label className="field field-span-2">
+                          <span>Observacion</span>
+                          <textarea disabled={!selectedItem.can_validate || busy} onChange={(event) => setValidationComment(event.target.value)} rows={3} value={validationComment} />
+                        </label>
+                      </div>
+                      <div className="form-actions">
+                        <button className="button button-primary" disabled={busy || !validationResult || !selectedItem.can_validate} type="submit">
+                          {busy ? "Guardando..." : "Registrar validacion"}
+                        </button>
+                      </div>
+                    </>
                   )}
-
-                  <div className="form-grid">
-                    <label className="field">
-                      <span>Resultado de validacion</span>
-                      <select
-                        disabled={!validationAvailable || !canCurrentUserValidate || busy}
-                        onChange={(event) => setValidationResult(event.target.value as ValidationResult)}
-                        required
-                        value={validationResult}
-                      >
-                        <option value="">Seleccionar...</option>
-                        <option value="effective">Eficaz</option>
-                        <option value="not_effective">No eficaz</option>
-                      </select>
-                    </label>
-                    <label className="field">
-                      <span>Observacion</span>
-                      <textarea
-                        disabled={!validationAvailable || !canCurrentUserValidate || busy}
-                        onChange={(event) => setValidationComment(event.target.value)}
-                        rows={3}
-                        value={validationComment}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="form-actions">
-                    <button
-                      className="button button-primary"
-                      disabled={busy || !validationResult || !validationAvailable || !canCurrentUserValidate}
-                      type="submit"
-                    >
-                      Registrar validacion
-                    </button>
-                  </div>
                 </form>
               ) : (
-                <p className="muted-copy">Selecciona un tratamiento para revisar su validacion.</p>
+                <p className="muted-copy">Selecciona una validacion para revisar el detalle.</p>
               )}
             </DataState>
           </section>

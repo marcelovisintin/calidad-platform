@@ -121,6 +121,15 @@ textarea {
   color: var(--primary);
 }
 
+.button-danger {
+  background: #b42318;
+  color: #fff;
+}
+
+.button-danger:hover {
+  background: #8f1c13;
+}
+
 .button-ghost {
   background: rgba(216, 140, 58, 0.12);
   color: #8a5215;
@@ -3001,6 +3010,156 @@ small {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.action-work-list,
+.validation-work-list {
+  gap: 0.45rem;
+}
+
+.actions-two-column {
+  align-items: start;
+}
+
+.actions-two-column .action-list-column {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.actions-two-column .action-detail-fixed {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+
+@media (max-width: 1120px) {
+  .actions-two-column .action-list-column {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .actions-two-column .action-detail-fixed {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+
+.work-list-card,
+.user-list-scroll .selectable-card.work-list-card {
+  min-height: 0;
+  padding: 0.55rem 0.7rem;
+  border-width: 1px;
+  border-radius: 14px;
+  box-shadow: 0 3px 9px rgba(8, 33, 40, 0.05);
+}
+
+.work-card-header {
+  gap: 0.5rem;
+}
+
+.work-card-main {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.work-card-heading,
+.work-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.work-card-heading > span:last-child,
+.work-card-main > small,
+.work-card-meta small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-card-main > small,
+.work-card-meta small {
+  line-height: 1.1;
+}
+
+.work-card-meta {
+  gap: 0.8rem;
+}
+
+.work-card-facts {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.25rem 0.55rem;
+  margin: 0.35rem 0 0;
+}
+
+.work-card-facts dt {
+  margin-bottom: 0.08rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.09em;
+}
+
+.work-card-facts dd {
+  overflow: hidden;
+  font-size: 0.78rem;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.validation-work-list .work-list-card > .badge-stack {
+  gap: 0.12rem;
+}
+
+.action-source-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.action-source-selector p {
+  margin: 0;
+}
+
+.action-source-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.action-source-options .checkbox-inline {
+  min-height: 42px;
+  padding: 0.55rem 0.8rem;
+  border: 2px solid rgba(15, 44, 53, 0.16);
+  border-radius: 12px;
+  background: rgba(226, 241, 237, 0.92);
+  color: var(--primary-dark);
+}
+
+.action-source-badge {
+  display: inline-flex;
+  width: fit-content;
+  margin-bottom: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.action-source-badge.treatment {
+  color: #0a5146;
+  background: rgba(21, 132, 111, 0.16);
+}
+
+.action-source-badge.observation {
+  color: #74470a;
+  background: rgba(201, 135, 26, 0.18);
+}
+
 .action-card.active {
   border-color: rgba(21, 132, 111, 0.45);
   box-shadow: 0 8px 20px rgba(12, 56, 53, 0.08);
@@ -3021,6 +3180,27 @@ small {
   align-items: center;
   justify-content: space-between;
   gap: 0.8rem;
+}
+
+@media (max-width: 720px) {
+  .work-card-heading,
+  .work-card-meta {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .work-card-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .action-source-selector {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .action-source-options .checkbox-inline {
+    flex: 1 1 100%;
+  }
 }
 
 .inbox-tabs {

@@ -29,6 +29,7 @@ from apps.anomalies.models import (
     AnomalyStage,
     AnomalyStatus,
     AnomalyStatusHistory,
+    ObservationAction,
     ParticipantRole,
 )
 from apps.catalog.models import Area, Line, OrderType, Site
@@ -471,6 +472,34 @@ class AnomalyImmediateActionSerializer(serializers.ModelSerializer):
             "closure_comment",
         )
 
+
+class ObservationActionSerializer(serializers.ModelSerializer):
+    completed_by = UserSummarySerializer(read_only=True)
+
+    class Meta:
+        model = ObservationAction
+        fields = (
+            "id",
+            "sequence",
+            "detail",
+            "estimated_completion_date",
+            "effectiveness_due_date",
+            "status",
+            "completed_at",
+            "completed_by",
+            "created_at",
+        )
+
+
+class ObservationActionCreateSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+    estimated_completion_date = serializers.DateField()
+    effectiveness_due_date = serializers.DateField()
+
+
+class ObservationActionCompleteSerializer(serializers.Serializer):
+    completed_at = serializers.DateField()
+
 class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin, serializers.ModelSerializer):
     site = SiteSummarySerializer(read_only=True)
     area = AreaSummarySerializer(read_only=True)
@@ -556,6 +585,7 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
     cause_analysis = AnomalyCauseAnalysisSerializer(read_only=True)
     learning = AnomalyLearningSerializer(read_only=True)
     immediate_action = AnomalyImmediateActionSerializer(read_only=True)
+    observation_actions = ObservationActionSerializer(many=True, read_only=True)
     action_plans = ActionPlanSummarySerializer(many=True, read_only=True)
     treatment_tasks = serializers.SerializerMethodField()
     learned_lessons = serializers.SerializerMethodField()
@@ -648,6 +678,7 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
             "cause_analysis",
             "learning",
             "immediate_action",
+            "observation_actions",
             "action_plans",
             "treatment_tasks",
             "learned_lessons",
@@ -727,6 +758,8 @@ class AnomalyUpdateSerializer(AffectedOrdersWriteMixin, serializers.ModelSeriali
         write_only=True,
     )
     classification_reason = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    observation_due_date = serializers.DateField(required=False, allow_null=True, write_only=True)
+    observation_comment = serializers.CharField(required=False, allow_blank=True, write_only=True)
     treatment_related_anomalies = serializers.PrimaryKeyRelatedField(
         queryset=Anomaly.objects.all(),
         many=True,
@@ -761,6 +794,8 @@ class AnomalyUpdateSerializer(AffectedOrdersWriteMixin, serializers.ModelSeriali
             "result_summary",
             "classification_responsible",
             "classification_reason",
+            "observation_due_date",
+            "observation_comment",
             "treatment_related_anomalies",
         )
         extra_kwargs = {

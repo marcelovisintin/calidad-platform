@@ -18,6 +18,8 @@
     AnomalyStatus,
     AnomalyStatusHistory,
     ObservationResolutionPath,
+    ObservationAction,
+    ObservationActionStatus,
     ParticipantRole,
     STAGE_STATUS_MAP,
 )
@@ -42,6 +44,8 @@ __all__ = [
     "AnomalyStatus",
     "AnomalyStatusHistory",
     "ObservationResolutionPath",
+    "ObservationAction",
+    "ObservationActionStatus",
     "ParticipantRole",
     "STAGE_STATUS_MAP",
 ]

@@ -13,6 +13,7 @@ from apps.anomalies.models import (
     AnomalyParticipant,
     AnomalyProposal,
     AnomalyStatusHistory,
+    ObservationAction,
 )
 
 def build_anomaly_queryset(*, detailed: bool = False):
@@ -62,6 +63,10 @@ def build_anomaly_queryset(*, detailed: bool = False):
             Prefetch(
                 "status_history",
                 queryset=AnomalyStatusHistory.objects.select_related("changed_by").order_by("-changed_at", "-created_at"),
+            ),
+            Prefetch(
+                "observation_actions",
+                queryset=ObservationAction.objects.select_related("completed_by").order_by("sequence", "created_at"),
             ),
             Prefetch(
                 "action_plans",

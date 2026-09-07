@@ -598,6 +598,64 @@ export interface TreatmentTaskHistory {
   updated_at: string;
 }
 
+export type ActionWorkItemSource = "treatment" | "observation";
+
+export interface ActionWorkItemAnomaly {
+  id: UUID;
+  code: string;
+  title: string;
+  current_status: string;
+  current_stage: string;
+}
+
+export interface ActionWorkItemTreatment {
+  id: UUID;
+  code: string;
+  status: string;
+}
+
+export interface ActionWorkItem {
+  id: UUID;
+  source: ActionWorkItemSource;
+  code: string;
+  title: string;
+  description: string;
+  status: "pending" | "in_progress" | "completed" | "cancelled";
+  due_date?: string | null;
+  completed_on?: string | null;
+  effectiveness_due_date?: string | null;
+  is_overdue: boolean;
+  responsible?: UserSummary | null;
+  completed_by?: UserSummary | null;
+  treatment?: ActionWorkItemTreatment | null;
+  anomalies: ActionWorkItemAnomaly[];
+  root_causes: TreatmentTaskHistoryRootCause[];
+  evidences: TreatmentTaskEvidence[];
+  can_manage: boolean;
+  can_update_status: boolean;
+  can_add_evidence: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ValidationWorkItem {
+  id: UUID;
+  source: ActionWorkItemSource;
+  code: string;
+  title: string;
+  status: "pending" | "blocked" | "completed";
+  due_date?: string | null;
+  responsible?: UserSummary | null;
+  result: "" | "effective" | "not_effective";
+  validated_at?: string | null;
+  validation_comment: string;
+  available: boolean;
+  blockers: string[];
+  can_validate: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface TreatmentRootCause {
   id: UUID;
   sequence: number;
@@ -1008,6 +1066,7 @@ export interface AnomalyDetail extends AnomalyListItem {
   cause_analysis?: AnomalyCauseAnalysis | null;
   learning?: AnomalyLearning | null;
   immediate_action?: AnomalyImmediateAction | null;
+  observation_actions: ObservationAction[];
   action_plans: ActionPlanSummary[];
   treatment_tasks: AnomalyTreatmentTaskSummary[];
   learned_lessons: AnomalyTreatmentLearnedLessonSummary[];
@@ -1040,6 +1099,24 @@ export interface ObservationActionPayload {
   action_completed_at: string;
   actions_taken: string;
   effectiveness_due_at: string;
+}
+
+export interface ObservationAction {
+  id: UUID;
+  sequence: number;
+  detail: string;
+  estimated_completion_date: string;
+  effectiveness_due_date: string;
+  status: "pending" | "completed";
+  completed_at?: string | null;
+  completed_by?: UserSummary | null;
+  created_at: string;
+}
+
+export interface ObservationActionCreatePayload {
+  detail: string;
+  estimated_completion_date: string;
+  effectiveness_due_date: string;
 }
 
 export interface ObservationVerificationPayload {

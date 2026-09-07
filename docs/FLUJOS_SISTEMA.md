@@ -37,8 +37,8 @@ flowchart TD
     U --> Q
     T --> M
 
-    P -- Observación TRT --> V[Camino TREATMENT_PENDING]
-    V --> W[Calidad la asocia a tratamiento]
+    P -- Observación TRT --> V[Mando Medio Activo confirma su decisión]
+    V --> W[Crear tratamiento individual]
     W --> X[Camino TREATMENT]
 
     J -- No conformidad --> Y[Asignar responsable y seleccionar relacionadas]
@@ -80,11 +80,9 @@ flowchart TD
 
     F -- Sí --> G{¿Ya hay acciones confirmadas?}
     G -- Sí --> H[Rechazar: la casilla TRT está bloqueada]
-    G -- No --> I[Guardar camino TREATMENT_PENDING]
-    I --> J[Estado: En evaluación<br/>Etapa: Revisión de hallazgos]
-    J --> K[Queda elegible para tratamiento]
-    K --> L[Calidad la asocia a una NC/tratamiento]
-    L --> M[Camino TREATMENT]
+    G -- No --> I[Conformar tratamiento individual]
+    I --> J[Responsable: Mando Medio Activo asignado]
+    J --> M[Camino TREATMENT]
     M --> N[Continúa por flujo de tratamiento]
 
     F -- No --> O[Guardar camino OBSERVATION]

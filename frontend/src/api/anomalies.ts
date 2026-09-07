@@ -9,6 +9,8 @@ import type {
   AffectedOrderListResponse,
   ImmediateActionPayload,
   ObservationActionPayload,
+  ObservationAction,
+  ObservationActionCreatePayload,
   ObservationLoadPayload,
   ObservationVerificationPayload,
   PagedResponse,
@@ -153,6 +155,20 @@ export function saveObservationActionTaken(anomalyId: string, payload: Observati
   });
 }
 
+export function createObservationAction(anomalyId: string, payload: ObservationActionCreatePayload) {
+  return apiRequest<ObservationAction>(`/anomalies/${anomalyId}/observation/actions/`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function completeObservationAction(anomalyId: string, actionId: string, completedAt: string) {
+  return apiRequest<ObservationAction>(`/anomalies/${anomalyId}/observation/actions/${actionId}/complete/`, {
+    method: "POST",
+    body: { completed_at: completedAt },
+  });
+}
+
 export function verifyObservationEffectiveness(anomalyId: string, payload: ObservationVerificationPayload) {
   return apiRequest<AnomalyDetail>(`/anomalies/${anomalyId}/observation/effectiveness/`, {
     method: "POST",
@@ -184,6 +200,8 @@ export function classifyAnomalyBySeverity(
     severity: string;
     classification_responsible?: string;
     classification_reason?: string;
+    observation_due_date?: string;
+    observation_comment?: string;
     treatment_related_anomalies?: string[];
   },
 ) {

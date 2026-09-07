@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError as DjangoValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
@@ -42,6 +42,8 @@ from apps.anomalies.models import (
     AnomalyStage,
     AnomalyStatus,
     AnomalyStatusHistory,
+    ObservationAction,
+    ObservationActionStatus,
     ObservationResolutionPath,
     ParticipantRole,
 )
@@ -554,6 +556,8 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     before = snapshot_anomaly(locked)
     classification_responsible = data.pop("classification_responsible", None)
     classification_reason = (data.pop("classification_reason", "") or "").strip()
+    observation_due_date = data.pop("observation_due_date", None)
+    observation_comment = (data.pop("observation_comment", "") or "").strip()
     treatment_related_anomalies = list(data.pop("treatment_related_anomalies", []) or [])
     affected_orders = data.pop("affected_orders", None)
     legacy_order_changed = "manufacturing_order_number" in data or "affected_quantity" in data
@@ -601,6 +605,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
         severity_name = locked.severity.name
         closes_as_invalid = bool(getattr(locked.severity, "closes_anomaly_as_invalid", False))
         requires_responsible = bool(getattr(locked.severity, "requires_classification_responsible", True))
+        is_observation = is_immediate_action_value(locked.severity.code) or is_immediate_action_value(severity_name)
 
         if treatment_related_anomalies and not is_nonconformity_anomaly(locked):
             raise ValidationError(
@@ -617,9 +622,13 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
                 {"classification_responsible": "El responsable debe tener nivel Mando medio, Administrador o Desarrollador."}
             )
         locked.classification_summary = f"Criterio de Revisión de hallazgos aplicado: {severity_name}."
-        if is_immediate_action_value(locked.severity.code) or is_immediate_action_value(severity_name):
+        if is_observation:
+            if not observation_due_date:
+                raise ValidationError({"observation_due_date": "Debe indicar la fecha de realizacion."})
+            if not observation_comment:
+                raise ValidationError({"observation_comment": "Debe registrar la causa asignada."})
             _ensure_observation_code(locked)
-
+            locked.containment_summary = observation_comment
         if closes_as_invalid:
             transition_from_status = locked.current_status
             transition_from_stage = locked.current_stage
@@ -734,6 +743,9 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
             evidence_lines.append(f"Motivo: {classification_reason}")
         elif classification_responsible is not None:
             evidence_lines.append(f"Responsable asignado: {_user_label(classification_responsible)}")
+        if is_observation:
+            evidence_lines.append(f"Fecha de realizacion: {observation_due_date.isoformat()}")
+            evidence_lines.append(f"Causa asignada: {observation_comment}")
         evidence_lines.extend(
             [
                 f"Estado anterior: {transition_from_status}",
@@ -763,6 +775,10 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
         request_id=_request_id(request_id),
     )
     configured_treatment = None
+    is_observation_classification = bool(
+        should_sync_classification
+        and (is_immediate_action_value(locked.severity.code) or is_immediate_action_value(locked.severity.name))
+    )
     if should_sync_classification and is_nonconformity_anomaly(locked):
         from apps.actions.services import create_configured_treatment
 
@@ -782,6 +798,18 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
             related_anomalies=related_anomalies,
             responsible=classification_responsible,
             user=user,
+            request_id=request_id,
+        )
+    elif is_observation_classification:
+        save_observation_load(
+            anomaly=locked,
+            user=user,
+            data={
+                "responsible": classification_responsible,
+                "action_date": observation_due_date,
+                "observation": observation_comment,
+                "requires_treatment": False,
+            },
             request_id=request_id,
         )
 
@@ -1173,7 +1201,10 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
         raise ValidationError({"responsible": "La Observacion debe gestionarla el responsable asignado en Revision de hallazgos."})
     if immediate_action.pk and immediate_action.responsible_id and data["responsible"].pk != immediate_action.responsible_id:
         raise ValidationError({"responsible": "No se puede cambiar el responsable de una Observacion ya cargada."})
-    if requires_treatment and immediate_action.pk and (immediate_action.actions_taken or "").strip():
+    if requires_treatment and immediate_action.pk and (
+        (immediate_action.actions_taken or "").strip()
+        or locked.observation_actions.exists()
+    ):
         raise ValidationError(
             {"requires_treatment": "No se puede marcar como Observacion TRT porque las acciones tomadas ya fueron confirmadas."}
         )
@@ -1242,7 +1273,7 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
         from_stage=previous_stage,
         to_stage=locked.current_stage,
         comment=(
-            "Observacion TRT confirmada: pendiente de asociacion a Tratamiento."
+            "Observacion TRT confirmada por el responsable."
             if requires_treatment
             else "Carga de Observacion confirmada."
         ),
@@ -1270,7 +1301,17 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
         },
         request_id=_request_id(request_id),
     )
+    configured_treatment = None
     if requires_treatment:
+        from apps.actions.services import create_configured_treatment
+
+        configured_treatment = create_configured_treatment(
+            primary_anomaly=locked,
+            related_anomalies=[],
+            responsible=immediate_action.responsible,
+            user=user,
+            request_id=request_id,
+        )
         complete_observation_effectiveness_assignment(
             anomaly=locked,
             actor=user,
@@ -1281,8 +1322,202 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
             responsible=immediate_action.responsible,
             actor=user,
             request_id=request_id,
+            treatment=configured_treatment,
         )
     return immediate_action
+
+
+@transaction.atomic
+def create_observation_action(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> ObservationAction:
+    _ensure_anomaly_is_editable(anomaly)
+    required_fields = {
+        "detail": "Debe registrar el detalle de la accion.",
+        "estimated_completion_date": "Debe indicar la fecha estimada de realizacion.",
+        "effectiveness_due_date": "Debe indicar la fecha estimada de verificacion de eficacia.",
+    }
+    for field_name, message in required_fields.items():
+        value = data.get(field_name)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            raise ValidationError({field_name: message})
+
+    locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
+    _ensure_observation_path_available(locked)
+    immediate_action = _get_related_or_none(locked, "immediate_action")
+    if immediate_action is None:
+        raise ValidationError({"observation": "Primero debe confirmar los datos generales de la Observacion."})
+    _require_observation_manager(locked, user, immediate_action)
+
+    if immediate_action.effectiveness_verified_at is not None:
+        immediate_action.effectiveness_verified_at = None
+        immediate_action.effectiveness_is_effective = None
+        immediate_action.effectiveness_comment = ""
+        immediate_action.closure_comment = ""
+        immediate_action.updated_by = user
+        immediate_action.save(
+            update_fields=[
+                "effectiveness_verified_at",
+                "effectiveness_is_effective",
+                "effectiveness_comment",
+                "closure_comment",
+                "updated_by",
+                "updated_at",
+            ]
+        )
+
+    sequence = (locked.observation_actions.aggregate(max_sequence=models.Max("sequence"))["max_sequence"] or 0) + 1
+    action = ObservationAction(
+        anomaly=locked,
+        sequence=sequence,
+        detail=data["detail"].strip(),
+        estimated_completion_date=data["estimated_completion_date"],
+        effectiveness_due_date=data["effectiveness_due_date"],
+        created_by=user,
+        updated_by=user,
+    )
+    action.full_clean()
+    action.save()
+
+    previous_status = locked.current_status
+    previous_stage = locked.current_stage
+    now = timezone.now()
+    locked.current_stage = AnomalyStage.EXECUTION_AND_FOLLOW_UP
+    locked.current_status = AnomalyStatus.IN_TREATMENT
+    locked.resolution_summary = action.detail
+    locked.last_transition_at = now
+    locked.updated_by = user
+    _bump_version(locked)
+    locked.full_clean()
+    locked.save()
+
+    evidence_note = "\n".join(
+        [
+            f"Accion: {action.sequence}",
+            f"Detalle: {action.detail}",
+            f"Fecha estimada de realizacion: {action.estimated_completion_date.isoformat()}",
+            f"Fecha estimada de verificacion: {action.effectiveness_due_date.isoformat()}",
+        ]
+    )
+    _write_status_history(
+        anomaly=locked,
+        from_status=previous_status,
+        to_status=locked.current_status,
+        from_stage=previous_stage,
+        to_stage=locked.current_stage,
+        comment=f"Accion {action.sequence} de Observacion guardada en modo solo lectura.",
+        evidence_note=evidence_note,
+        actor=user,
+        changed_at=now,
+    )
+    record_audit_event(
+        entity=locked,
+        action="anomaly.observation_action_created",
+        actor=user,
+        after_data={
+            "action_id": str(action.pk),
+            "sequence": action.sequence,
+            "detail": action.detail,
+            "estimated_completion_date": action.estimated_completion_date.isoformat(),
+            "effectiveness_due_date": action.effectiveness_due_date.isoformat(),
+        },
+        request_id=_request_id(request_id),
+    )
+    return action
+
+
+@transaction.atomic
+def complete_observation_action(*, action: ObservationAction, user, completed_at, request_id: str = "") -> ObservationAction:
+    locked_anomaly = Anomaly.objects.select_for_update().get(pk=action.anomaly_id)
+    _ensure_anomaly_is_editable(locked_anomaly)
+    _ensure_observation_path_available(locked_anomaly)
+    immediate_action = _get_related_or_none(locked_anomaly, "immediate_action")
+    _require_observation_manager(locked_anomaly, user, immediate_action)
+
+    locked_action = ObservationAction.objects.select_for_update().get(pk=action.pk, anomaly=locked_anomaly)
+    if locked_action.status == ObservationActionStatus.COMPLETED:
+        raise ValidationError({"action": "La accion ya fue finalizada."})
+    if not completed_at:
+        raise ValidationError({"completed_at": "Debe indicar la fecha real de finalizacion."})
+
+    previous_status = locked_anomaly.current_status
+    previous_stage = locked_anomaly.current_stage
+    locked_action.status = ObservationActionStatus.COMPLETED
+    locked_action.completed_at = completed_at
+    locked_action.completed_by = user
+    locked_action.updated_by = user
+    _bump_version(locked_action)
+    locked_action.full_clean()
+    locked_action.save()
+
+    now = timezone.now()
+    reference_action = None
+    all_actions_completed = not locked_anomaly.observation_actions.filter(
+        status=ObservationActionStatus.PENDING
+    ).exists()
+    if all_actions_completed:
+        reference_action = locked_anomaly.observation_actions.order_by(
+            "-effectiveness_due_date",
+            "-sequence",
+        ).first()
+        if reference_action is not None and immediate_action is not None:
+            immediate_action.effectiveness_due_at = reference_action.effectiveness_due_date
+            immediate_action.updated_by = user
+            immediate_action.save(update_fields=["effectiveness_due_at", "updated_by", "updated_at"])
+
+        locked_anomaly.current_stage = AnomalyStage.EFFECTIVENESS_VERIFICATION
+        locked_anomaly.current_status = AnomalyStatus.PENDING_VERIFICATION
+        locked_anomaly.last_transition_at = now
+        locked_anomaly.updated_by = user
+        _bump_version(locked_anomaly)
+        locked_anomaly.full_clean()
+        locked_anomaly.save()
+
+    _write_status_history(
+        anomaly=locked_anomaly,
+        from_status=previous_status,
+        to_status=locked_anomaly.current_status,
+        from_stage=previous_stage,
+        to_stage=locked_anomaly.current_stage,
+        comment=(
+            f"Accion {locked_action.sequence} de Observacion finalizada. "
+            "Todas las acciones estan completas; continua la verificacion de eficacia."
+            if all_actions_completed
+            else f"Accion {locked_action.sequence} de Observacion finalizada."
+        ),
+        evidence_note=f"Fecha real de finalizacion: {locked_action.completed_at.isoformat()}",
+        actor=user,
+        changed_at=now,
+    )
+    record_audit_event(
+        entity=locked_anomaly,
+        action="anomaly.observation_action_completed",
+        actor=user,
+        before_data={"action_id": str(locked_action.pk), "status": ObservationActionStatus.PENDING},
+        after_data={
+            "action_id": str(locked_action.pk),
+            "status": locked_action.status,
+            "completed_at": locked_action.completed_at.isoformat(),
+            "completed_by_id": str(user.pk),
+            "all_actions_completed": all_actions_completed,
+            "anomaly_status": locked_anomaly.current_status,
+            "anomaly_stage": locked_anomaly.current_stage,
+            "reference_action_id": str(reference_action.pk) if reference_action is not None else None,
+            "reference_action_sequence": reference_action.sequence if reference_action is not None else None,
+            "effectiveness_due_date": (
+                reference_action.effectiveness_due_date.isoformat()
+                if reference_action is not None
+                else None
+            ),
+        },
+        request_id=_request_id(request_id),
+    )
+    if all_actions_completed and immediate_action is not None:
+        notify_observation_effectiveness_assigned(
+            anomaly=locked_anomaly,
+            immediate_action=immediate_action,
+            actor=user,
+            request_id=request_id,
+        )
+    return locked_action
 
 
 @transaction.atomic
@@ -1379,10 +1614,36 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
     _ensure_observation_path_available(locked)
     immediate_action = _get_related_or_none(locked, "immediate_action")
-    if immediate_action is None or not (immediate_action.actions_taken or "").strip():
-        raise ValidationError({"actions_taken": "Primero debe confirmar una accion tomada."})
+    observation_actions = list(
+        locked.observation_actions.select_for_update().order_by("sequence", "created_at")
+    )
+    has_legacy_action = bool(immediate_action and (immediate_action.actions_taken or "").strip())
+    if immediate_action is None or (not observation_actions and not has_legacy_action):
+        raise ValidationError({"actions_taken": "Debe cargar al menos una accion antes de verificar eficacia."})
     if immediate_action.responsible_id != getattr(user, "id", None):
         raise PermissionDenied("Solo el responsable asignado puede verificar la eficacia de la Observacion.")
+
+    reference_action = max(
+        observation_actions,
+        key=lambda item: (item.effectiveness_due_date, item.sequence),
+        default=None,
+    )
+    pending_actions = [item for item in observation_actions if item.status != ObservationActionStatus.COMPLETED]
+    all_actions_completed = not pending_actions
+    evidence_summary = (
+        "\n".join(f"Accion {item.sequence}: {item.detail}" for item in observation_actions)
+        if observation_actions
+        else immediate_action.actions_taken
+    )
+    if reference_action is not None:
+        reference_note = (
+            f"Accion de referencia: {reference_action.sequence} - {reference_action.detail}\n"
+            f"Fecha estimada usada: {reference_action.effectiveness_due_date.isoformat()}"
+        )
+    elif immediate_action.effectiveness_due_at is not None:
+        reference_note = f"Fecha estimada usada: {immediate_action.effectiveness_due_at.isoformat()}"
+    else:
+        reference_note = "Fecha estimada usada: sin fecha registrada en la accion heredada."
 
     before = snapshot_anomaly(locked)
     previous_status = locked.current_status
@@ -1397,6 +1658,8 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
     immediate_action.effectiveness_is_effective = is_effective
     immediate_action.effectiveness_comment = check_comment
     immediate_action.closure_comment = (data.get("closure_comment") or "").strip()
+    if reference_action is not None:
+        immediate_action.effectiveness_due_at = reference_action.effectiveness_due_date
     immediate_action.updated_by = user
     immediate_action.full_clean()
     immediate_action.save()
@@ -1406,9 +1669,13 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
         verified_by=immediate_action.responsible,
         verified_at=immediate_action.effectiveness_verified_at,
         is_effective=is_effective,
-        evidence_summary=immediate_action.actions_taken,
+        evidence_summary=f"{evidence_summary}\n{reference_note}",
         comment=check_comment,
-        recommended_stage="",
+        recommended_stage=(
+            ""
+            if is_effective
+            else AnomalyStage.EXECUTION_AND_FOLLOW_UP
+        ),
         created_by=user,
         updated_by=user,
     )
@@ -1417,18 +1684,22 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
 
     locked.result_summary = check_comment
     locked.effectiveness_summary = check_comment
-    if is_effective:
+    if is_effective and all_actions_completed:
         locked.current_stage = AnomalyStage.CLOSURE
         locked.current_status = AnomalyStatus.CLOSED
         locked.closed_at = now
         locked.closure_comment = immediate_action.closure_comment or "Cierre directo por Observacion eficaz."
         history_comment = "Verificacion de eficacia confirmada. Anomalia cerrada."
     else:
-        locked.current_stage = AnomalyStage.EFFECTIVENESS_VERIFICATION
-        locked.current_status = AnomalyStatus.PENDING_VERIFICATION
+        locked.current_stage = AnomalyStage.EXECUTION_AND_FOLLOW_UP
+        locked.current_status = AnomalyStatus.IN_TREATMENT
         locked.closed_at = None
         locked.closure_comment = ""
-        history_comment = "Verificacion de eficacia No eficaz. La anomalia queda abierta para nueva accion tomada."
+        history_comment = (
+            "Verificacion eficaz, pero la Observacion no puede cerrarse porque existen acciones pendientes."
+            if is_effective
+            else "Verificacion de eficacia No eficaz. La Observacion queda abierta para cargar nuevas acciones."
+        )
 
     locked.last_transition_at = now
     locked.updated_by = user
@@ -1447,6 +1718,7 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
             [
                 f"Fecha: {immediate_action.effectiveness_verified_at.isoformat()}",
                 f"Resultado: {'Eficaz' if is_effective else 'No eficaz'}",
+                reference_note,
                 f"Observacion: {check_comment}",
             ]
         ),
@@ -1458,7 +1730,25 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
         action="anomaly.observation_effectiveness_verified",
         actor=user,
         before_data=before,
-        after_data=snapshot_anomaly(locked) | {"immediate_action_id": str(immediate_action.pk)},
+        after_data=snapshot_anomaly(locked)
+        | {
+            "immediate_action_id": str(immediate_action.pk),
+            "effectiveness_check_id": str(check.pk),
+            "effectiveness_result": "effective" if is_effective else "not_effective",
+            "all_actions_completed": all_actions_completed,
+            "pending_action_ids": [str(item.pk) for item in pending_actions],
+            "reference_action_id": str(reference_action.pk) if reference_action is not None else None,
+            "reference_action_sequence": reference_action.sequence if reference_action is not None else None,
+            "effectiveness_due_date": (
+                reference_action.effectiveness_due_date.isoformat()
+                if reference_action is not None
+                else (
+                    immediate_action.effectiveness_due_at.isoformat()
+                    if immediate_action.effectiveness_due_at is not None
+                    else None
+                )
+            ),
+        },
         request_id=_request_id(request_id),
     )
     complete_observation_effectiveness_assignment(
@@ -1466,14 +1756,14 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
         actor=user,
         request_id=request_id,
     )
-    if is_effective:
+    if is_effective and all_actions_completed:
         notify_anomaly_closed(
             anomaly=locked,
             actor=user,
             closure_path="observation_effective",
             request_id=request_id,
         )
-    else:
+    elif not is_effective:
         notify_observation_not_effective(
             anomaly=locked,
             immediate_action=immediate_action,

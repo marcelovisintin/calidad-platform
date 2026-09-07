@@ -25,6 +25,11 @@ class ObservationResolutionPath(models.TextChoices):
     TREATMENT = "TREATMENT", "Tratamiento"
 
 
+class ObservationActionStatus(models.TextChoices):
+    PENDING = "pending", "Pendiente"
+    COMPLETED = "completed", "Finalizada"
+
+
 class AnomalyStage(models.TextChoices):
     REGISTRATION = "registration", "Registro"
     CONTAINMENT = "containment", "Contencion"
@@ -501,4 +506,53 @@ class AnomalyImmediateAction(AuditBaseModel):
     class Meta:
         verbose_name = "Observacion de anomalia"
         verbose_name_plural = "Observaciones de anomalia"
+
+
+class ObservationAction(AuditBaseModel):
+    anomaly = models.ForeignKey(
+        "anomalies.Anomaly",
+        on_delete=models.CASCADE,
+        related_name="observation_actions",
+    )
+    sequence = models.PositiveIntegerField(default=1)
+    detail = models.TextField()
+    estimated_completion_date = models.DateField()
+    effectiveness_due_date = models.DateField()
+    status = models.CharField(
+        max_length=20,
+        choices=ObservationActionStatus.choices,
+        default=ObservationActionStatus.PENDING,
+    )
+    completed_at = models.DateField(null=True, blank=True)
+    completed_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="completed_observation_actions",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ("sequence", "created_at")
+        verbose_name = "Accion de Observacion"
+        verbose_name_plural = "Acciones de Observaciones"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["anomaly", "sequence"],
+                name="obs_action_anom_seq_uq",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["status", "effectiveness_due_date"],
+                name="obs_action_status_due_idx",
+            )
+        ]
+
+    def clean(self):
+        if self.completed_at and self.status != ObservationActionStatus.COMPLETED:
+            raise ValidationError({"completed_at": "La fecha real solo corresponde a una accion finalizada."})
+
+    def __str__(self) -> str:
+        return f"{self.anomaly.code}-A{self.sequence:02d}"
 

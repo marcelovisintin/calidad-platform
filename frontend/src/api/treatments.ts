@@ -133,6 +133,13 @@ export function updateTreatment(treatmentId: string, payload: TreatmentUpdatePay
   });
 }
 
+export function deleteEmptyTreatment(code: string) {
+  return apiRequest<{ code: string }>("/actions/treatments/delete-empty/", {
+    method: "POST",
+    body: { code },
+  });
+}
+
 export function confirmTreatmentConvocation(
   treatmentId: string,
   payload: { scheduled_for: string; treatment_location?: string },
@@ -228,6 +235,12 @@ export function addTreatmentParticipant(
   return apiRequest<TreatmentParticipant>(`/actions/treatments/${treatmentId}/participants/`, {
     method: "POST",
     body: payload,
+  });
+}
+
+export function removeTreatmentParticipant(treatmentId: string, participantId: string) {
+  return apiRequest<void>(`/actions/treatments/${treatmentId}/participants/${participantId}/remove/`, {
+    method: "POST",
   });
 }
 

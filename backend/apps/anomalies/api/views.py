@@ -39,6 +39,9 @@ from apps.anomalies.api.serializers import (
     AnomalyLearningWriteSerializer,
     AnomalyListSerializer,
     AnomalyObservationActionWriteSerializer,
+    ObservationActionCompleteSerializer,
+    ObservationActionCreateSerializer,
+    ObservationActionSerializer,
     AnomalyObservationLoadWriteSerializer,
     AnomalyObservationVerificationWriteSerializer,
     AnomalyParticipantSerializer,
@@ -58,6 +61,7 @@ from apps.anomalies.models import (
     AnomalyStage,
     AnomalyStatus,
     ObservationResolutionPath,
+    ObservationAction,
     ParticipantRole,
 )
 from apps.anomalies.selectors import build_anomaly_queryset, filter_anomaly_queryset_for_user
@@ -67,6 +71,8 @@ from apps.anomalies.services import (
     add_participant,
     add_proposal,
     create_anomaly,
+    create_observation_action,
+    complete_observation_action,
     record_effectiveness_check,
     reserve_anomaly_code,
     save_cause_analysis,
@@ -497,6 +503,12 @@ class AnomalyViewSet(viewsets.ModelViewSet):
         queryset = build_anomaly_queryset(detailed=self.action in detailed_actions)
         queryset = filter_anomaly_queryset_for_user(queryset, self.request.user)
 
+        # Seguimiento muestra solamente las anomalias principales. Las anomalias
+        # incorporadas como secundarias a un tratamiento permanecen disponibles
+        # en el detalle y en la trazabilidad del tratamiento.
+        if self.action == "list":
+            queryset = queryset.exclude(treatment_links__is_primary=False)
+
         params = self.request.query_params
         if status_value := params.get("status"):
             queryset = queryset.filter(current_status=status_value)
@@ -552,6 +564,10 @@ class AnomalyViewSet(viewsets.ModelViewSet):
             return AnomalyObservationLoadWriteSerializer
         if self.action == "save_observation_action_taken":
             return AnomalyObservationActionWriteSerializer
+        if self.action == "create_observation_action":
+            return ObservationActionCreateSerializer
+        if self.action == "complete_observation_action":
+            return ObservationActionCompleteSerializer
         if self.action == "verify_observation_effectiveness":
             return AnomalyObservationVerificationWriteSerializer
         if self.action == "add_attachment":
@@ -686,6 +702,43 @@ class AnomalyViewSet(viewsets.ModelViewSet):
             request_id=self._request_id(),
         )
         return self._detail_response(anomaly.pk)
+
+    @action(detail=True, methods=["post"], url_path="observation/actions")
+    def create_observation_action(self, request, pk=None):
+        anomaly = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        observation_action = create_observation_action(
+            anomaly=anomaly,
+            user=request.user,
+            data=dict(serializer.validated_data),
+            request_id=self._request_id(),
+        )
+        output = ObservationActionSerializer(observation_action, context=self.get_serializer_context())
+        return Response(output.data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"observation/actions/(?P<observation_action_id>[^/.]+)/complete",
+    )
+    def complete_observation_action(self, request, pk=None, observation_action_id=None):
+        anomaly = self.get_object()
+        observation_action = get_object_or_404(
+            ObservationAction,
+            pk=observation_action_id,
+            anomaly=anomaly,
+        )
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        completed = complete_observation_action(
+            action=observation_action,
+            user=request.user,
+            completed_at=serializer.validated_data["completed_at"],
+            request_id=self._request_id(),
+        )
+        output = ObservationActionSerializer(completed, context=self.get_serializer_context())
+        return Response(output.data)
 
     @action(detail=True, methods=["post"], url_path="observation/effectiveness")
     def verify_observation_effectiveness(self, request, pk=None):

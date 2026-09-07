@@ -48,7 +48,8 @@ const TOURS: Record<string, GuidedTourDefinition> = {
       { selector: ".page-header", title: "Seguimiento", content: "Esta pantalla reúne las anomalías disponibles según tu nivel y relación con cada caso." },
       { selector: ".tabbed-filters", title: "Buscar y filtrar", content: "Escribe código, título, área o estado para reducir el listado. Puedes limpiar el filtro cuando quieras." },
       { selector: ".anomaly-row", title: "Tarjeta de anomalía", content: "La tarjeta resume código, título, tipo, generador, proceso, fecha y estado. Pulsa sobre sus datos para abrir el detalle." },
-      { selector: ".anomaly-classification-control", title: "Revisión de hallazgos", content: "Los perfiles globales utilizan este control para seleccionar el criterio, asignar responsable y confirmar el circuito correspondiente." },
+      { selector: ".anomaly-classification-control", title: "Revisión de hallazgos", content: "Los perfiles globales utilizan este control para seleccionar el criterio, asignar responsable y confirmar el circuito correspondiente. Al elegir No conformidad se habilita la conformación del tratamiento." },
+      { selector: ".anomaly-classification-control", title: "Coincidencias para relacionar", content: "El sistema sugiere solamente anomalías elegibles que coinciden simultáneamente en tipo de desvío y proceso afectado. Todas las elegibles permite revisar el resto. Una anomalía ya asociada como hija no vuelve a ofrecerse." },
       { selector: ".pagination-controls", title: "Cambiar de página", content: "Utiliza la paginación para consultar todos los resultados sin perder los filtros aplicados." },
     ],
   },
@@ -60,8 +61,8 @@ const TOURS: Record<string, GuidedTourDefinition> = {
       { selector: ".page-header", title: "Observaciones", content: "Aquí se gestionan las anomalías clasificadas como Observación que están dentro de tu alcance." },
       { selector: ".tabbed-filters", title: "Localizar un caso", content: "Busca por código, título, área o usuario. También puedes incluir los casos cerrados." },
       { selector: ".treatment-layout > article:first-child", title: "Listado", content: "Selecciona una anomalía para consultar y trabajar su detalle." },
-      { selector: ".treatment-layout > article:last-child", title: "Detalle operativo", content: "El panel derecho muestra el paso disponible: carga de Observación, acciones tomadas o verificación de eficacia." },
-      { selector: ".treatment-layout form", title: "Formulario actual", content: "Completa los campos obligatorios y confirma. Las siguientes etapas se habilitan según el avance guardado." },
+      { selector: ".treatment-layout > article:last-child", title: "Detalle operativo", content: "El panel derecho presenta en orden los datos generales, las acciones tomadas y la verificación de eficacia." },
+      { selector: ".treatment-layout form", title: "Formulario actual", content: "Guarda cada acción y marca su finalización. La eficacia toma como referencia la fecha más lejana y solo cierra el caso si todas las acciones terminaron." },
     ],
   },
   treatments: {
@@ -93,9 +94,10 @@ const TOURS: Record<string, GuidedTourDefinition> = {
   validation: {
     id: "validation",
     title: "Verificar eficacia",
-    description: "Revisa el tratamiento asignado y registra el resultado de eficacia.",
+    description: "Revisa validaciones de tratamientos y observaciones y registra el resultado de eficacia.",
     steps: [
-      { selector: ".user-management-grid > section:first-child", title: "Tratamientos disponibles", content: "Selecciona el tratamiento que debes verificar. Solo aparecen casos visibles para tu usuario." },
+      { selector: ".action-source-selector", title: "Origen de las validaciones", content: "Usa los checks para mostrar u ocultar las validaciones de tratamientos y de observaciones." },
+      { selector: ".user-management-grid > section:first-child", title: "Validaciones visibles", content: "Selecciona el caso que debes verificar. Los bloqueados y realizados tambien quedan disponibles para consulta." },
       { selector: ".user-management-grid > section:last-child", title: "Detalle de validación", content: "Revisa fechas, responsable, resultado actual y toda condición informada por el sistema." },
       { selector: ".user-management-grid > section:last-child .panel.warning", title: "Condiciones pendientes", content: "Si existen bloqueos, esta tarjeta indica qué debe completarse antes de validar." },
       { selector: ".user-management-grid > section:last-child .form-grid", title: "Resultado", content: "Selecciona Eficaz o No eficaz y documenta la observación que justifica tu decisión." },

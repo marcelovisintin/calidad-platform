@@ -1,4 +1,5 @@
 import uuid
+from unittest import skipIf
 
 from django.db import connection
 from django.utils import timezone
@@ -71,10 +72,13 @@ class UserAccessProfileApiTests(APITestCase):
         returned_ids = {item["id"] for item in response.data["results"]}
         self.assertIn(str(self.target_user.pk), returned_ids)
 
+    @skipIf(connection.vendor == "sqlite", "SQLite difiere la restriccion FK del modelo historico hasta cerrar la prueba.")
     def test_delete_user_with_archived_scope_returns_controlled_error(self):
         now = timezone.now()
         role_id = uuid.uuid4()
         scope_id = uuid.uuid4()
+        def db_uuid(value):
+            return User._meta.get_field("id").get_db_prep_value(value, connection)
         with connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -82,7 +86,7 @@ class UserAccessProfileApiTests(APITestCase):
                     (id, created_at, updated_at, row_version, code, name, description, is_active)
                 VALUES (%s, %s, %s, 1, %s, %s, '', TRUE)
                 """,
-                [role_id, now, now, f"LEG-{role_id.hex[:8]}", "Rol historico"],
+                [db_uuid(role_id), now, now, f"LEG-{role_id.hex[:8]}", "Rol historico"],
             )
             cursor.execute(
                 """
@@ -91,7 +95,14 @@ class UserAccessProfileApiTests(APITestCase):
                      role_id, site_id, updated_by_id, user_id)
                 VALUES (%s, %s, %s, 1, NULL, NULL, %s, %s, NULL, %s)
                 """,
-                [scope_id, now, now, role_id, self.site.pk, self.target_user.pk],
+                [
+                    db_uuid(scope_id),
+                    now,
+                    now,
+                    db_uuid(role_id),
+                    db_uuid(self.site.pk),
+                    db_uuid(self.target_user.pk),
+                ],
             )
 
         response = self.client.delete(f"/api/v1/accounts/users/{self.target_user.pk}/")

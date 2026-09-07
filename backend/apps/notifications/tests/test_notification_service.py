@@ -18,7 +18,12 @@ from apps.actions.services.treatment_service import (
     update_treatment_task,
 )
 from apps.anomalies.models import ParticipantRole
-from apps.anomalies.services.anomaly_service import add_participant, create_anomaly, save_observation_load, update_anomaly
+from apps.anomalies.services.anomaly_service import (
+    add_participant,
+    create_anomaly,
+    save_observation_load,
+    update_anomaly,
+)
 from apps.catalog.models import AnomalyOrigin, AnomalyType, Area, Priority, Severity, Site
 from apps.notifications.models import (
     DeliveryStatus,
@@ -652,6 +657,8 @@ class NotificationServiceTests(TestCase):
             data={
                 "severity": observation,
                 "classification_responsible": self.analyst,
+                "observation_due_date": timezone.localdate() + timezone.timedelta(days=3),
+                "observation_comment": "Gestion directa de orden y limpieza.",
             },
         )
 
@@ -662,13 +669,13 @@ class NotificationServiceTests(TestCase):
         notification = recipients.get(channel=NotificationChannel.IN_APP).notification
         self.assertEqual(recipients.count(), 1)
         self.assertFalse(recipients.filter(channel=NotificationChannel.EMAIL).exists())
-        self.assertEqual(notification.action_url, f"/anomalies/{anomaly.pk}")
-        self.assertIn("observación directa", notification.body)
-        self.assertIn("derivarlo a un tratamiento", notification.body)
-        self.assertEqual(notification.context_data["management_path"], "observation_or_treatment")
+        self.assertEqual(notification.action_url, "/anomalies/observations")
+        self.assertIn("gestión directa", notification.body)
+        self.assertIn("verificación de eficacia", notification.body)
+        self.assertEqual(notification.context_data["management_path"], "observation_direct")
 
     @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
-    def test_observation_trt_replaces_management_notification_with_treatment_link(self):
+    def test_observation_trt_decision_creates_treatment_notification(self):
         observation = Severity.objects.create(code="OBS", name="Observación")
         anomaly = self._create_unclassified_anomaly(title="Observación plausible de tratamiento")
         anomaly = update_anomaly(
@@ -677,11 +684,9 @@ class NotificationServiceTests(TestCase):
             data={
                 "severity": observation,
                 "classification_responsible": self.analyst,
+                "observation_due_date": timezone.localdate() + timezone.timedelta(days=3),
+                "observation_comment": "Requiere análisis de causa y tratamiento.",
             },
-        )
-        previous_notification = Notification.objects.get(
-            template_code="finding_management_assigned",
-            source_id=anomaly.pk,
         )
 
         save_observation_load(
@@ -694,19 +699,18 @@ class NotificationServiceTests(TestCase):
                 "requires_treatment": True,
             },
         )
-
-        previous_recipient = previous_notification.recipients.get(channel=NotificationChannel.IN_APP)
-        self.assertEqual(previous_recipient.task_status, RecipientTaskStatus.DISMISSED)
-        active_recipient = NotificationRecipient.objects.get(
-            notification__template_code="finding_management_assigned",
-            notification__source_id=anomaly.pk,
-            channel=NotificationChannel.IN_APP,
-            task_status=RecipientTaskStatus.PENDING,
+        notification = Notification.objects.get(
+            template_code="finding_management_assigned",
+            source_id=anomaly.pk,
+            recipients__task_status=RecipientTaskStatus.PENDING,
         )
-        notification = active_recipient.notification
-        self.assertEqual(notification.action_url, f"/treatments?anomaly={anomaly.pk}")
-        self.assertIn("observación fue marcada como plausible de tratamiento", notification.body)
-        self.assertEqual(notification.context_data["management_path"], "observation_treatment")
+        treatment = Treatment.objects.get(primary_anomaly=anomaly)
+        self.assertEqual(treatment.responsible_id, self.analyst.pk)
+        self.assertEqual(notification.action_url, f"/treatments?treatment={treatment.pk}")
+        self.assertIn("Conformaste el tratamiento", notification.body)
+        self.assertEqual(notification.context_data["management_path"], "configured_treatment")
+        self.assertEqual(notification.context_data["treatment_id"], str(treatment.pk))
+        self.assertEqual(notification.recipients.filter(channel=NotificationChannel.IN_APP).count(), 1)
 
     @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
     def test_improvement_opportunity_responsible_is_directed_to_treatment(self):
@@ -1188,7 +1192,11 @@ class NotificationServiceTests(TestCase):
         save_treatment_learned_lesson(
             treatment=treatment,
             user=self.admin,
-            data={**payload, "learned_text": "Texto actualizado sin nuevo correo."},
+            data={
+                **payload,
+                "learned_text": "Texto actualizado sin nuevo correo.",
+                "confirm_modification": True,
+            },
             request_id="req-updated-lesson",
         )
 

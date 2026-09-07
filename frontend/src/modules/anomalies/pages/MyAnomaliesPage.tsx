@@ -25,6 +25,9 @@ type PendingClassification = {
   responsibleId: string;
   reason: string;
   isNonconformity: boolean;
+  isObservation: boolean;
+  observationDueDate: string;
+  observationComment: string;
   relatedAnomalyIds: string[];
 };
 
@@ -48,6 +51,14 @@ function criterionIsNonconformity(criterion: CatalogSummary) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
   return criterion.code.trim().toUpperCase() === "NC" || normalized.includes("no conformidad");
+}
+
+function criterionIsObservation(criterion: CatalogSummary) {
+  const normalized = `${criterion.code} ${criterion.name}`
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return criterion.code.trim().toUpperCase() === "OBS" || normalized.includes("observacion");
 }
 
 export function MyAnomaliesPage() {
@@ -90,6 +101,10 @@ export function MyAnomaliesPage() {
   const criteria: CatalogSummary[] = data?.criteria ?? [];
   const users: UserDirectoryItem[] = data?.users ?? [];
   const totalCount = data?.anomalies.count ?? 0;
+  const suggestedCandidateCount = useMemo(
+    () => classificationCandidates.filter((candidate) => candidate.suggested_by_repetition).length,
+    [classificationCandidates],
+  );
   const visibleClassificationCandidates = useMemo(() => {
     const normalizedSearch = candidateSearch.trim().toLowerCase();
     return classificationCandidates.filter((candidate) => {
@@ -101,7 +116,8 @@ export function MyAnomaliesPage() {
       }
       return [
         candidate.code,
-        candidate.title,
+        candidate.anomaly_type?.code,
+        candidate.anomaly_type?.name,
         candidate.area?.name,
         candidate.imputed_area?.name,
         candidate.severity?.name,
@@ -149,6 +165,7 @@ export function MyAnomaliesPage() {
 
     const closesAsInvalid = criterionClosesAsInvalid(criterion);
     const isNonconformity = criterionIsNonconformity(criterion);
+    const isObservation = criterionIsObservation(criterion);
     setClassificationError(null);
     setClassificationMessage(null);
     setPendingClassification({
@@ -160,6 +177,9 @@ export function MyAnomaliesPage() {
       responsibleId: "",
       reason: "",
       isNonconformity,
+      isObservation,
+      observationDueDate: "",
+      observationComment: "",
       relatedAnomalyIds: [],
     });
     setClassificationCandidates([]);
@@ -193,6 +213,24 @@ export function MyAnomaliesPage() {
       return;
     }
 
+    if (pendingClassification.isObservation && !pendingClassification.observationDueDate) {
+      setClassificationError("Debe indicar la fecha de realización de la Observación.");
+      return;
+    }
+    if (pendingClassification.isObservation && !pendingClassification.observationComment.trim()) {
+      setClassificationError("Debe registrar la causa asignada.");
+      return;
+    }
+
+    if (
+      pendingClassification.isNonconformity
+      && !window.confirm(
+        "¿Está seguro de confirmar la No Conformidad? Esta acción generará un tratamiento.",
+      )
+    ) {
+      return;
+    }
+
     setClassificationError(null);
     setClassificationMessage(null);
     setUpdatingAnomalyId(pendingClassification.anomalyId);
@@ -202,6 +240,12 @@ export function MyAnomaliesPage() {
         severity: pendingClassification.severityId,
         classification_responsible: pendingClassification.closesAsInvalid ? undefined : pendingClassification.responsibleId || undefined,
         classification_reason: pendingClassification.closesAsInvalid ? pendingClassification.reason.trim() : undefined,
+        observation_due_date: pendingClassification.isObservation
+          ? pendingClassification.observationDueDate
+          : undefined,
+        observation_comment: pendingClassification.isObservation
+          ? pendingClassification.observationComment.trim()
+          : undefined,
         treatment_related_anomalies: pendingClassification.isNonconformity
           ? pendingClassification.relatedAnomalyIds
           : undefined,
@@ -352,6 +396,37 @@ export function MyAnomaliesPage() {
                                 </label>
                               ) : null}
 
+                              {pendingForItem.isObservation ? (
+                                <section className="form-section compact">
+                                  <label className="field">
+                                    <span>Fecha de realización</span>
+                                    <input
+                                      onChange={(event) =>
+                                        setPendingClassification((current) => current && current.anomalyId === item.id
+                                          ? { ...current, observationDueDate: event.target.value }
+                                          : current)
+                                      }
+                                      required
+                                      type="date"
+                                      value={pendingForItem.observationDueDate}
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>Causa asignada</span>
+                                    <textarea
+                                      onChange={(event) =>
+                                        setPendingClassification((current) => current && current.anomalyId === item.id
+                                          ? { ...current, observationComment: event.target.value }
+                                          : current)
+                                      }
+                                      required
+                                      rows={3}
+                                      value={pendingForItem.observationComment}
+                                    />
+                                  </label>
+                                </section>
+                              ) : null}
+
                               {pendingForItem.isNonconformity ? (
                                 <section className="classification-treatment-composition">
                                   <div className="section-head compact">
@@ -369,7 +444,7 @@ export function MyAnomaliesPage() {
                                       onClick={() => setCandidateView("suggested")}
                                       type="button"
                                     >
-                                      Sugeridas por repitencia
+                                      Coincidencias por tipo y proceso ({suggestedCandidateCount})
                                     </button>
                                     <button
                                       className={candidateView === "all" ? "active" : ""}
@@ -379,10 +454,13 @@ export function MyAnomaliesPage() {
                                       Todas las elegibles
                                     </button>
                                   </div>
+                                  <small className="muted-copy">
+                                    Se sugieren anomalías elegibles que coinciden simultáneamente en tipo de desvío y proceso afectado.
+                                  </small>
                                   <input
                                     aria-label="Buscar anomalías relacionadas"
                                     onChange={(event) => setCandidateSearch(event.target.value)}
-                                    placeholder="Buscar por código, título, proceso o clasificación"
+                                    placeholder="Buscar por código, tipo de desvío, proceso o clasificación"
                                     type="search"
                                     value={candidateSearch}
                                   />
@@ -403,13 +481,16 @@ export function MyAnomaliesPage() {
                                             <small>
                                               {candidate.severity?.name || "Sin clasificación"} | {candidate.imputed_area?.name || candidate.area?.name || "Sin proceso"}
                                             </small>
+                                            {candidate.suggested_by_repetition ? (
+                                              <span className="status-badge success compact">Coincide: tipo de desvío + proceso</span>
+                                            ) : null}
                                           </span>
                                         </label>
                                       ))}
                                       {!visibleClassificationCandidates.length ? (
                                         <p className="muted-copy">
                                           {candidateView === "suggested"
-                                            ? "No hay coincidencias por repitencia. Puedes revisar todas las elegibles."
+                                            ? "No hay anomalías elegibles con el mismo tipo de desvío y proceso. Puedes revisar todas las elegibles."
                                             : "No hay anomalías elegibles para conformar el tratamiento."}
                                         </p>
                                       ) : null}

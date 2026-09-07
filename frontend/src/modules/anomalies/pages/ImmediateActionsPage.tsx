@@ -1,6 +1,8 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  completeObservationAction,
+  createObservationAction,
   fetchAnomalyDetail,
   fetchImmediateActionAnomalies,
   saveObservationActionTaken,
@@ -63,6 +65,11 @@ export function ImmediateActionsPage() {
   const [actionDate, setActionDate] = useState(nowAsDate());
   const [observation, setObservation] = useState("");
   const [requiresTreatment, setRequiresTreatment] = useState(false);
+  const [generalStepConfirmed, setGeneralStepConfirmed] = useState(false);
+  const [actionDetail, setActionDetail] = useState("");
+  const [estimatedCompletionDate, setEstimatedCompletionDate] = useState(nowAsDate());
+  const [actionEffectivenessDueDate, setActionEffectivenessDueDate] = useState(nowAsDate());
+  const [completionDates, setCompletionDates] = useState<Record<string, string>>({});
   const [actionCompletedAt, setActionCompletedAt] = useState(nowAsDate());
   const [actionsTaken, setActionsTaken] = useState("");
   const [effectivenessDueAt, setEffectivenessDueAt] = useState(nowAsDate());
@@ -94,7 +101,11 @@ export function ImmediateActionsPage() {
   }, [user?.id, search, page, includeClosed]);
 
   useEffect(() => {
-    if (!listData?.anomalies.results.length) {
+    if (!listData) {
+      return;
+    }
+
+    if (!listData.anomalies.results.length) {
       setSelectedAnomalyId("");
       return;
     }
@@ -144,7 +155,15 @@ export function ImmediateActionsPage() {
     setObjectiveEvidenceInputKey((current) => current + 1);
     setFormError(null);
     setMessage(null);
+    setActionDetail("");
+    setEstimatedCompletionDate(nowAsDate());
+    setActionEffectivenessDueDate(nowAsDate());
+    setCompletionDates({});
   }, [selectedAnomalyId, selectedAnomaly]);
+
+  useEffect(() => {
+    setGeneralStepConfirmed(false);
+  }, [selectedAnomalyId]);
 
   const handleSearch = (event: ChangeEvent<HTMLInputElement>) => {
     setSearch(event.target.value);
@@ -158,8 +177,14 @@ export function ImmediateActionsPage() {
       return;
     }
 
+    if (selectedAnomaly?.immediate_action && !requiresTreatment) {
+      setGeneralStepConfirmed(true);
+      setFormError(null);
+      return;
+    }
+
     if (!responsibleId || !actionDate || !observation.trim()) {
-      setFormError("Completa responsable, fecha limite de ejecucion y observacion.");
+      setFormError("Completa responsable, fecha limite de ejecucion y causa asignada.");
       return;
     }
 
@@ -177,12 +202,72 @@ export function ImmediateActionsPage() {
 
       setMessage(
         requiresTreatment
-          ? "Observacion TRT registrada. Ya esta disponible para crear o asociar a un tratamiento."
+          ? "Observacion clasificada como TRT. El tratamiento fue creado correctamente."
           : "Observacion cargada. Ahora registra las acciones tomadas.",
       );
       await Promise.all([reload(), reloadDetail()]);
+      setGeneralStepConfirmed(!requiresTreatment);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "No se pudo cargar la Observacion.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreateObservationAction = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedAnomalyId || !actionDetail.trim() || !estimatedCompletionDate || !actionEffectivenessDueDate) {
+      setFormError("Completa el detalle y las dos fechas estimadas de la accion.");
+      return;
+    }
+
+    setSubmitting(true);
+    setFormError(null);
+    setMessage(null);
+    try {
+      await createObservationAction(selectedAnomalyId, {
+        detail: actionDetail.trim(),
+        estimated_completion_date: estimatedCompletionDate,
+        effectiveness_due_date: actionEffectivenessDueDate,
+      });
+      for (const file of objectiveEvidenceFiles) {
+        await uploadAnomalyAttachment(selectedAnomalyId, {
+          file,
+          originalName: file.name,
+        });
+      }
+      setActionDetail("");
+      setObjectiveEvidenceFiles([]);
+      setObjectiveEvidenceInputKey((current) => current + 1);
+      await Promise.all([reload(), reloadDetail()]);
+      setGeneralStepConfirmed(true);
+      setMessage("La accion fue guardada correctamente y no podra editarse.");
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "No se pudo guardar la accion.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCompleteObservationAction = async (actionId: string) => {
+    if (!selectedAnomalyId) {
+      return;
+    }
+    const completedAt = completionDates[actionId] || nowAsDate();
+    if (!window.confirm("¿Está seguro de marcar esta acción como finalizada?")) {
+      return;
+    }
+
+    setSubmitting(true);
+    setFormError(null);
+    setMessage(null);
+    try {
+      await completeObservationAction(selectedAnomalyId, actionId, completedAt);
+      await Promise.all([reload(), reloadDetail()]);
+      setGeneralStepConfirmed(true);
+      setMessage("Accion finalizada correctamente.");
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "No se pudo finalizar la accion.");
     } finally {
       setSubmitting(false);
     }
@@ -245,8 +330,8 @@ export function ImmediateActionsPage() {
       return;
     }
 
-    if (!selectedAnomaly?.immediate_action?.actions_taken) {
-      setFormError("Primero confirma una accion tomada.");
+    if (!hasConfirmedActions) {
+      setFormError("Debe cargar al menos una accion antes de verificar eficacia.");
       return;
     }
 
@@ -262,14 +347,20 @@ export function ImmediateActionsPage() {
     const isEffective = effectivenessResult === "effective";
 
     try {
-      await verifyObservationEffectiveness(selectedAnomalyId, {
+      const updatedAnomaly = await verifyObservationEffectiveness(selectedAnomalyId, {
         effectiveness_verified_at: toOffsetIso(effectivenessVerifiedAt),
         effectiveness_is_effective: isEffective,
         effectiveness_comment: effectivenessComment.trim() || undefined,
       });
 
-      setMessage(isEffective ? "Observacion eficaz. Anomalia cerrada definitivamente." : "No eficaz reveer acciones tomadas");
       await Promise.all([reload(), reloadDetail()]);
+      setMessage(
+        isEffective
+          ? updatedAnomaly.current_status === "closed"
+            ? "La observacion fue cerrada correctamente."
+            : "La observacion no puede cerrarse porque existen acciones pendientes."
+          : "La verificacion resulto no eficaz. Deben cargarse nuevas acciones.",
+      );
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "No se pudo verificar la eficacia.");
     } finally {
@@ -280,7 +371,22 @@ export function ImmediateActionsPage() {
   const anomalies = listData?.anomalies.results ?? [];
   const totalCount = listData?.anomalies.count ?? 0;
   const hasLoadedAction = Boolean(selectedAnomaly?.immediate_action);
-  const hasConfirmedActions = Boolean(selectedAnomaly?.immediate_action?.actions_taken);
+  const observationActions = selectedAnomaly?.observation_actions ?? [];
+  const hasObservationActions = observationActions.length > 0;
+  const hasConfirmedActions = hasObservationActions || Boolean(selectedAnomaly?.immediate_action?.actions_taken);
+  const effectivenessReferenceAction = observationActions.reduce<(typeof observationActions)[number] | null>(
+    (current, action) => {
+      if (!current || action.effectiveness_due_date > current.effectiveness_due_date) {
+        return action;
+      }
+      if (action.effectiveness_due_date === current.effectiveness_due_date && action.sequence > current.sequence) {
+        return action;
+      }
+      return current;
+    },
+    null,
+  );
+  const hasPendingObservationActions = observationActions.some((action) => action.status !== "completed");
   const notEffective = selectedAnomaly?.immediate_action?.effectiveness_is_effective === false || effectivenessResult === "not_effective";
   const assignedResponsible = selectedAnomaly?.immediate_action?.responsible || selectedAnomaly?.owner || selectedAnomaly?.current_responsible || null;
   usePublishHelpWorkContext(selectedAnomaly ? resolveAnomalyHelpWorkContext(selectedAnomaly, isAdminUser(user)) : null);
@@ -391,32 +497,13 @@ export function ImmediateActionsPage() {
 
                   <form className="form-section" onSubmit={handleLoadAction}>
                     <div className="section-head compact">
-                      <h3>Carga de Observacion</h3>
+                      <div>
+                        <p className="eyebrow">Primera tarjeta</p>
+                        <h3>Datos generales de la Observacion</h3>
+                      </div>
                     </div>
 
                     <div className="form-grid">
-                      <label className="checkbox-inline field-span-2">
-                        <input
-                          checked={requiresTreatment}
-                          disabled={submitting || selectedAnomaly.current_status === "closed" || hasConfirmedActions}
-                          onChange={(event) => setRequiresTreatment(event.target.checked)}
-                          type="checkbox"
-                        />
-                        <span>Clasificar como Observacion TRT (con tratamiento)</span>
-                      </label>
-
-                      {requiresTreatment ? (
-                        <p className="muted-copy field-span-2">
-                          La anomalia seguira siendo una Observacion, saldra de este circuito y quedara disponible para crear o asociar a un tratamiento.
-                        </p>
-                      ) : null}
-
-                      {hasConfirmedActions ? (
-                        <p className="muted-copy field-span-2">
-                          La opcion TRT esta bloqueada porque las acciones tomadas ya fueron confirmadas.
-                        </p>
-                      ) : null}
-
                       <label className="field">
                         <span>Responsable</span>
                         <input readOnly value={buildResponsibleLabel(assignedResponsible)} />
@@ -424,18 +511,28 @@ export function ImmediateActionsPage() {
 
                       <label className="field">
                         <span>Fecha limite de ejecucion</span>
-                        <input onChange={(event) => setActionDate(event.target.value)} required type="date" value={actionDate} />
+                        <input disabled={hasLoadedAction} onChange={(event) => setActionDate(event.target.value)} required type="date" value={actionDate} />
                       </label>
 
                       <label className="field field-span-2">
-                        <span>{requiresTreatment ? "Motivo para derivar a tratamiento" : "Observacion"}</span>
-                        <textarea onChange={(event) => setObservation(event.target.value)} required rows={3} value={observation} />
+                        <span>Causa asignada</span>
+                        <textarea disabled={hasLoadedAction} onChange={(event) => setObservation(event.target.value)} required rows={3} value={observation} />
+                      </label>
+
+                      <label className="checkbox-inline field-span-2">
+                        <input
+                          checked={requiresTreatment}
+                          disabled={hasConfirmedActions || selectedAnomaly.current_status === "closed"}
+                          onChange={(event) => setRequiresTreatment(event.target.checked)}
+                          type="checkbox"
+                        />
+                        <span>Clasificar como Observacion TRT (con tratamiento)</span>
                       </label>
                     </div>
 
                     <div className="form-actions">
                       <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed"} type="submit">
-                        {submitting ? "Guardando..." : requiresTreatment ? "Confirmar Observacion TRT" : "Cargar observacion"}
+                        {submitting ? "Guardando..." : "Siguiente"}
                       </button>
                     </div>
                   </form>
@@ -443,26 +540,29 @@ export function ImmediateActionsPage() {
                   {!hasLoadedAction && formError ? <div className="panel danger">{formError}</div> : null}
                   {!hasLoadedAction && message ? <div className="panel success">{message}</div> : null}
 
-                  {requiresTreatment ? null : hasLoadedAction ? (
-                    <form className="form-section" onSubmit={handleSaveActionsTaken}>
+                  {generalStepConfirmed && hasLoadedAction ? (
+                    <form className="form-section" onSubmit={handleCreateObservationAction}>
                       <div className="section-head compact">
-                        <h3>Acciones tomadas</h3>
+                        <div>
+                          <p className="eyebrow">Segunda tarjeta</p>
+                          <h3>Acciones tomadas</h3>
+                        </div>
                       </div>
 
                       <div className="form-grid">
                         <label className="field">
-                          <span>Fecha de realizado</span>
-                          <input onChange={(event) => setActionCompletedAt(event.target.value)} required type="date" value={actionCompletedAt} />
+                          <span>Fecha estimada de realizacion</span>
+                          <input onChange={(event) => setEstimatedCompletionDate(event.target.value)} required type="date" value={estimatedCompletionDate} />
                         </label>
 
                         <label className="field">
-                          <span>Fecha de verificacion de eficacia</span>
-                          <input onChange={(event) => setEffectivenessDueAt(event.target.value)} required type="date" value={effectivenessDueAt} />
+                          <span>Fecha estimada de verificacion de eficacia</span>
+                          <input onChange={(event) => setActionEffectivenessDueDate(event.target.value)} required type="date" value={actionEffectivenessDueDate} />
                         </label>
 
                         <label className="field field-span-2">
                           <span>Detalle de la accion</span>
-                          <textarea onChange={(event) => setActionsTaken(event.target.value)} required rows={3} value={actionsTaken} />
+                          <textarea onChange={(event) => setActionDetail(event.target.value)} required rows={3} value={actionDetail} />
                         </label>
 
                         <label className="field field-span-2">
@@ -487,13 +587,47 @@ export function ImmediateActionsPage() {
                         </div>
                       ) : null}
 
-                      {!hasConfirmedActions && formError ? <div className="panel danger">{formError}</div> : null}
-                      {!hasConfirmedActions && message ? <div className="panel success">{message}</div> : null}
-
                       <div className="form-actions">
                         <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed"} type="submit">
-                          {submitting ? "Guardando..." : "Confirmar acciones tomadas"}
+                          {submitting ? "Guardando..." : "Guardar"}
                         </button>
+                      </div>
+
+                      <div className="stack-list compact">
+                        {observationActions.map((action) => (
+                          <article className="list-card compact" key={action.id}>
+                            <div>
+                              <strong>{`Accion ${action.sequence}`}</strong>
+                              <p>{action.detail}</p>
+                              <small>
+                                Realizacion estimada: {action.estimated_completion_date} | Verificacion estimada: {action.effectiveness_due_date}
+                              </small>
+                              {action.completed_at ? <small>Finalizada: {action.completed_at}</small> : null}
+                            </div>
+                            <div className="badge-stack align-end">
+                              <StatusBadge compact value={action.status} />
+                              {action.status === "pending" ? (
+                                <>
+                                  <input
+                                    aria-label={`Fecha real de finalizacion de accion ${action.sequence}`}
+                                    onChange={(event) => setCompletionDates((current) => ({ ...current, [action.id]: event.target.value }))}
+                                    type="date"
+                                    value={completionDates[action.id] || nowAsDate()}
+                                  />
+                                  <button
+                                    className="button button-secondary"
+                                    disabled={submitting || selectedAnomaly.current_status === "closed"}
+                                    onClick={() => void handleCompleteObservationAction(action.id)}
+                                    type="button"
+                                  >
+                                    Marcar finalizada
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                          </article>
+                        ))}
+                        {!observationActions.length ? <p className="muted-copy">Todavia no hay acciones cargadas.</p> : null}
                       </div>
                     </form>
                   ) : (
@@ -502,39 +636,62 @@ export function ImmediateActionsPage() {
                     </div>
                   )}
 
-                  {requiresTreatment ? null : hasConfirmedActions ? (
+                  {hasConfirmedActions ? (
                     <form className="form-section" onSubmit={handleVerifyEffectiveness}>
                       <div className="section-head compact">
                         <h3>Verificacion de eficacia</h3>
                       </div>
 
-                      {notEffective ? <div className="panel warning">No eficaz reveer acciones tomadas</div> : null}
+                      {hasPendingObservationActions ? (
+                        <div className="panel warning">
+                          La verificacion puede registrarse, pero la observacion no se cerrara mientras existan acciones pendientes.
+                        </div>
+                      ) : null}
+                      {notEffective ? <div className="panel warning">La ultima verificacion no fue eficaz; puede cargar nuevas acciones.</div> : null}
 
                       <div className="form-grid">
-                      <label className="field">
-                        <span>Fecha verificacion de eficacia</span>
-                        <input
-                          onChange={(event) => setEffectivenessVerifiedAt(event.target.value)}
-                          required
-                          type="datetime-local"
-                          value={effectivenessVerifiedAt}
-                        />
-                      </label>
+                        <label className="field">
+                          <span>Fecha estimada de verificacion de eficacia</span>
+                          <input
+                            disabled
+                            type="date"
+                            value={effectivenessReferenceAction?.effectiveness_due_date || selectedAnomaly.immediate_action?.effectiveness_due_at || ""}
+                          />
+                        </label>
 
-                      <label className="field">
-                        <span>Eficaz</span>
-                        <select onChange={(event) => setEffectivenessResult(event.target.value as "" | "effective" | "not_effective")} required value={effectivenessResult}>
-                          <option value="">Seleccionar...</option>
-                          <option value="effective">Si</option>
-                          <option value="not_effective">No</option>
-                        </select>
-                      </label>
+                        <div className="field">
+                          <span>Accion tomada como referencia</span>
+                          <div className="readonly-block">
+                            {effectivenessReferenceAction
+                              ? `Accion ${effectivenessReferenceAction.sequence}: ${effectivenessReferenceAction.detail}`
+                              : selectedAnomaly.immediate_action?.actions_taken || "Sin accion de referencia"}
+                          </div>
+                        </div>
+
+                        <label className="field">
+                          <span>Fecha de realizacion de la verificacion</span>
+                          <input
+                            onChange={(event) => setEffectivenessVerifiedAt(event.target.value)}
+                            required
+                            type="datetime-local"
+                            value={effectivenessVerifiedAt}
+                          />
+                        </label>
+
+                        <label className="field">
+                          <span>Resultado</span>
+                          <select onChange={(event) => setEffectivenessResult(event.target.value as "" | "effective" | "not_effective")} required value={effectivenessResult}>
+                            <option value="">Seleccionar...</option>
+                            <option value="effective">Eficaz</option>
+                            <option value="not_effective">No eficaz</option>
+                          </select>
+                        </label>
 
                         <label className="field field-span-2">
-                          <span>Observacion</span>
+                          <span>Detalle de la verificacion</span>
                           <textarea onChange={(event) => setEffectivenessComment(event.target.value)} rows={3} value={effectivenessComment} />
                         </label>
-                    </div>
+                      </div>
 
                     {formError ? <div className="panel danger">{formError}</div> : null}
                     {message ? <div className="panel success">{message}</div> : null}
@@ -547,7 +704,7 @@ export function ImmediateActionsPage() {
                   </form>
                   ) : (
                     <div className="panel muted">
-                      <p>Primero confirma acciones tomadas para habilitar la verificacion de eficacia.</p>
+                      <p>Primero carga al menos una accion para habilitar la verificacion de eficacia.</p>
                     </div>
                   )}
                 </>

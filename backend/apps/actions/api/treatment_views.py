@@ -21,6 +21,7 @@ from apps.actions.api.treatment_serializers import (
     TreatmentCandidateSerializer,
     TreatmentConfirmConvocationSerializer,
     TreatmentCreateSerializer,
+    TreatmentDeleteEmptySerializer,
     TreatmentDetailSerializer,
     TreatmentEvidenceSerializer,
     TreatmentEvidenceWriteSerializer,
@@ -61,16 +62,18 @@ from apps.actions.services import (
     can_reconfigure_treatment,
     can_update_treatment_task,
     confirm_treatment_convocation,
+    delete_empty_treatment,
     ensure_anomaly_available_for_treatment,
     has_global_treatment_management_access,
     is_mergeable_pending_treatment,
     reconfigure_treatment,
+    remove_treatment_participant,
     save_treatment_learned_lesson,
     update_treatment,
     update_treatment_task,
     validate_treatment_effectiveness,
 )
-from apps.anomalies.models import Anomaly, AnomalyAttachment, AnomalyStatus, ObservationResolutionPath
+from apps.anomalies.models import AnomalyAttachment, AnomalyStatus, ObservationResolutionPath
 from apps.anomalies.selectors import build_anomaly_queryset, filter_anomaly_queryset_for_user
 from apps.anomalies.services.classification_rules import nonconformity_q
 from common.query_params import parse_iso_date_parameter
@@ -144,6 +147,7 @@ def _treatment_candidate_queryset(visible):
             nonconformity_q()
             | Q(observation_resolution_path=ObservationResolutionPath.TREATMENT_PENDING)
         )
+        .exclude(treatment_links__is_primary=False)
         .exclude(current_status__in=[AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED])
     )
 
@@ -337,6 +341,8 @@ class TreatmentViewSet(viewsets.ModelViewSet):
             return TreatmentListSerializer
         if self.action == "create":
             return TreatmentCreateSerializer
+        if self.action == "delete_empty":
+            return TreatmentDeleteEmptySerializer
         if self.action in {"update", "partial_update"}:
             return TreatmentUpdateSerializer
         if self.action == "add_anomaly":
@@ -385,6 +391,18 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         raise PermissionDenied(
             "Los tratamientos se conforman exclusivamente desde la Revision de hallazgos de una No Conformidad."
         )
+
+    @action(detail=False, methods=["post"], url_path="delete-empty")
+    def delete_empty(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        treatment = get_object_or_404(Treatment, code__iexact=serializer.validated_data["code"])
+        deleted_code = delete_empty_treatment(
+            treatment=treatment,
+            user=request.user,
+            request_id=self._request_id(),
+        )
+        return Response({"code": deleted_code}, status=status.HTTP_200_OK)
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)
@@ -672,6 +690,26 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         )
         output = TreatmentParticipantSerializer(participant, context=self.get_serializer_context())
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"participants/(?P<participant_id>[^/.]+)/remove",
+    )
+    def remove_participant(self, request, pk=None, participant_id=None):
+        treatment = self.get_object()
+        participant = get_object_or_404(
+            TreatmentParticipant,
+            pk=participant_id,
+            treatment=treatment,
+        )
+        remove_treatment_participant(
+            treatment=treatment,
+            participant=participant,
+            user=request.user,
+            request_id=self._request_id(),
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["post"], url_path="confirm-convocation")
     def confirm_convocation(self, request, pk=None):

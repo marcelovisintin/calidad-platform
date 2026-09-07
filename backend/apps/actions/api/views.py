@@ -54,6 +54,8 @@ class ActionsApiRootView(APIView):
             "my_actions": "/api/v1/actions/items/my-actions/",
             "pending": "/api/v1/actions/items/pending/",
             "treatments": "/api/v1/actions/treatments/",
+            "work_items": "/api/v1/actions/work-items/",
+            "validation_items": "/api/v1/actions/validation-items/",
         }
         serializer = ActionsApiRootSerializer(payload)
         return Response(serializer.data)

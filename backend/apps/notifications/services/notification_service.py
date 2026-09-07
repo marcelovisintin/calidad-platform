@@ -8,6 +8,7 @@ from django.db.models import F
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
+from apps.accounts.services.access_policy import has_global_access
 from apps.actions.models import ActionItemStatus, TreatmentTaskStatus
 from apps.anomalies.models import ParticipantRole
 from apps.audit.services import record_audit_event
@@ -748,7 +749,7 @@ def notify_finding_management_assigned(
         if treatment is not None
         else "observation_treatment"
         if is_observation_treatment
-        else "observation_or_treatment"
+        else "observation_direct"
         if is_observation
         else "treatment"
     )
@@ -791,11 +792,18 @@ def notify_finding_management_assigned(
 
     if treatment is not None:
         linked_count = treatment.anomaly_links.count()
-        title = f"Tratamiento {treatment.code} conformado por Calidad"
-        instruction = (
-            f"Calidad conformó el tratamiento con {linked_count} anomalía"
-            f"{'s' if linked_count != 1 else ''}. Debes convocar a los participantes y realizar su gestión."
-        )
+        if has_global_access(actor):
+            title = f"Tratamiento {treatment.code} conformado por Calidad"
+            instruction = (
+                f"Calidad conformó el tratamiento con {linked_count} anomalía"
+                f"{'s' if linked_count != 1 else ''}. Debes convocar a los participantes y realizar su gestión."
+            )
+        else:
+            title = f"Tratamiento {treatment.code} conformado"
+            instruction = (
+                f"Conformaste el tratamiento desde la Observación TRT con {linked_count} anomalía"
+                f"{'s' if linked_count != 1 else ''}. Debes convocar a los participantes y realizar su gestión."
+            )
         action_url = f"/treatments?treatment={treatment.pk}"
     elif is_observation_treatment:
         title = f"Tratamiento requerido para la observación TRT {anomaly.code}"
@@ -804,10 +812,10 @@ def notify_finding_management_assigned(
     elif is_observation:
         title = f"Gestión requerida para la observación {anomaly.code}"
         instruction = (
-            "Debes revisar el hallazgo y definir si corresponde gestionarlo como observación directa "
-            "o derivarlo a un tratamiento."
+            "La observación fue confirmada para gestión directa. Debes revisar sus datos generales, "
+            "registrar las acciones y completar la verificación de eficacia."
         )
-        action_url = f"/anomalies/{anomaly.pk}"
+        action_url = "/anomalies/observations"
     else:
         title = f"Tratamiento requerido para la anomalía {anomaly.code}"
         instruction = "Debes crear y coordinar el tratamiento, convocando a los participantes necesarios."

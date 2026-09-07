@@ -9,7 +9,8 @@ from rest_framework.test import APITestCase
 from apps.accounts.constants import PERMISSION_CLASSIFY_ANOMALY, PERMISSION_EDIT_ANOMALY
 from apps.accounts.models import User
 from apps.accounts.services.role_setup import ensure_required_permissions
-from apps.actions.models import Treatment
+from apps.actions.models import Treatment, TreatmentAnomaly
+from apps.audit.models import AuditEvent
 from apps.anomalies.models import (
     AffectedOrder,
     Anomaly,
@@ -21,6 +22,7 @@ from apps.anomalies.models import (
     AnomalyStage,
     AnomalyStatus,
     ObservationResolutionPath,
+    ObservationAction,
     ParticipantRole,
 )
 from apps.catalog.models import AnomalyOrigin, AnomalyType, Area, OrderType, Priority, Severity, Site
@@ -60,7 +62,15 @@ class AnomalyCreateApiTests(APITestCase):
         self.priority = Priority.objects.create(code="P1", name="Prioridad 1")
 
     def _classification_payload(self, severity):
-        return {"severity": str(severity.pk), "classification_responsible": str(self.user.pk)}
+        payload = {"severity": str(severity.pk), "classification_responsible": str(self.user.pk)}
+        if severity.pk == self.severity_observation.pk:
+            payload.update(
+                {
+                    "observation_due_date": (timezone.localdate() + timedelta(days=5)).isoformat(),
+                    "observation_comment": "Observacion confirmada desde Revision de hallazgos.",
+                }
+            )
+        return payload
 
     def _build_payload(self, suffix: str, *, include_severity: bool = True):
         payload = {
@@ -399,6 +409,82 @@ class AnomalyCreateApiTests(APITestCase):
             first_reservation.data["sequence"] + 1,
         )
 
+    def test_observation_classification_creates_normal_observation(self):
+        create_response = self.client.post(
+            "/api/v1/anomalies/",
+            self._build_payload("OBS-NORMAL", include_severity=False),
+            format="json",
+        )
+        due_date = timezone.localdate() + timedelta(days=5)
+
+        response = self.client.patch(
+            f"/api/v1/anomalies/{create_response.data['id']}/",
+            {
+                "severity": str(self.severity_observation.pk),
+                "classification_responsible": str(self.user.pk),
+                "observation_due_date": due_date.isoformat(),
+                "observation_comment": "Seguimiento normal desde clasificacion.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["observation_resolution_path"], ObservationResolutionPath.OBSERVATION)
+        self.assertEqual(response.data["immediate_action"]["action_date"], due_date.isoformat())
+        self.assertEqual(response.data["immediate_action"]["observation"], "Seguimiento normal desde clasificacion.")
+        self.assertFalse(Treatment.objects.filter(anomaly_links__anomaly_id=create_response.data["id"]).exists())
+
+    def test_assigned_manager_decides_observation_trt_from_observation_flow(self):
+        manager = User.objects.create_user(
+            username="observation-manager",
+            email="observation-manager@example.com",
+            password="secret123",
+            access_level=User.AccessLevel.MANDO_MEDIO_ACTIVO,
+        )
+        create_response = self.client.post(
+            "/api/v1/anomalies/",
+            self._build_payload("OBS-TRT", include_severity=False),
+            format="json",
+        )
+        due_date = timezone.localdate() + timedelta(days=7)
+
+        response = self.client.patch(
+            f"/api/v1/anomalies/{create_response.data['id']}/",
+            {
+                "severity": str(self.severity_observation.pk),
+                "classification_responsible": str(manager.pk),
+                "observation_due_date": due_date.isoformat(),
+                "observation_comment": "Requiere tratamiento desde clasificacion.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["observation_resolution_path"], ObservationResolutionPath.OBSERVATION)
+        self.assertEqual(response.data["immediate_action"]["responsible"]["id"], str(manager.pk))
+        self.assertFalse(Treatment.objects.filter(anomaly_links__anomaly_id=create_response.data["id"]).exists())
+
+        self.client.force_authenticate(user=manager)
+        trt_response = self.client.post(
+            f"/api/v1/anomalies/{create_response.data['id']}/observation/load/",
+            {
+                "responsible": str(manager.pk),
+                "action_date": due_date.isoformat(),
+                "observation": "Requiere tratamiento desde clasificacion.",
+                "requires_treatment": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(trt_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            trt_response.data["observation_resolution_path"],
+            ObservationResolutionPath.TREATMENT,
+        )
+        treatment = Treatment.objects.get(primary_anomaly_id=create_response.data["id"])
+        self.assertEqual(treatment.responsible_id, manager.pk)
+        self.assertEqual(treatment.created_by_id, manager.pk)
+
     def test_create_anomaly_allows_missing_severity(self):
         payload = self._build_payload("003", include_severity=False)
 
@@ -545,8 +631,8 @@ class AnomalyCreateApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["current_status"], AnomalyStatus.PENDING_VERIFICATION)
-        self.assertEqual(response.data["current_stage"], AnomalyStage.EFFECTIVENESS_VERIFICATION)
+        self.assertEqual(response.data["current_status"], AnomalyStatus.IN_TREATMENT)
+        self.assertEqual(response.data["current_stage"], AnomalyStage.EXECUTION_AND_FOLLOW_UP)
         self.assertEqual(response.data["immediate_action"]["effectiveness_is_effective"], False)
         self.assertIn("No eficaz", response.data["effectiveness_summary"])
         self.assertEqual(len(response.data["effectiveness_checks"]), 1)
@@ -565,7 +651,7 @@ class AnomalyCreateApiTests(APITestCase):
         )
 
         self.assertEqual(second_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(second_response.data["current_status"], AnomalyStatus.PENDING_VERIFICATION)
+        self.assertEqual(second_response.data["current_status"], AnomalyStatus.IN_TREATMENT)
         self.assertEqual(len(second_response.data["effectiveness_checks"]), 2)
         no_effective_history = [
             item for item in second_response.data["status_history"]
@@ -649,8 +735,8 @@ class AnomalyCreateApiTests(APITestCase):
         )
 
         self.assertEqual(ineffective_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(ineffective_response.data["current_status"], AnomalyStatus.PENDING_VERIFICATION)
-        self.assertEqual(ineffective_response.data["current_stage"], AnomalyStage.EFFECTIVENESS_VERIFICATION)
+        self.assertEqual(ineffective_response.data["current_status"], AnomalyStatus.IN_TREATMENT)
+        self.assertEqual(ineffective_response.data["current_stage"], AnomalyStage.EXECUTION_AND_FOLLOW_UP)
         self.assertIsNone(ineffective_response.data["closed_at"])
         self.assertTrue(
             any("Evidencia cargada" in item["comment"] for item in ineffective_response.data["status_history"])
@@ -677,7 +763,7 @@ class AnomalyCreateApiTests(APITestCase):
             any("Anomalia cerrada" in item["comment"] for item in effective_response.data["status_history"])
         )
 
-    def test_observation_can_be_marked_as_treatment_pending(self):
+    def test_observation_trt_creates_treatment_immediately(self):
         anomaly = self._immediate_anomaly("AI-TRT-001")
         anomaly.severity = self.severity_observation
         anomaly.save(update_fields=["severity", "updated_at"])
@@ -694,17 +780,300 @@ class AnomalyCreateApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["observation_resolution_path"], ObservationResolutionPath.TREATMENT_PENDING)
+        self.assertEqual(response.data["observation_resolution_path"], ObservationResolutionPath.TREATMENT)
         self.assertEqual(response.data["severity"]["id"], str(self.severity_observation.pk))
         self.assertTrue(response.data["code"].endswith("-OBS"))
         self.assertIn("Observacion TRT", response.data["classification_summary"])
         self.assertTrue(
             any("Observacion TRT confirmada" in item["comment"] for item in response.data["status_history"])
         )
+        treatment = Treatment.objects.get(primary_anomaly=anomaly)
+        self.assertEqual(treatment.responsible_id, self.user.pk)
 
         observation_list = self.client.get("/api/v1/anomalies/immediate-actions/")
         observation_ids = {item["id"] for item in observation_list.data["results"]}
         self.assertNotIn(str(anomaly.pk), observation_ids)
+
+    def test_observation_supports_multiple_read_only_actions(self):
+        anomaly = self._immediate_anomaly("OBS-MULTI-001")
+        load_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": (timezone.localdate() + timedelta(days=3)).isoformat(),
+                "observation": "Datos generales confirmados.",
+            },
+            format="json",
+        )
+        self.assertEqual(load_response.status_code, status.HTTP_200_OK)
+
+        for sequence in (1, 2):
+            response = self.client.post(
+                f"/api/v1/anomalies/{anomaly.pk}/observation/actions/",
+                {
+                    "detail": f"Accion independiente {sequence}",
+                    "estimated_completion_date": (timezone.localdate() + timedelta(days=sequence)).isoformat(),
+                    "effectiveness_due_date": (timezone.localdate() + timedelta(days=sequence + 5)).isoformat(),
+                },
+                format="json",
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            self.assertEqual(response.data["sequence"], sequence)
+            self.assertEqual(response.data["status"], "pending")
+
+        detail = self.client.get(f"/api/v1/anomalies/{anomaly.pk}/")
+        self.assertEqual(len(detail.data["observation_actions"]), 2)
+        self.assertEqual(
+            [item["detail"] for item in detail.data["observation_actions"]],
+            ["Accion independiente 1", "Accion independiente 2"],
+        )
+
+    def test_observation_action_can_be_finalized_without_editing_its_content(self):
+        anomaly = self._immediate_anomaly("OBS-COMPLETE-001")
+        self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": timezone.localdate().isoformat(),
+                "observation": "Datos generales confirmados.",
+            },
+            format="json",
+        )
+        create_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/",
+            {
+                "detail": "Accion que debe permanecer inmutable.",
+                "estimated_completion_date": timezone.localdate().isoformat(),
+                "effectiveness_due_date": (timezone.localdate() + timedelta(days=5)).isoformat(),
+            },
+            format="json",
+        )
+
+        complete_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{create_response.data['id']}/complete/",
+            {"completed_at": timezone.localdate().isoformat()},
+            format="json",
+        )
+
+        self.assertEqual(complete_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(complete_response.data["status"], "completed")
+        action = ObservationAction.objects.get(pk=create_response.data["id"])
+        self.assertEqual(action.detail, "Accion que debe permanecer inmutable.")
+        self.assertEqual(action.completed_by_id, self.user.pk)
+        self.assertTrue(
+            anomaly.status_history.filter(comment__contains="finalizada").exists()
+        )
+
+    def test_observation_actions_advance_to_effectiveness_and_use_latest_due_date(self):
+        anomaly = self._immediate_anomaly("OBS-EFFECTIVENESS-001")
+        self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": timezone.localdate().isoformat(),
+                "observation": "Datos generales confirmados.",
+            },
+            format="json",
+        )
+        created_actions = []
+        for sequence, due_days in ((1, 5), (2, 10)):
+            response = self.client.post(
+                f"/api/v1/anomalies/{anomaly.pk}/observation/actions/",
+                {
+                    "detail": f"Accion para eficacia {sequence}",
+                    "estimated_completion_date": (timezone.localdate() + timedelta(days=sequence)).isoformat(),
+                    "effectiveness_due_date": (timezone.localdate() + timedelta(days=due_days)).isoformat(),
+                },
+                format="json",
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            created_actions.append(response.data)
+
+        pending_effectiveness = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/effectiveness/",
+            {
+                "effectiveness_verified_at": timezone.now().isoformat(),
+                "effectiveness_is_effective": True,
+                "effectiveness_comment": "Eficaz con una accion pendiente.",
+            },
+            format="json",
+        )
+        self.assertEqual(pending_effectiveness.status_code, status.HTTP_200_OK)
+        self.assertEqual(pending_effectiveness.data["current_status"], AnomalyStatus.IN_TREATMENT)
+        self.assertEqual(pending_effectiveness.data["current_stage"], AnomalyStage.EXECUTION_AND_FOLLOW_UP)
+        self.assertIsNone(pending_effectiveness.data["closed_at"])
+        self.assertIn("Accion de referencia: 2", pending_effectiveness.data["effectiveness_checks"][0]["evidence_summary"])
+        effectiveness_audit = AuditEvent.objects.filter(
+            entity_id=anomaly.pk,
+            action="anomaly.observation_effectiveness_verified",
+        ).latest("created_at")
+        self.assertEqual(effectiveness_audit.after_data["reference_action_sequence"], 2)
+        self.assertEqual(
+            effectiveness_audit.after_data["effectiveness_due_date"],
+            (timezone.localdate() + timedelta(days=10)).isoformat(),
+        )
+        self.assertFalse(effectiveness_audit.after_data["all_actions_completed"])
+        self.assertEqual(len(effectiveness_audit.after_data["pending_action_ids"]), 2)
+
+        for action in created_actions:
+            complete_response = self.client.post(
+                f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action['id']}/complete/",
+                {"completed_at": timezone.localdate().isoformat()},
+                format="json",
+            )
+            self.assertEqual(complete_response.status_code, status.HTTP_200_OK)
+
+        anomaly.refresh_from_db()
+        self.assertEqual(anomaly.current_status, AnomalyStatus.PENDING_VERIFICATION)
+        self.assertEqual(anomaly.current_stage, AnomalyStage.EFFECTIVENESS_VERIFICATION)
+        self.assertTrue(
+            anomaly.status_history.filter(comment__contains="continua la verificacion de eficacia").exists()
+        )
+
+        effective_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/effectiveness/",
+            {
+                "effectiveness_verified_at": timezone.now().isoformat(),
+                "effectiveness_is_effective": True,
+                "effectiveness_comment": "Todas las acciones fueron eficaces.",
+            },
+            format="json",
+        )
+        self.assertEqual(effective_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(effective_response.data["current_status"], AnomalyStatus.CLOSED)
+        self.assertEqual(effective_response.data["current_stage"], AnomalyStage.CLOSURE)
+
+    def test_not_effective_observation_allows_a_new_action_without_losing_history(self):
+        anomaly = self._immediate_anomaly("OBS-REOPEN-001")
+        self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": timezone.localdate().isoformat(),
+                "observation": "Datos generales confirmados.",
+            },
+            format="json",
+        )
+        action_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/",
+            {
+                "detail": "Primera accion.",
+                "estimated_completion_date": timezone.localdate().isoformat(),
+                "effectiveness_due_date": (timezone.localdate() + timedelta(days=5)).isoformat(),
+            },
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action_response.data['id']}/complete/",
+            {"completed_at": timezone.localdate().isoformat()},
+            format="json",
+        )
+
+        ineffective_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/effectiveness/",
+            {
+                "effectiveness_verified_at": timezone.now().isoformat(),
+                "effectiveness_is_effective": False,
+                "effectiveness_comment": "La accion no resolvio el desvio.",
+            },
+            format="json",
+        )
+        self.assertEqual(ineffective_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(ineffective_response.data["current_status"], AnomalyStatus.IN_TREATMENT)
+        self.assertEqual(len(ineffective_response.data["effectiveness_checks"]), 1)
+
+        new_action_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/",
+            {
+                "detail": "Accion correctiva del nuevo ciclo.",
+                "estimated_completion_date": (timezone.localdate() + timedelta(days=1)).isoformat(),
+                "effectiveness_due_date": (timezone.localdate() + timedelta(days=7)).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(new_action_response.status_code, status.HTTP_201_CREATED)
+        detail = self.client.get(f"/api/v1/anomalies/{anomaly.pk}/")
+        self.assertEqual(len(detail.data["effectiveness_checks"]), 1)
+        self.assertIsNone(detail.data["immediate_action"]["effectiveness_verified_at"])
+        self.assertIsNone(detail.data["immediate_action"]["effectiveness_is_effective"])
+
+    def test_observation_effectiveness_requires_at_least_one_action(self):
+        anomaly = self._immediate_anomaly("OBS-NO-ACTION-001")
+        self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": timezone.localdate().isoformat(),
+                "observation": "Datos generales sin acciones.",
+            },
+            format="json",
+        )
+
+        response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/effectiveness/",
+            {
+                "effectiveness_verified_at": timezone.now().isoformat(),
+                "effectiveness_is_effective": True,
+                "effectiveness_comment": "Intento sin acciones.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("actions_taken", response.data)
+        anomaly.refresh_from_db()
+        self.assertNotEqual(anomaly.current_status, AnomalyStatus.CLOSED)
+
+    def test_unassigned_user_cannot_manage_observation_actions_or_effectiveness(self):
+        responsible = User.objects.create_user(
+            username="responsable_fase4",
+            email="responsable_fase4@example.com",
+            password="secret123",
+            primary_sector=self.area,
+            access_level=User.AccessLevel.MANDO_MEDIO_ACTIVO,
+        )
+        unassigned = User.objects.create_user(
+            username="no_asignado_fase4",
+            email="no_asignado_fase4@example.com",
+            password="secret123",
+            primary_sector=self.area,
+            access_level=User.AccessLevel.MANDO_MEDIO_ACTIVO,
+        )
+        anomaly = self._immediate_anomaly("OBS-PERMISSION-001")
+        load_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(responsible.pk),
+                "action_date": timezone.localdate().isoformat(),
+                "observation": "Observacion asignada.",
+            },
+            format="json",
+        )
+        self.assertEqual(load_response.status_code, status.HTTP_200_OK)
+
+        self.client.force_authenticate(user=unassigned)
+        action_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/",
+            {
+                "detail": "Accion no autorizada.",
+                "estimated_completion_date": timezone.localdate().isoformat(),
+                "effectiveness_due_date": (timezone.localdate() + timedelta(days=5)).isoformat(),
+            },
+            format="json",
+        )
+        effectiveness_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/effectiveness/",
+            {
+                "effectiveness_verified_at": timezone.now().isoformat(),
+                "effectiveness_is_effective": True,
+                "effectiveness_comment": "Verificacion no autorizada.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(action_response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(effectiveness_response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(ObservationAction.objects.filter(anomaly=anomaly).exists())
 
     def test_observation_cannot_be_marked_as_trt_after_actions_are_confirmed(self):
         anomaly = self._immediate_anomaly("AI-TRT-BLOCKED")
@@ -895,6 +1264,72 @@ class AnomalyCreateApiTests(APITestCase):
         codes = {item["code"] for item in response.data["results"]}
         self.assertIn(f"{year}9001", codes)
         self.assertIn(f"{year}9002", codes)
+
+    def test_tracking_list_excludes_secondary_treatment_anomalies(self):
+        year = timezone.localdate().year
+        parent = Anomaly.objects.create(
+            code=f"{year}9010",
+            title="Anomalia principal",
+            description="Caso principal del tratamiento",
+            current_status=AnomalyStatus.IN_TREATMENT,
+            current_stage=AnomalyStage.ACTION_PLAN,
+            site=self.site,
+            area=self.area,
+            reporter=self.user,
+            anomaly_type=self.anomaly_type,
+            anomaly_origin=self.anomaly_origin,
+            priority=self.priority,
+            detected_at=timezone.now(),
+            created_by=self.user,
+            updated_by=self.user,
+        )
+        child = Anomaly.objects.create(
+            code=f"{year}9011",
+            title="Anomalia hija",
+            description="Caso asociado al tratamiento",
+            current_status=AnomalyStatus.IN_TREATMENT,
+            current_stage=AnomalyStage.ACTION_PLAN,
+            site=self.site,
+            area=self.area,
+            reporter=self.user,
+            anomaly_type=self.anomaly_type,
+            anomaly_origin=self.anomaly_origin,
+            priority=self.priority,
+            detected_at=timezone.now(),
+            created_by=self.user,
+            updated_by=self.user,
+        )
+        treatment = Treatment.objects.create(
+            code="TRT-TRACKING-001",
+            primary_anomaly=parent,
+            responsible=self.user,
+            created_by=self.user,
+            updated_by=self.user,
+        )
+        TreatmentAnomaly.objects.create(
+            treatment=treatment,
+            anomaly=parent,
+            is_primary=True,
+            created_by=self.user,
+            updated_by=self.user,
+        )
+        TreatmentAnomaly.objects.create(
+            treatment=treatment,
+            anomaly=child,
+            is_primary=False,
+            created_by=self.user,
+            updated_by=self.user,
+        )
+
+        response = self.client.get("/api/v1/anomalies/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        anomaly_ids = {item["id"] for item in response.data["results"]}
+        self.assertIn(str(parent.pk), anomaly_ids)
+        self.assertNotIn(str(child.pk), anomaly_ids)
+
+        detail_response = self.client.get(f"/api/v1/anomalies/{child.pk}/")
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
 
     def test_default_tracking_order_prioritizes_registered_and_sends_closed_last(self):
         admin_user = User.objects.create_user(

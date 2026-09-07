@@ -72,7 +72,13 @@ def has_global_treatment_management_access(user) -> bool:
 
 
 def can_create_treatment_for_anomaly(user, anomaly: Anomaly) -> bool:
-    return has_global_treatment_management_access(user)
+    if has_global_treatment_management_access(user):
+        return True
+    return bool(
+        is_immediate_action_anomaly(anomaly)
+        and anomaly.observation_resolution_path == ObservationResolutionPath.TREATMENT_PENDING
+        and can_manage_assigned_process(user, anomaly.owner_id)
+    )
 
 
 def can_manage_treatment(user, treatment: Treatment) -> bool:
@@ -154,6 +160,35 @@ def is_mergeable_pending_treatment(treatment: Treatment) -> bool:
         ).exists()
     )
     return not has_work_data
+
+
+def is_deletable_empty_treatment(treatment: Treatment) -> bool:
+    """Allow deletion only before either treatment view records any work."""
+    responsible_id = treatment.responsible_id or treatment.primary_anomaly.owner_id
+    return bool(
+        treatment.status == TreatmentStatus.PENDING
+        and treatment.row_version == 1
+        and not treatment.scheduled_for
+        and not (treatment.treatment_location or "").strip()
+        and not treatment.convocation_confirmed_at
+        and not treatment.convocation_confirmed_by_id
+        and not (treatment.method_used or "").strip()
+        and not (treatment.observations or "").strip()
+        and not treatment.effectiveness_evaluation_date
+        and not treatment.effectiveness_responsible_id
+        and not treatment.effectiveness_validation_result
+        and not treatment.effectiveness_validated_at
+        and not treatment.effectiveness_validated_by_id
+        and not (treatment.effectiveness_validation_comment or "").strip()
+        and not treatment.root_causes.exists()
+        and not treatment.tasks.exists()
+        and not treatment.evidences.exists()
+        and not hasattr(treatment, "learned_lesson")
+        and not treatment.participants.exclude(
+            user_id=responsible_id,
+            role=TreatmentParticipantRole.OWNER,
+        ).exists()
+    )
 
 
 def can_reconfigure_treatment(user, treatment: Treatment) -> bool:
@@ -847,9 +882,17 @@ def create_configured_treatment(
     responsible,
     user,
     request_id: str = "",
+    scheduled_for=None,
 ) -> Treatment:
-    if not has_global_treatment_management_access(user):
-        raise PermissionDenied("Solo Calidad puede conformar un tratamiento.")
+    has_global_access = has_global_treatment_management_access(user)
+    if not can_create_treatment_for_anomaly(user, primary_anomaly):
+        raise PermissionDenied(
+            "Solo Calidad o el Mando Medio Activo responsable de una Observacion TRT puede conformar el tratamiento."
+        )
+    if not has_global_access and related_anomalies:
+        raise PermissionDenied(
+            "El responsable de una Observacion TRT solo puede conformar su tratamiento individual."
+        )
     if not responsible or not is_management_user(responsible):
         raise ValidationError({"classification_responsible": "Debe seleccionar un responsable de tratamiento valido."})
 
@@ -858,6 +901,21 @@ def create_configured_treatment(
         for anomaly in related_anomalies
         if anomaly.pk != primary_anomaly.pk
     }
+    secondary_links = list(
+        TreatmentAnomaly.objects.select_for_update()
+        .filter(anomaly_id__in=related_by_id, is_primary=False)
+        .select_related("anomaly", "treatment")
+    )
+    if secondary_links:
+        linked_codes = ", ".join(sorted({link.anomaly.code for link in secondary_links}))
+        raise ValidationError(
+            {
+                "treatment_related_anomalies": (
+                    "Las anomalias secundarias ya pertenecen a un tratamiento y no pueden volver a asociarse: "
+                    + linked_codes
+                )
+            }
+        )
     linked_rows = list(
         TreatmentAnomaly.objects.select_for_update()
         .filter(anomaly_id__in=related_by_id)
@@ -927,13 +985,19 @@ def create_configured_treatment(
             },
             request_id=_request_id(request_id),
         )
+        if scheduled_for and not treatment.scheduled_for:
+            treatment.scheduled_for = scheduled_for
+            treatment.updated_by = user
+            _bump_version(treatment)
+            treatment.full_clean()
+            treatment.save(update_fields=["scheduled_for", "updated_by", "row_version", "updated_at"])
         return treatment
 
     treatment = create_treatment(
         primary_anomaly=primary_anomaly,
         responsible=responsible,
         user=user,
-        data={"status": TreatmentStatus.PENDING},
+        data={"status": TreatmentStatus.PENDING, "scheduled_for": scheduled_for},
         request_id=request_id,
     )
     for anomaly in related_anomalies:
@@ -1285,6 +1349,47 @@ def _restore_anomaly_after_treatment_removal(*, anomaly: Anomaly, treatment: Tre
 
 
 @transaction.atomic
+def delete_empty_treatment(*, treatment: Treatment, user, request_id: str = "") -> str:
+    if user.access_level not in {User.AccessLevel.ADMINISTRADOR, User.AccessLevel.DESARROLLADOR}:
+        raise PermissionDenied("Solo un administrador o desarrollador puede eliminar tratamientos.")
+
+    locked = (
+        Treatment.objects.select_for_update(of=("self",))
+        .select_related("primary_anomaly", "responsible")
+        .prefetch_related("anomaly_links__anomaly", "participants")
+        .get(pk=treatment.pk)
+    )
+    if not is_deletable_empty_treatment(locked):
+        raise ValidationError(
+            {
+                "treatment": (
+                    "El tratamiento no puede eliminarse porque ya tiene datos agregados "
+                    "o modificados en las vistas 1 o 2."
+                )
+            }
+        )
+
+    code = locked.code
+    linked_anomalies = [link.anomaly for link in locked.anomaly_links.all()]
+    record_audit_event(
+        entity=locked,
+        action="treatment.deleted",
+        actor=user,
+        before_data={
+            **snapshot_treatment(locked),
+            "anomaly_ids": [str(anomaly.pk) for anomaly in linked_anomalies],
+        },
+        after_data={},
+        request_id=_request_id(request_id),
+    )
+    for anomaly in linked_anomalies:
+        _restore_anomaly_after_treatment_removal(anomaly=anomaly, treatment=locked, user=user)
+
+    locked.delete()
+    return code
+
+
+@transaction.atomic
 def reconfigure_treatment(
     *,
     treatment: Treatment,
@@ -1408,6 +1513,10 @@ def confirm_treatment_convocation(
         raise ValidationError(
             {"convocation": "La convocatoria debe confirmarse antes de iniciar el analisis del tratamiento."}
         )
+    if not locked.participants.exclude(role=TreatmentParticipantRole.OWNER).exists():
+        raise ValidationError(
+            {"participants": "Debe convocar al menos un usuario antes de completar y confirmar la agenda."}
+        )
     if not scheduled_for:
         raise ValidationError({"scheduled_for": "Debe indicar la fecha y hora programada."})
 
@@ -1494,6 +1603,44 @@ def add_treatment_participant(*, treatment: Treatment, participant_user, role: s
         ),
     )
     return participant
+
+
+@transaction.atomic
+def remove_treatment_participant(*, treatment: Treatment, participant: TreatmentParticipant, user, request_id: str = "") -> None:
+    _require_treatment_management(user, "No tiene permisos para eliminar usuarios convocados.", treatment)
+    locked_treatment = Treatment.objects.select_for_update().get(pk=treatment.pk)
+    ensure_treatment_is_editable(locked_treatment)
+    if locked_treatment.convocation_confirmed_at:
+        raise ValidationError(
+            {"participant": "La convocatoria ya fue confirmada y no admite eliminar usuarios."}
+        )
+
+    locked_participant = TreatmentParticipant.objects.select_for_update().get(
+        pk=participant.pk,
+        treatment=locked_treatment,
+    )
+    if locked_participant.role == TreatmentParticipantRole.OWNER:
+        raise ValidationError({"participant": "El responsable del tratamiento no puede eliminarse de la convocatoria."})
+
+    participant_user = locked_participant.user
+    record_audit_event(
+        entity=locked_treatment,
+        action="treatment.participant_removed",
+        actor=user,
+        before_data={
+            "participant_id": str(locked_participant.pk),
+            "user_id": str(participant_user.pk),
+            "role": locked_participant.role,
+        },
+        after_data={},
+        request_id=_request_id(request_id),
+    )
+    locked_participant.delete()
+    _register_history_for_treatment(
+        treatment=locked_treatment,
+        user=user,
+        comment=f"Se elimina al usuario {participant_user.username} de la convocatoria de {locked_treatment.code}.",
+    )
 
 
 

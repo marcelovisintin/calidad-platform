@@ -192,7 +192,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Revisar y clasificar un hallazgo",
     summary: "Define el criterio, el responsable y el circuito que seguirá la anomalía.",
     audience: "admin",
-    keywords: ["clasificar", "revision", "hallazgo", "responsable", "invalida", "no conformidad", "observacion"],
+    keywords: ["clasificar", "revision", "hallazgo", "responsable", "invalida", "no conformidad", "observacion", "repitencia", "coincidencia", "tipo de desvio", "proceso"],
     route: "/anomalies",
     routeLabel: "Ir a Seguimiento de anomalías",
     quick: true,
@@ -226,6 +226,13 @@ export const HELP_TOPICS: HelpTopic[] = [
         paragraphs: [
           "Antes de confirmar el tratamiento, Calidad puede seleccionar otras no conformidades u Observaciones TRT elegibles que todavía no integren un tratamiento. La composición queda bloqueada para el responsable asignado.",
         ],
+        bullets: [
+          "Coincidencias por tipo y proceso muestra solamente las candidatas que tienen simultáneamente el mismo tipo de desvío y el mismo proceso afectado que la anomalía principal.",
+          "Todas las elegibles muestra las demás anomalías disponibles para conformar el tratamiento, aunque no cumplan ambos criterios de coincidencia.",
+          "La búsqueda dentro de las relacionadas filtra por código, tipo de desvío, proceso o clasificación; el título no interviene en el filtrado.",
+          "Las anomalías ya asociadas como hijas de un tratamiento quedan excluidas y no pueden volver a asociarse.",
+        ],
+        note: "La coincidencia es una ayuda de selección basada en tipo de desvío y proceso. No compara automáticamente títulos, descripciones, causas, productos ni fechas.",
       },
     ],
     related: ["consultar-anomalias", "gestionar-observacion", "gestionar-tratamiento"],
@@ -244,28 +251,29 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         title: "Elegir el camino",
         paragraphs: [
-          "La Observación puede resolverse mediante acciones directas o marcarse como Observación TRT para incorporarla posteriormente a un tratamiento. La decisión TRT debe tomarse antes de confirmar acciones.",
+          "En Revisión de hallazgos, Calidad asigna el responsable, la fecha y la causa. El responsable decide en la primera tarjeta de Observaciones si corresponde una resolución directa o una Observación TRT con tratamiento.",
         ],
       },
       {
         title: "Resolución directa",
         steps: [
-          "Completa la observación o descripción del tratamiento y las fechas solicitadas.",
-          "Registra las acciones tomadas, su fecha de realización y la fecha prevista para verificar eficacia.",
+          "Revisa los datos generales confirmados y pulsa Siguiente.",
+          "Registra una o más acciones con su fecha estimada de realización y de verificación de eficacia.",
+          "Finaliza cada acción indicando su fecha real.",
           "Adjunta evidencia cuando corresponda.",
-          "Espera la fecha y la asignación de verificación.",
+          "Registra la verificación usando como referencia la acción con la fecha de eficacia más lejana.",
         ],
       },
       {
         title: "Observación TRT",
         paragraphs: [
-          "Marca Clasificar como Observación TRT y confirma antes de registrar acciones directas. La anomalía conserva su clasificación de Observación y queda elegible para que Calidad la asocie a un tratamiento.",
+          "El responsable Mando Medio Activo puede marcar Clasificar como Observación TRT en la primera tarjeta, antes de registrar acciones. Al confirmar, el sistema crea inmediatamente el tratamiento con ese responsable y el caso continúa por el circuito de Tratamientos.",
         ],
       },
       {
         title: "Verificación",
         paragraphs: [
-          "El responsable de eficacia asignado registra el resultado. Si es eficaz, la anomalía se cierra. Si no es eficaz, vuelve al trabajo de acciones para continuar la mejora.",
+          "El responsable registra fecha real, resultado y detalle. La Observación solo se cierra cuando el resultado es eficaz y todas las acciones están finalizadas. Si no es eficaz, vuelve a ejecución para permitir nuevas acciones sin perder el historial.",
         ],
       },
     ],
@@ -368,14 +376,14 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         title: "Responsabilidad",
         paragraphs: [
-          "Solo el usuario específicamente asignado a la evaluación puede confirmar el resultado. La validación aparece cuando el caso reúne las condiciones necesarias.",
+          "Solo el usuario específicamente asignado puede confirmar el resultado. Las validaciones aparecen aunque estén pendientes, bloqueadas o realizadas.",
         ],
       },
       {
         title: "Cómo validar",
         steps: [
           "Abre la validación asignada.",
-          "Revisa el tratamiento, las causas, las acciones y sus evidencias.",
+          "Revisa el tratamiento u observación, sus acciones y la información disponible.",
           "Selecciona Eficaz o No eficaz.",
           "Registra la observación que justifica el resultado.",
           "Confirma la evaluación.",

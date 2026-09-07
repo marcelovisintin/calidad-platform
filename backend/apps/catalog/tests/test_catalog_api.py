@@ -1,4 +1,5 @@
 import uuid
+from unittest import skipIf
 
 from django.db import connection
 from django.utils import timezone
@@ -61,6 +62,7 @@ class CatalogBootstrapApiTests(APITestCase):
             ["902", "101"],
         )
 
+    @skipIf(connection.vendor == "sqlite", "SQLite difiere la restriccion FK del modelo historico hasta cerrar la prueba.")
     def test_delete_site_with_archived_user_scope_returns_controlled_error(self):
         admin = User.objects.create_superuser(
             username="catalog_delete_admin",
@@ -76,6 +78,8 @@ class CatalogBootstrapApiTests(APITestCase):
         now = timezone.now()
         role_id = uuid.uuid4()
         scope_id = uuid.uuid4()
+        def db_uuid(value):
+            return User._meta.get_field("id").get_db_prep_value(value, connection)
         with connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -83,7 +87,7 @@ class CatalogBootstrapApiTests(APITestCase):
                     (id, created_at, updated_at, row_version, code, name, description, is_active)
                 VALUES (%s, %s, %s, 1, %s, %s, '', TRUE)
                 """,
-                [role_id, now, now, f"LEG-{role_id.hex[:8]}", "Rol historico"],
+                [db_uuid(role_id), now, now, f"LEG-{role_id.hex[:8]}", "Rol historico"],
             )
             cursor.execute(
                 """
@@ -92,7 +96,14 @@ class CatalogBootstrapApiTests(APITestCase):
                      role_id, site_id, updated_by_id, user_id)
                 VALUES (%s, %s, %s, 1, NULL, NULL, %s, %s, NULL, %s)
                 """,
-                [scope_id, now, now, role_id, site.pk, target_user.pk],
+                [
+                    db_uuid(scope_id),
+                    now,
+                    now,
+                    db_uuid(role_id),
+                    db_uuid(site.pk),
+                    db_uuid(target_user.pk),
+                ],
             )
         self.client.force_authenticate(user=admin)
 

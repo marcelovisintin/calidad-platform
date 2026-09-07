@@ -10,6 +10,8 @@ from apps.actions.api.treatment_views import (
     TreatmentViewSet,
 )
 from apps.actions.api.views import ActionEvidenceDownloadAPIView, ActionItemViewSet, ActionPlanViewSet, ActionsApiRootView, DashboardSummaryAPIView
+from apps.actions.api.work_item_views import ActionWorkItemListAPIView
+from apps.actions.api.validation_item_views import ValidationItemListAPIView
 
 app_name = "actions"
 
@@ -23,6 +25,8 @@ router.register("learned-lessons", TreatmentLearnedLessonViewSet, basename="lear
 urlpatterns = [
     path("", ActionsApiRootView.as_view(), name="actions-root"),
     path("dashboard-summary/", DashboardSummaryAPIView.as_view(), name="dashboard-summary"),
+    path("work-items/", ActionWorkItemListAPIView.as_view(), name="work-item-list"),
+    path("validation-items/", ValidationItemListAPIView.as_view(), name="validation-item-list"),
     path("evidences/<uuid:evidence_id>/download/", ActionEvidenceDownloadAPIView.as_view(), name="evidence-download"),
     path(
         "treatments/evidences/<uuid:evidence_id>/download/",

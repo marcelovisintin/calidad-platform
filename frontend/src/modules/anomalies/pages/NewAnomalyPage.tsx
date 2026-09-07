@@ -70,9 +70,8 @@ export function NewAnomalyPage() {
     }
     setForm((current) => ({
       ...current,
-      site: current.site || bootstrap.sites[0]?.id || "",
-      imputed_area: current.imputed_area || bootstrap.areas[0]?.id || "",
-      anomaly_type: current.anomaly_type || bootstrap.anomalyTypes[0]?.id || "",
+      imputed_area: bootstrap.areas.some((area) => area.id === current.imputed_area) ? current.imputed_area : "",
+      anomaly_type: bootstrap.anomalyTypes.some((type) => type.id === current.anomaly_type) ? current.anomaly_type : "",
       anomaly_origin: current.anomaly_origin || bootstrap.anomalyOrigins[0]?.id || "",
       priority: current.priority || bootstrap.priorities[0]?.id || "",
     }));
@@ -90,13 +89,15 @@ export function NewAnomalyPage() {
       return;
     }
     setForm((current) => {
-      const nextArea = availableAreas.some((area) => area.id === current.area) ? current.area : availableAreas[0]?.id || "";
-      const selectedArea = availableAreas.find((area) => area.id === nextArea);
-      if (nextArea === current.area) {
-        const nextSite = selectedArea?.site?.id || current.site;
-        return nextSite === current.site ? current : { ...current, site: nextSite };
+      if (!current.area) {
+        return current.site ? { ...current, site: "" } : current;
       }
-      return { ...current, area: nextArea, site: selectedArea?.site?.id || current.site };
+      const selectedArea = availableAreas.find((area) => area.id === current.area);
+      if (!selectedArea) {
+        return { ...current, area: "", site: "" };
+      }
+      const nextSite = selectedArea.site?.id || "";
+      return nextSite === current.site ? current : { ...current, site: nextSite };
     });
   }, [availableAreas]);
 
@@ -183,6 +184,15 @@ export function NewAnomalyPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const missingSelection = [
+      [form.area, "Elaborado por"],
+      [form.imputed_area, "Asignado a"],
+      [form.anomaly_type, "Tipo de desvio"],
+    ].find(([value]) => !value);
+    if (missingSelection) {
+      setSubmitError(`Debe seleccionar una opcion en ${missingSelection[1]}.`);
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     try {
