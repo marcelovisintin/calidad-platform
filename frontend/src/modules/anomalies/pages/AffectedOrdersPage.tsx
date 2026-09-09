@@ -243,7 +243,7 @@ export function AffectedOrdersPage() {
                       <td><Link className="text-link" to={`/anomalies/${item.anomaly_id}`}>{item.anomaly_code}</Link><small>{item.anomaly_title}</small></td>
                       <td>{item.process?.name || "Sin proceso"}</td>
                       <td>{formatDateTime(item.detected_at)}</td>
-                      <td><StatusBadge compact value={item.anomaly_status} /></td>
+                      <td><StatusBadge compact value={item.anomaly_status} overdue={item.anomaly_is_overdue} /></td>
                     </tr>
                   ))}
                 </tbody>

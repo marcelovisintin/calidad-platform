@@ -627,6 +627,7 @@ class NotificationServiceTests(TestCase):
             data={
                 "severity": nonconformity,
                 "classification_responsible": self.analyst,
+                "treatment_deadline": timezone.localdate(),
             },
             request_id="req-nc-responsible",
         )
@@ -746,7 +747,11 @@ class NotificationServiceTests(TestCase):
         anomaly = update_anomaly(
             anomaly=anomaly,
             user=self.admin,
-            data={"severity": nonconformity, "classification_responsible": self.analyst},
+            data={
+                "severity": nonconformity,
+                "classification_responsible": self.analyst,
+                "treatment_deadline": timezone.localdate(),
+            },
         )
         previous_notification = Notification.objects.get(
             template_code="finding_management_assigned",
@@ -789,6 +794,7 @@ class NotificationServiceTests(TestCase):
         classification_data = {
             "severity": nonconformity,
             "classification_responsible": self.analyst,
+            "treatment_deadline": timezone.localdate(),
         }
 
         anomaly = update_anomaly(anomaly=anomaly, user=self.admin, data=classification_data.copy())
@@ -823,7 +829,11 @@ class NotificationServiceTests(TestCase):
         update_anomaly(
             anomaly=anomaly,
             user=self.admin,
-            data={"severity": nonconformity, "classification_responsible": self.analyst},
+            data={
+                "severity": nonconformity,
+                "classification_responsible": self.analyst,
+                "treatment_deadline": timezone.localdate(),
+            },
         )
 
         with self.assertRaises(ValidationError):

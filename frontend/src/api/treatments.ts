@@ -1,7 +1,6 @@
 import { apiRequest } from "./http";
 import type {
   PagedResponse,
-  TreatmentCandidate,
   TreatmentDetail,
   TreatmentEvidence,
   TreatmentLearnedLessonPayload,
@@ -161,71 +160,9 @@ export function validateTreatmentEffectiveness(treatmentId: string, payload: Tre
   });
 }
 
-export function fetchTreatmentCandidates(filters: {
-  page?: number;
-  pageSize?: number;
-  treatmentId?: string;
-  anomaly?: string;
-  sector?: string;
-  area?: string;
-  user?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  anchorId?: string;
-} = {}) {
-  const params = new URLSearchParams({
-    page: String(filters.page ?? 1),
-    page_size: String(filters.pageSize ?? 100),
-  });
-
-  if (filters.treatmentId?.trim()) {
-    params.set("treatment", filters.treatmentId.trim());
-  }
-  if (filters.anomaly?.trim()) {
-    params.set("anomaly", filters.anomaly.trim());
-  }
-  if (filters.sector?.trim()) {
-    params.set("sector", filters.sector.trim());
-  }
-  if (filters.area?.trim()) {
-    params.set("area", filters.area.trim());
-  }
-  if (filters.user?.trim()) {
-    params.set("user", filters.user.trim());
-  }
-  if (filters.dateFrom?.trim()) {
-    params.set("date_from", filters.dateFrom.trim());
-  }
-  if (filters.dateTo?.trim()) {
-    params.set("date_to", filters.dateTo.trim());
-  }
-  if (filters.anchorId?.trim()) {
-    params.set("anchor", filters.anchorId.trim());
-  }
-
-  return apiRequest<PagedResponse<TreatmentCandidate>>(`/actions/treatments/candidates/?${params.toString()}`);
-}
-
-export function reconfigureTreatment(
-  treatmentId: string,
-  payload: { related_anomalies: string[]; responsible: string; reason: string },
-) {
-  return apiRequest<TreatmentDetail>(`/actions/treatments/${treatmentId}/reconfigure/`, {
-    method: "POST",
-    body: payload,
-  });
-}
-
 export function fetchOpenTreatmentOptions(anomalyId: string) {
   const params = new URLSearchParams({ anomaly: anomalyId });
   return apiRequest<TreatmentSummary[]>(`/actions/treatments/open-options/?${params.toString()}`);
-}
-
-export function addTreatmentAnomaly(treatmentId: string, anomalyId: string) {
-  return apiRequest<TreatmentCandidate>(`/actions/treatments/${treatmentId}/anomalies/`, {
-    method: "POST",
-    body: { anomaly: anomalyId },
-  });
 }
 
 export function addTreatmentParticipant(

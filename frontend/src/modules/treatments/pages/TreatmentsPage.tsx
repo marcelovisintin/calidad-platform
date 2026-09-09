@@ -8,16 +8,14 @@ import {
   addTreatmentTaskEvidence,
   confirmTreatmentConvocation,
   deleteEmptyTreatment,
-  fetchTreatmentCandidates,
   fetchTreatmentDetail,
   fetchTreatmentParticipantOptions,
   fetchTreatments,
-  reconfigureTreatment,
   removeTreatmentParticipant,
   updateTreatment,
   updateTreatmentTask,
 } from "../../../api/treatments";
-import type { TreatmentCandidate, TreatmentParticipantOption, TreatmentTask } from "../../../api/types";
+import type { TreatmentParticipantOption, TreatmentTask } from "../../../api/types";
 import { readStoredSession } from "../../../api/http";
 import { formatDate, formatDateTime, toDateTimeLocalValue, toOffsetIso } from "../../../app/utils";
 import { useAuth } from "../../../app/providers/AuthProvider";
@@ -203,12 +201,6 @@ export function TreatmentsPage() {
   const [taskEvidenceNote, setTaskEvidenceNote] = useState("");
   const [treatmentEvidenceInputKey, setTreatmentEvidenceInputKey] = useState(0);
   const [taskEvidenceInputKey, setTaskEvidenceInputKey] = useState(0);
-  const [correctionOpen, setCorrectionOpen] = useState(false);
-  const [correctionReason, setCorrectionReason] = useState("");
-  const [correctionResponsibleId, setCorrectionResponsibleId] = useState("");
-  const [correctionRelatedIds, setCorrectionRelatedIds] = useState<string[]>([]);
-  const [correctionCandidates, setCorrectionCandidates] = useState<TreatmentCandidate[]>([]);
-  const [correctionLoading, setCorrectionLoading] = useState(false);
 
   const {
     data: supportData,
@@ -565,62 +557,6 @@ export function TreatmentsPage() {
     }, "Usuario eliminado de la convocatoria.");
   };
 
-  const handleOpenCompositionCorrection = async () => {
-    if (!selectedTreatment?.can_reconfigure) {
-      return;
-    }
-    setCorrectionOpen(true);
-    setCorrectionReason("");
-    setCorrectionResponsibleId(selectedTreatment.responsible?.id || "");
-    setCorrectionRelatedIds(
-      selectedTreatment.anomaly_links.filter((link) => !link.is_primary).map((link) => link.anomaly.id),
-    );
-    setCorrectionLoading(true);
-    setFormError(null);
-    try {
-      const response = await fetchTreatmentCandidates({
-        anchorId: selectedTreatment.primary_anomaly.id,
-        pageSize: 200,
-      });
-      const combined = new Map<string, TreatmentCandidate>();
-      for (const link of selectedTreatment.anomaly_links.filter((item) => !item.is_primary)) {
-        combined.set(link.anomaly.id, link.anomaly as TreatmentCandidate);
-      }
-      for (const candidate of response.results) {
-        combined.set(candidate.id, candidate);
-      }
-      setCorrectionCandidates(Array.from(combined.values()));
-    } catch (candidateError) {
-      setFormError(candidateError instanceof Error ? candidateError.message : "No se pudieron cargar las anomalías elegibles.");
-      setCorrectionOpen(false);
-    } finally {
-      setCorrectionLoading(false);
-    }
-  };
-
-  const toggleCorrectionAnomaly = (anomalyId: string) => {
-    setCorrectionRelatedIds((current) => current.includes(anomalyId)
-      ? current.filter((value) => value !== anomalyId)
-      : [...current, anomalyId]);
-  };
-
-  const handleCorrectComposition = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!selectedTreatment || !correctionResponsibleId || !correctionReason.trim()) {
-      setFormError("Selecciona el responsable e indica el motivo de la corrección.");
-      return;
-    }
-    await runMutation(async () => {
-      await reconfigureTreatment(selectedTreatment.id, {
-        related_anomalies: correctionRelatedIds,
-        responsible: correctionResponsibleId,
-        reason: correctionReason.trim(),
-      });
-      setCorrectionOpen(false);
-      setCorrectionReason("");
-    }, "Conformación del tratamiento corregida y auditada.");
-  };
-
   const handleSaveAnalysis = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedTreatment) {
@@ -964,7 +900,7 @@ return (
                   >
                     <div className="section-head compact">
                       <strong>{treatment.code}</strong>
-                      <StatusBadge compact value={treatment.status} />
+                      <StatusBadge compact value={treatment.status} overdue={treatment.is_overdue} />
                     </div>
                     <p className="treatment-title">{anomaly.code}</p>
                     <p>{anomaly.title}</p>
@@ -996,8 +932,15 @@ return (
                         Anomalia principal: <strong>{selectedTreatment.primary_anomaly.code}</strong> | {selectedTreatment.primary_anomaly.title}
                       </p>
                     </div>
-                    <StatusBadge value={selectedTreatment.status} />
+                    <StatusBadge value={selectedTreatment.status} overdue={selectedTreatment.is_overdue} />
                   </div>
+                  <dl className="key-grid compact treatment-origin-data">
+                    <div><dt>Fecha límite</dt><dd>{formatDate(selectedTreatment.deadline)}</dd></div>
+                    <div>
+                      <dt>Comentario de creación</dt>
+                      <dd>{selectedTreatment.creation_comment?.trim() || "Sin comentario"}</dd>
+                    </div>
+                  </dl>
                   {treatmentClosed ? (
                     <div className="panel info compact-inline-panel">
                       <p>Tratamiento cerrado por validacion eficaz. Los datos quedan solo lectura y las anomalias asociadas fueron cerradas automaticamente.</p>
@@ -1027,6 +970,42 @@ return (
 
                   {selectedTab === "agenda" ? (
                     <div className="treatment-tab-content">
+                      <section className="form-section treatment-linked-anomalies">
+                        <div className="section-head compact">
+                          <div>
+                            <h3>Anomalías asociadas al tratamiento</h3>
+                            <small>
+                              Esta sección define el alcance del tratamiento. La anomalía de origen y las asociadas
+                              comparten responsable, análisis y resultado final.
+                            </small>
+                          </div>
+                        </div>
+
+                        <div className="stack-list compact">
+                          {selectedTreatment.anomaly_links.map((link) => (
+                            <div className="list-card compact" key={`linked-${link.id}`}>
+                              <div>
+                                <strong>{link.anomaly.code}</strong>
+                                <p>{link.anomaly.title}</p>
+                                <small>
+                                  Proceso: {link.anomaly.imputed_area?.name || link.anomaly.area?.name || "-"} | Estado: <StatusBadge compact value={link.anomaly.current_status} overdue={link.anomaly.is_overdue} />
+                                </small>
+                              </div>
+                              <span className={`status-badge ${link.is_primary ? "info" : "success"} compact`}>
+                                {link.is_primary ? "Origen" : "Asociada"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="panel info compact-inline-panel">
+                          <p>
+                            La composición es informativa. Las nuevas asociaciones se realizan únicamente desde
+                            Seguimiento de anomalías por Administrador o Desarrollador.
+                          </p>
+                        </div>
+                      </section>
+
                       <form className="form-section" onSubmit={handleSaveAgenda}>
                         <div className="section-head compact">
                           <h3>Fecha de tratamiento</h3>
@@ -1147,96 +1126,6 @@ return (
                           {!selectedTreatment.participants.length ? <p className="muted-copy">Todavia no hay convocados.</p> : null}
                         </div>
                       </form>
-
-                      <section className="form-section">
-                        <div className="section-head compact">
-                          <div>
-                            <h3>Anomalías incluidas por Calidad</h3>
-                            <small>La composición es de solo lectura para el responsable del tratamiento.</small>
-                          </div>
-                          {selectedTreatment.can_reconfigure ? (
-                            <button
-                              className="button button-secondary"
-                              disabled={busy || correctionLoading}
-                              onClick={() => void handleOpenCompositionCorrection()}
-                              type="button"
-                            >
-                              Corregir conformación
-                            </button>
-                          ) : null}
-                        </div>
-
-                        <div className="stack-list compact">
-                          {selectedTreatment.anomaly_links.map((link) => (
-                            <div className="list-card compact" key={`locked-${link.id}`}>
-                              <div>
-                                <strong>{link.anomaly.code}</strong>
-                                <p>{link.anomaly.title}</p>
-                                <small>
-                                  Proceso: {link.anomaly.imputed_area?.name || link.anomaly.area?.name || "-"} | Estado: {link.anomaly.current_status}
-                                </small>
-                              </div>
-                              <span className={`status-badge ${link.is_primary ? "info" : "success"} compact`}>
-                                {link.is_primary ? "Principal" : "Relacionada"}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-
-                        {correctionOpen ? (
-                          <form className="nested-card" onSubmit={handleCorrectComposition}>
-                            <div className="section-head compact">
-                              <div>
-                                <h4>Corrección administrativa</h4>
-                                <small>Disponible solamente antes de iniciar convocatoria, agenda, análisis o carga de evidencias.</small>
-                              </div>
-                            </div>
-                            <label className="field">
-                              <span>Responsable único</span>
-                              <select
-                                onChange={(event) => setCorrectionResponsibleId(event.target.value)}
-                                required
-                                value={correctionResponsibleId}
-                              >
-                                <option value="">Seleccionar responsable...</option>
-                                {(supportData?.users ?? [])
-                                  .filter((option) => ["mando_medio_activo", "administrador", "desarrollador"].includes(option.access_level))
-                                  .map((option) => (
-                                    <option key={option.id} value={option.id}>{buildUsersLabel(option)}</option>
-                                  ))}
-                              </select>
-                            </label>
-                            <div className="stack-list compact classification-candidate-list">
-                              {correctionCandidates.map((candidate) => (
-                                <label className="list-card compact classification-candidate" key={`correct-${candidate.id}`}>
-                                  <input
-                                    checked={correctionRelatedIds.includes(candidate.id)}
-                                    onChange={() => toggleCorrectionAnomaly(candidate.id)}
-                                    type="checkbox"
-                                  />
-                                  <span>
-                                    <strong>{candidate.code}</strong>
-                                    <small>{candidate.title}</small>
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
-                            <label className="field">
-                              <span>Motivo obligatorio</span>
-                              <textarea
-                                onChange={(event) => setCorrectionReason(event.target.value)}
-                                required
-                                rows={3}
-                                value={correctionReason}
-                              />
-                            </label>
-                            <div className="form-actions">
-                              <button className="button button-primary" disabled={busy} type="submit">Guardar corrección</button>
-                              <button className="button button-secondary" onClick={() => setCorrectionOpen(false)} type="button">Cancelar</button>
-                            </div>
-                          </form>
-                        ) : null}
-                      </section>
 
                       <section className="form-section">
                         <div className="section-head compact">
@@ -1494,7 +1383,7 @@ return (
                                       : "Sin causas"}
                                 </small>
                               </div>
-                              <StatusBadge compact value={task.status} />
+                              <StatusBadge compact value={task.status} overdue={task.is_overdue} />
                             </div>
                           ))}
                           {!selectedTreatment.tasks.length ? <p className="muted-copy">No hay acciones registradas para este tratamiento.</p> : null}
@@ -1510,6 +1399,11 @@ return (
                           <div>
                             <p className="eyebrow">Paso final</p>
                             <h3>Evaluacion de eficacia</h3>
+                            <StatusBadge
+                              value={selectedTreatment.effectiveness_validated_at ? "completed" : selectedTreatment.status === "cancelled" ? "cancelled" : "pending"}
+                              overdue={selectedTreatment.effectiveness_is_overdue}
+                              compact
+                            />
                           </div>
                           <button
                             className="button button-primary"

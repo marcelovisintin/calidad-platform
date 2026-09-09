@@ -1,8 +1,11 @@
 import { humanizeToken } from "../app/utils";
+import { canShowOverdue, isDeadlineOverdue } from "../app/deadlines";
 
 type StatusBadgeProps = {
   value?: string | null;
   compact?: boolean;
+  overdue?: boolean;
+  dueDate?: string | null;
 };
 
 const toneMap: Record<string, string> = {
@@ -53,15 +56,17 @@ const labelMap: Record<string, string> = {
   email_notifications_disabled: "Correo desactivado",
 };
 
-export function StatusBadge({ value, compact = false }: StatusBadgeProps) {
+export function StatusBadge({ value, compact = false, overdue, dueDate }: StatusBadgeProps) {
   if (!value) {
     return <span className="status-badge neutral">Sin dato</span>;
   }
 
   const tone = toneMap[value] ?? "neutral";
+  const expired = canShowOverdue(value) && (overdue ?? isDeadlineOverdue(dueDate, value));
   return (
-    <span className={`status-badge ${tone}${compact ? " compact" : ""}`}>
+    <span className={`status-badge ${expired ? "danger" : tone}${compact ? " compact" : ""}`}>
       {labelMap[value] ?? humanizeToken(value)}
+      {expired && value !== "overdue" ? " · Vencido" : ""}
     </span>
   );
 }

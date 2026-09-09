@@ -17,6 +17,7 @@ from apps.anomalies.models import (
 )
 from common.pagination import DefaultPageNumberPagination
 from common.permissions import IsAuthenticatedAndActive
+from common.deadlines import is_overdue
 
 
 VALIDATION_ITEM_SOURCES = {"treatment", "observation"}
@@ -103,6 +104,7 @@ def _treatment_validation_item(treatment, user) -> dict:
     return {
         "id": treatment.pk,
         "source": "treatment",
+        "is_overdue": treatment.effectiveness_is_overdue,
         "code": treatment.code,
         "title": treatment.primary_anomaly.title,
         "status": status,
@@ -146,6 +148,11 @@ def _observation_validation_item(anomaly, user) -> dict:
     return {
         "id": anomaly.pk,
         "source": "observation",
+        "is_overdue": is_overdue(
+            reference_action.effectiveness_due_date if reference_action else observation.effectiveness_due_at,
+            anomaly.current_status,
+            finished=bool(observation.effectiveness_verified_at),
+        ),
         "code": anomaly.code,
         "title": anomaly.title,
         "status": "completed" if result else ("pending" if available else "blocked"),

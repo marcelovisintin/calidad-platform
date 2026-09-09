@@ -255,7 +255,7 @@ export function resolveTreatmentHelpWorkContext(treatment: TreatmentDetail): Hel
 
   return {
     recordLabel: `${treatment.code} — ${treatment.primary_anomaly.title}`,
-    status: humanizeToken(treatment.status),
+    status: humanizeToken(treatment.status) + (treatment.is_overdue ? " · Vencido" : ""),
     stage,
     responsible,
     nextAction,
@@ -269,7 +269,7 @@ export function resolveTaskHelpWorkContext(task: TreatmentTaskHistory | ActionWo
   const canWork = task.can_update_status || task.can_add_evidence;
   return {
     recordLabel: `${task.code || "Acción"} — ${task.title}`,
-    status: humanizeToken(task.is_overdue && !complete ? "overdue" : task.status),
+    status: humanizeToken(task.status) + (task.is_overdue && !complete && task.status !== "cancelled" ? " · Vencido" : ""),
     stage: complete ? "Acción completada" : "Ejecución de acción",
     responsible: userLabel(task.responsible),
     nextAction: complete

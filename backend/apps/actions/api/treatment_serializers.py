@@ -63,6 +63,8 @@ class AnomalyAttachmentSummarySerializer(serializers.ModelSerializer):
 
 
 class TreatmentAnomalySummarySerializer(serializers.Serializer):
+    is_overdue = serializers.BooleanField(read_only=True)
+    deadline = serializers.DateField(read_only=True, allow_null=True)
     id = serializers.UUIDField(read_only=True)
     code = serializers.CharField(read_only=True)
     title = serializers.CharField(read_only=True)
@@ -344,6 +346,8 @@ class TreatmentAnomalyLinkSerializer(serializers.ModelSerializer):
 
 
 class TreatmentListSerializer(serializers.ModelSerializer):
+    is_overdue = serializers.BooleanField(read_only=True)
+    effectiveness_is_overdue = serializers.BooleanField(read_only=True)
     primary_anomaly = TreatmentAnomalySummarySerializer(read_only=True)
     responsible = UserSummarySerializer(read_only=True)
     convocation_confirmed_by = UserSummarySerializer(read_only=True)
@@ -354,14 +358,19 @@ class TreatmentListSerializer(serializers.ModelSerializer):
     learned_lesson = TreatmentLearnedLessonSerializer(read_only=True)
     can_manage = serializers.SerializerMethodField()
     can_validate_effectiveness = serializers.SerializerMethodField()
-    can_reconfigure = serializers.SerializerMethodField()
+    tasks_total = serializers.SerializerMethodField()
+    tasks_completed = serializers.SerializerMethodField()
 
     class Meta:
         model = Treatment
         fields = (
+            "is_overdue",
+            "effectiveness_is_overdue",
             "id",
             "code",
             "status",
+            "deadline",
+            "creation_comment",
             "scheduled_for",
             "treatment_location",
             "convocation_confirmed_at",
@@ -379,7 +388,8 @@ class TreatmentListSerializer(serializers.ModelSerializer):
             "learned_lesson",
             "can_manage",
             "can_validate_effectiveness",
-            "can_reconfigure",
+            "tasks_total",
+            "tasks_completed",
             "primary_anomaly",
             "responsible",
             "created_at",
@@ -408,14 +418,16 @@ class TreatmentListSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         return can_validate_treatment_effectiveness(getattr(request, "user", None), obj)
 
-    def get_can_reconfigure(self, obj):
-        from apps.actions.services.treatment_service import can_reconfigure_treatment
+    def get_tasks_total(self, obj):
+        return len(obj.tasks.all())
 
-        request = self.context.get("request")
-        return can_reconfigure_treatment(getattr(request, "user", None), obj)
+    def get_tasks_completed(self, obj):
+        return sum(task.status == TreatmentTaskStatus.COMPLETED for task in obj.tasks.all())
 
 
 class TreatmentDetailSerializer(serializers.ModelSerializer):
+    is_overdue = serializers.BooleanField(read_only=True)
+    effectiveness_is_overdue = serializers.BooleanField(read_only=True)
     primary_anomaly = TreatmentAnomalySummarySerializer(read_only=True)
     responsible = UserSummarySerializer(read_only=True)
     convocation_confirmed_by = UserSummarySerializer(read_only=True)
@@ -432,14 +444,17 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
     learned_lesson = TreatmentLearnedLessonSerializer(read_only=True)
     can_manage = serializers.SerializerMethodField()
     can_validate_effectiveness = serializers.SerializerMethodField()
-    can_reconfigure = serializers.SerializerMethodField()
 
     class Meta:
         model = Treatment
         fields = (
+            "is_overdue",
+            "effectiveness_is_overdue",
             "id",
             "code",
             "status",
+            "deadline",
+            "creation_comment",
             "scheduled_for",
             "treatment_location",
             "convocation_confirmed_at",
@@ -465,7 +480,6 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
             "learned_lesson",
             "can_manage",
             "can_validate_effectiveness",
-            "can_reconfigure",
             "created_at",
             "updated_at",
             "row_version",
@@ -493,12 +507,6 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         return can_validate_treatment_effectiveness(getattr(request, "user", None), obj)
 
-    def get_can_reconfigure(self, obj):
-        from apps.actions.services.treatment_service import can_reconfigure_treatment
-
-        request = self.context.get("request")
-        return can_reconfigure_treatment(getattr(request, "user", None), obj)
-
     def get_audit_events(self, obj):
         queryset = AuditEvent.objects.select_related("actor").filter(
             entity_type="actions.treatment",
@@ -510,6 +518,8 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
 class TreatmentCreateSerializer(serializers.Serializer):
     primary_anomaly = serializers.PrimaryKeyRelatedField(queryset=Anomaly.objects.all())
     force_create_new = serializers.BooleanField(required=False, default=False, write_only=True)
+    deadline = serializers.DateField(required=False, allow_null=True)
+    creation_comment = serializers.CharField(required=False, allow_blank=True)
     scheduled_for = serializers.DateTimeField(required=False, allow_null=True)
     treatment_location = serializers.CharField(required=False, allow_blank=True, max_length=200)
     status = serializers.ChoiceField(choices=TreatmentStatus.choices, required=False)
@@ -525,6 +535,8 @@ class TreatmentDeleteEmptySerializer(serializers.Serializer):
 
 
 class TreatmentUpdateSerializer(serializers.Serializer):
+    deadline = serializers.DateField(required=False, allow_null=True)
+    creation_comment = serializers.CharField(required=False, allow_blank=True)
     scheduled_for = serializers.DateTimeField(required=False, allow_null=True)
     treatment_location = serializers.CharField(required=False, allow_blank=True, max_length=200)
     status = serializers.ChoiceField(choices=TreatmentStatus.choices, required=False)
@@ -545,18 +557,6 @@ class TreatmentConfirmConvocationSerializer(serializers.Serializer):
 
 class TreatmentAddAnomalySerializer(serializers.Serializer):
     anomaly = serializers.PrimaryKeyRelatedField(queryset=Anomaly.objects.all())
-
-
-class TreatmentReconfigureSerializer(serializers.Serializer):
-    related_anomalies = serializers.PrimaryKeyRelatedField(
-        queryset=Anomaly.objects.all(),
-        many=True,
-        required=False,
-    )
-    responsible = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.filter(is_active=True),
-    )
-    reason = serializers.CharField(allow_blank=False)
 
 
 class TreatmentAddParticipantSerializer(serializers.Serializer):

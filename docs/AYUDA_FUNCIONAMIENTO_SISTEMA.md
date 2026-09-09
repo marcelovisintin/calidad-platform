@@ -215,26 +215,24 @@ Al confirmar una clasificación:
 
 - se registra o actualiza la verificación inicial y la clasificación;
 - se mueve el caso a **En evaluación / Revisión de hallazgos**, salvo cierre por inválida;
-- si el criterio requiere responsable, se debe seleccionar un usuario activo con nivel Mando medio, Administrador o Desarrollador;
-- el usuario seleccionado pasa a ser responsable de la anomalía;
+- si la clasificación crea un tratamiento nuevo, se debe seleccionar un usuario activo con nivel Mando medio, Administrador o Desarrollador;
+- si la anomalía se asocia a un tratamiento existente, hereda el responsable de ese tratamiento;
 - se genera notificación de gestión del hallazgo;
 - si es Observación, el código recibe `-OBS`;
 - si el criterio está configurado para cerrar como inválida, exige **Observación / Motivo** y cierra la anomalía de inmediato.
 
 La primera clasificación puede modificarse una vez mientras la etapa siga entre Registro, Contención, Verificación inicial o Revisión de hallazgos. Después se bloquea. Un Administrador/Desarrollador puede seleccionar **Habilitar cambio** para habilitar otra modificación, siempre que la etapa todavía lo permita. Una anomalía ya incluida en un tratamiento no puede reclasificarse desde este selector.
 
-### No conformidad y conformación del tratamiento
+### No conformidad: tratamiento nuevo o asociación
 
-Cuando el criterio es reconocido como No conformidad (`NC` o texto equivalente):
+Desde **Seguimiento de anomalías**, Administrador y Desarrollador disponen de dos caminos:
 
-1. El Administrador selecciona el **Responsable único del tratamiento**.
-2. Puede seleccionar opcionalmente **Anomalías relacionadas**.
-3. Las candidatas deben estar clasificadas para tratamiento, no estar cerradas/anuladas y no estar asociadas como hijas de otro tratamiento. Pueden ser otras NC u Observaciones marcadas como **Observación TRT (con tratamiento)**.
-4. La vista **Coincidencias por tipo y proceso** muestra solamente las candidatas que coinciden simultáneamente con la anomalía principal en el tipo de desvío y el proceso afectado. Es una ayuda de selección: no compara títulos, descripciones, causas, productos ni fechas.
-5. **Todas las elegibles** muestra el resto del conjunto disponible. La búsqueda filtra por código, tipo de desvío, proceso o clasificación; el título no interviene.
-6. Al confirmar, Calidad crea o consolida un único tratamiento. El responsable no puede agregar o quitar anomalías.
+1. **Clasificar como No conformidad y crear un tratamiento nuevo.** Se exige seleccionar el responsable y la fecha límite del tratamiento. El comentario de creación es opcional. Al confirmar se genera un nuevo código `TRT-AAAA-####`.
+2. **Asociar anomalías.** El botón muestra los tratamientos existentes elegibles y permite seleccionar uno. Al confirmar, la anomalía se clasifica automáticamente como No conformidad, se vincula al tratamiento seleccionado y hereda su responsable; no se crea otro tratamiento ni se reinicia el avance existente.
 
-La numeración `TRT-AAAA-####` se reserva solo al crear un tratamiento. La consolidación de tratamientos pendientes preserva el código cancelado en auditoría y no pisa códigos existentes.
+Son elegibles los tratamientos creados, en análisis o en ejecución, incluidos aquellos cuyas acciones están todas completadas pero todavía no tienen una verificación de eficacia efectiva. Se excluyen los anulados/cancelados y los cerrados con resultado eficaz. Un tratamiento con resultado no eficaz vuelve a ser elegible mientras permanezca abierto.
+
+Cada opción muestra código, anomalía principal, responsable, situación y cantidad de acciones completadas. La asociación siempre es de una anomalía a un solo tratamiento y solicita una confirmación explícita antes de guardar.
 
 ### Estudio de repitencia
 
@@ -359,9 +357,11 @@ No existe un campo de duración de la reunión. La política de registrar duraci
 
 Antes de confirmar se puede filtrar por Área y elegir cualquier usuario activo. La participación creada desde la interfaz es **Convocado** y admite una nota opcional. El responsable se incorpora automáticamente como participante interno con rol Responsable.
 
-#### Anomalías incluidas por Calidad
+#### Anomalías asociadas al tratamiento
 
-El responsable las ve, pero no puede modificar la composición. Administrador/Desarrollador puede abrir una corrección solo mientras el tratamiento sea Pendiente y no tenga datos de trabajo. Debe elegir responsable, composición y un **Motivo obligatorio**. Los códigos de tratamientos consolidados se conservan en auditoría.
+Esta sección aparece primero para definir el alcance que debe considerarse al preparar la convocatoria. Muestra la anomalía **Origen**, que generó el tratamiento, y las anomalías **Asociadas** posteriormente. Cada tarjeta informa código, título, proceso y estado.
+
+La composición es informativa para todos los perfiles y no se modifica desde Tratamientos. Las nuevas asociaciones se realizan exclusivamente desde **Seguimiento de anomalías** por Administrador o Desarrollador. Una anomalía asociada hereda el responsable y la etapa del tratamiento sin cambiar su fecha límite, sus acciones ni su progreso. La anomalía de origen no puede quitarse. Cuando la verificación de eficacia resulta eficaz, se cierran todas las anomalías vinculadas.
 
 #### Evidencias de anomalías vinculadas
 
@@ -819,7 +819,7 @@ No hay acción visible. La reapertura solo está implementada en la API genéric
 2. Todos los usuarios activos pueden registrar anomalías.
 3. Administrador/Desarrollador clasifica hallazgos y conforma tratamientos de No Conformidades; el Mando Medio Activo asignado puede conformar el tratamiento de su propia Observación TRT.
 4. El responsable de clasificación debe ser Mando medio, Administrador o Desarrollador.
-5. Las anomalías de un tratamiento las define Calidad; el responsable no cambia la composición.
+5. Administrador/Desarrollador asocia anomalías desde Seguimiento; la composición se consulta en Tratamientos y no se modifica allí.
 6. Una Observación debe elegir resolución directa o TRT antes de confirmar acciones.
 7. Confirmar convocatoria bloquea agenda y convocados.
 8. Solo el responsable asignado cambia el estado de su acción y carga su evidencia.

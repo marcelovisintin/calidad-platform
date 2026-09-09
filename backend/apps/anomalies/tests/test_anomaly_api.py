@@ -63,6 +63,8 @@ class AnomalyCreateApiTests(APITestCase):
 
     def _classification_payload(self, severity):
         payload = {"severity": str(severity.pk), "classification_responsible": str(self.user.pk)}
+        if severity.code == "NC":
+            payload["treatment_deadline"] = (timezone.localdate() + timedelta(days=30)).isoformat()
         if severity.pk == self.severity_observation.pk:
             payload.update(
                 {

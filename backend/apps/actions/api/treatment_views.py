@@ -29,7 +29,6 @@ from apps.actions.api.treatment_serializers import (
     TreatmentListSerializer,
     TreatmentParticipantSerializer,
     TreatmentParticipantOptionSerializer,
-    TreatmentReconfigureSerializer,
     TreatmentRootCauseSerializer,
     TreatmentTaskEvidenceSerializer,
     TreatmentTaskEvidenceWriteSerializer,
@@ -59,14 +58,11 @@ from apps.actions.services import (
     add_treatment_participant,
     add_treatment_task,
     add_treatment_task_evidence,
-    can_reconfigure_treatment,
     can_update_treatment_task,
     confirm_treatment_convocation,
     delete_empty_treatment,
-    ensure_anomaly_available_for_treatment,
     has_global_treatment_management_access,
     is_mergeable_pending_treatment,
-    reconfigure_treatment,
     remove_treatment_participant,
     save_treatment_learned_lesson,
     update_treatment,
@@ -75,7 +71,7 @@ from apps.actions.services import (
 )
 from apps.anomalies.models import AnomalyAttachment, AnomalyStatus, ObservationResolutionPath
 from apps.anomalies.selectors import build_anomaly_queryset, filter_anomaly_queryset_for_user
-from apps.anomalies.services.classification_rules import nonconformity_q
+from apps.anomalies.services.classification_rules import can_modify_classification, nonconformity_q
 from common.query_params import parse_iso_date_parameter
 
 
@@ -157,9 +153,11 @@ def _open_treatments_for_anomaly(user, anomaly):
     return (
         _visible_treatments_queryset(user)
         .filter(status__in=[TreatmentStatus.PENDING, TreatmentStatus.SCHEDULED, TreatmentStatus.IN_PROGRESS])
-        .filter(effectiveness_validation_result="")
+        .filter(responsible__isnull=False)
+        .exclude(effectiveness_validation_result=TreatmentEffectivenessValidationResult.EFFECTIVE)
         .exclude(pk__in=linked_to_anomaly)
         .select_related("primary_anomaly", "primary_anomaly__reporter", "primary_anomaly__area", "primary_anomaly__imputed_area", "primary_anomaly__anomaly_origin")
+        .prefetch_related("tasks", "primary_anomaly__treatment_links__treatment")
         .distinct()
         .order_by("-updated_at", "-created_at")
     )
@@ -256,6 +254,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
                 "effectiveness_validated_by",
             )
             .prefetch_related(
+                "primary_anomaly__treatment_links__treatment",
                 Prefetch(
                     "primary_anomaly__attachments",
                     queryset=AnomalyAttachment.objects.select_related("uploaded_by").order_by("-created_at"),
@@ -276,7 +275,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
                         "anomaly__area",
                         "anomaly__anomaly_origin",
                     )
-                    .prefetch_related(anomaly_attachment_prefetch)
+                    .prefetch_related(anomaly_attachment_prefetch, "anomaly__treatment_links__treatment")
                     .order_by("-is_primary", "created_at"),
                 ),
                 Prefetch(
@@ -347,8 +346,6 @@ class TreatmentViewSet(viewsets.ModelViewSet):
             return TreatmentUpdateSerializer
         if self.action == "add_anomaly":
             return TreatmentAddAnomalySerializer
-        if self.action == "reconfigure":
-            return TreatmentReconfigureSerializer
         if self.action == "confirm_convocation":
             return TreatmentConfirmConvocationSerializer
         if self.action == "add_participant":
@@ -499,7 +496,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 status__in=["pending", "in_progress"],
                 execution_date__lt=timezone.localdate(),
-            )
+            ).exclude(treatment__status__in=["completed", "cancelled"])
         elif status_value:
             queryset = queryset.filter(status=status_value)
         else:
@@ -619,6 +616,8 @@ class TreatmentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="open-options")
     def open_options(self, request):
+        if not has_global_treatment_management_access(request.user):
+            raise PermissionDenied("Solo Administrador o Desarrollador pueden asociar anomalias a tratamientos.")
         anomaly_value = (request.query_params.get("anomaly") or "").strip()
         if not anomaly_value:
             raise ValidationError({"anomaly": "Debe indicar una anomalia."})
@@ -628,9 +627,13 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         except ValueError:
             raise ValidationError({"anomaly": "Identificador de anomalia invalido."})
 
-        visible = self._visible_anomalies()
-        anomaly = get_object_or_404(_treatment_candidate_queryset(visible), pk=anomaly_id)
-        ensure_anomaly_available_for_treatment(anomaly)
+        anomaly = get_object_or_404(self._visible_anomalies(), pk=anomaly_id)
+        if anomaly.current_status in {AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED}:
+            raise ValidationError({"anomaly": "La anomalia esta cerrada o anulada."})
+        if TreatmentAnomaly.objects.filter(anomaly=anomaly).exists():
+            raise ValidationError({"anomaly": "La anomalia ya esta asociada a un tratamiento."})
+        if not can_modify_classification(anomaly):
+            raise ValidationError({"anomaly": "La anomalia no admite una nueva clasificacion."})
 
         queryset = _open_treatments_for_anomaly(request.user, anomaly)
 
@@ -639,40 +642,19 @@ class TreatmentViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="anomalies")
     def add_anomaly(self, request, pk=None):
+        self.get_object()
         raise PermissionDenied(
-            "La composicion solo puede modificarse mediante la correccion administrativa auditada."
+            "Las anomalias se asocian exclusivamente desde Seguimiento de anomalias. "
+            "La composicion del tratamiento es de solo lectura."
         )
 
     @action(detail=True, methods=["post"], url_path="reconfigure")
     def reconfigure(self, request, pk=None):
-        treatment = self.get_object()
-        if not can_reconfigure_treatment(request.user, treatment):
-            raise PermissionDenied("Solo Calidad puede corregir una conformacion que todavia no fue iniciada.")
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        related_anomalies = list(serializer.validated_data.get("related_anomalies", []))
-        visible_ids = set(self._visible_anomalies().filter(pk__in=[item.pk for item in related_anomalies]).values_list("pk", flat=True))
-        if len(visible_ids) != len({item.pk for item in related_anomalies}):
-            raise PermissionDenied("No tiene alcance sobre una o mas anomalias seleccionadas.")
-
-        corrected = reconfigure_treatment(
-            treatment=treatment,
-            related_anomalies=related_anomalies,
-            responsible=serializer.validated_data["responsible"],
-            reason=serializer.validated_data["reason"],
-            user=request.user,
-            request_id=self._request_id(),
+        self.get_object()
+        raise PermissionDenied(
+            "Las anomalias se asocian exclusivamente desde Seguimiento de anomalias. "
+            "La composicion del tratamiento es de solo lectura."
         )
-        from apps.notifications.services import notify_finding_management_assigned
-
-        notify_finding_management_assigned(
-            anomaly=corrected.primary_anomaly,
-            responsible=corrected.responsible,
-            actor=request.user,
-            request_id=self._request_id(),
-            treatment=corrected,
-        )
-        return self._detail_response(corrected.pk)
 
     @action(detail=True, methods=["post"], url_path="participants")
     def add_participant(self, request, pk=None):

@@ -92,6 +92,37 @@ class AnomalyCommentType(models.TextChoices):
 
 
 class Anomaly(AuditBaseModel):
+    @property
+    def deadline(self):
+        # Use the current obligation, not dates of actions already completed.
+        links = list(self.treatment_links.all())
+        if links:
+            return links[0].treatment.deadline
+        observation = getattr(self, "immediate_action", None)
+        if observation and self.observation_resolution_path == ObservationResolutionPath.OBSERVATION:
+            actions = list(self.observation_actions.all())
+            pending = [action.estimated_completion_date for action in actions if action.status != ObservationActionStatus.COMPLETED]
+            if pending:
+                return min(pending)
+            if actions or observation.action_completed_at:
+                if observation.effectiveness_verified_at:
+                    return None
+                return max((action.effectiveness_due_date for action in actions), default=observation.effectiveness_due_at)
+            return observation.action_date
+        if self.due_at:
+            from django.utils import timezone
+
+            return timezone.localtime(self.due_at).date() if timezone.is_aware(self.due_at) else self.due_at.date()
+        return None
+
+    @property
+    def is_overdue(self) -> bool:
+        from common.deadlines import is_overdue
+
+        if self.current_status in {AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED}:
+            return False
+        return is_overdue(self.deadline, self.current_status, finished=bool(self.closed_at))
+
     code = models.CharField(max_length=50, unique=True)
     title = models.CharField(max_length=255)
     description = models.TextField()
@@ -509,6 +540,15 @@ class AnomalyImmediateAction(AuditBaseModel):
 
 
 class ObservationAction(AuditBaseModel):
+    @property
+    def is_overdue(self) -> bool:
+        from common.deadlines import is_overdue
+
+        return is_overdue(
+            self.estimated_completion_date, self.status,
+            finished=bool(self.completed_at) or self.anomaly.current_status in {AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED},
+        )
+
     anomaly = models.ForeignKey(
         "anomalies.Anomaly",
         on_delete=models.CASCADE,

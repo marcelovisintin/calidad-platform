@@ -33,6 +33,34 @@ export const HELP_CATEGORY_ORDER = [
 
 export const HELP_TOPICS: HelpTopic[] = [
   {
+    id: "estados-y-vencimientos",
+    category: "Seguimiento personal",
+    title: "Estados y vencimientos",
+    summary: "El vencimiento acompaña al estado mientras exista una obligación pendiente.",
+    audience: "all",
+    keywords: ["vencido", "vencimiento", "fecha limite", "pendiente", "eficacia"],
+    sections: [
+      {
+        title: "Cómo interpretar la marca",
+        paragraphs: [
+          "Un elemento fuera de plazo conserva su estado y agrega Vencido: por ejemplo, Pendiente · Vencido o En curso · Vencido. No se modifica el estado del proceso por el paso del tiempo.",
+          "Las fechas sin hora incluyen todo el día indicado. Sin fecha comprometida no se marca vencimiento. Los elementos completados, cerrados o cancelados no se muestran vencidos.",
+        ],
+      },
+      {
+        title: "Qué fecha se compara",
+        bullets: [
+          "Tratamiento: su fecha límite, no la fecha de reunión.",
+          "Acción: su fecha prevista de ejecución o realización.",
+          "Observación directa: la fecha de carga inicial; con acciones, la próxima realización pendiente; al completarlas, la fecha de eficacia de referencia.",
+          "Verificación de eficacia: su fecha de evaluación mientras no se haya registrado la verificación.",
+          "Anomalía vinculada: la fecha límite del tratamiento. En otros casos, su fecha de compromiso.",
+        ],
+      },
+    ],
+    related: ["gestionar-tratamiento", "consultar-anomalias"],
+  },
+  {
     id: "orientarse-en-el-sistema",
     category: "Primeros pasos",
     title: "Ingresar y orientarse en el sistema",
@@ -192,7 +220,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Revisar y clasificar un hallazgo",
     summary: "Define el criterio, el responsable y el circuito que seguirá la anomalía.",
     audience: "admin",
-    keywords: ["clasificar", "revision", "hallazgo", "responsable", "invalida", "no conformidad", "observacion", "repitencia", "coincidencia", "tipo de desvio", "proceso"],
+    keywords: ["clasificar", "revision", "hallazgo", "responsable", "invalida", "no conformidad", "observacion", "asociar", "tratamiento", "fecha limite", "tipo de desvio", "proceso"],
     route: "/anomalies",
     routeLabel: "Ir a Seguimiento de anomalías",
     quick: true,
@@ -217,22 +245,34 @@ export const HELP_TOPICS: HelpTopic[] = [
         title: "Resultado",
         bullets: [
           "Observación: queda disponible en el módulo Observaciones.",
-          "No conformidad: se define responsable único y se conforma el tratamiento.",
+          "No conformidad: se define responsable y fecha límite, y se crea un tratamiento nuevo.",
+          "Oportunidad de mejora: continúa con el responsable definido para su seguimiento.",
           "Inválida: se cierra con el motivo registrado y se informa al generador.",
         ],
       },
       {
-        title: "No conformidad y anomalías relacionadas",
+        title: "Asociar a un tratamiento existente",
         paragraphs: [
-          "Antes de confirmar el tratamiento, Calidad puede seleccionar otras no conformidades u Observaciones TRT elegibles que todavía no integren un tratamiento. La composición queda bloqueada para el responsable asignado.",
+          "Administrador o Desarrollador pueden pulsar Asociar anomalías antes de clasificar. Se elige un único tratamiento y, al confirmar, la anomalía se clasifica automáticamente como No Conformidad.",
         ],
         bullets: [
-          "Coincidencias por tipo y proceso muestra solamente las candidatas que tienen simultáneamente el mismo tipo de desvío y el mismo proceso afectado que la anomalía principal.",
-          "Todas las elegibles muestra las demás anomalías disponibles para conformar el tratamiento, aunque no cumplan ambos criterios de coincidencia.",
-          "La búsqueda dentro de las relacionadas filtra por código, tipo de desvío, proceso o clasificación; el título no interviene en el filtrado.",
-          "Las anomalías ya asociadas como hijas de un tratamiento quedan excluidas y no pueden volver a asociarse.",
+          "Se ofrecen tratamientos pendientes, programados o en curso, incluso cuando todas sus acciones están completadas y todavía no fueron validados como eficaces.",
+          "Un tratamiento cancelado, cerrado como eficaz o sin responsable no puede seleccionarse.",
+          "La anomalía hereda el responsable y adopta la etapa actual del tratamiento elegido.",
+          "La búsqueda filtra por código de tratamiento, anomalía principal, responsable o estado.",
+          "Una anomalía que ya pertenece a un tratamiento no puede volver a asociarse.",
         ],
-        note: "La coincidencia es una ayuda de selección basada en tipo de desvío y proceso. No compara automáticamente títulos, descripciones, causas, productos ni fechas.",
+        note: "La asociación conserva el número, la agenda, el análisis, las acciones y el avance del tratamiento seleccionado.",
+      },
+      {
+        title: "Crear un tratamiento nuevo",
+        steps: [
+          "Selecciona No Conformidad en Revisión de hallazgos.",
+          "Elige el responsable único del tratamiento.",
+          "Indica la fecha límite obligatoria.",
+          "Agrega un comentario si corresponde.",
+          "Confirma el aviso de seguridad para generar el nuevo tratamiento.",
+        ],
       },
     ],
     related: ["consultar-anomalias", "gestionar-observacion", "gestionar-tratamiento"],
@@ -299,12 +339,13 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         title: "Vista 1 — Convocatoria",
         steps: [
-          "Revisa las anomalías asociadas por Calidad.",
+          "Revisa primero el alcance: la anomalía de origen y las anomalías asociadas al tratamiento.",
+          "Consulta la fecha límite y el comentario definidos al crear el tratamiento.",
           "Define fecha y hora programada y, si corresponde, el lugar.",
           "Agrega todos los usuarios convocados necesarios.",
           "Pulsa Guardar agenda y confirma la pregunta de seguridad.",
         ],
-        note: "Después de confirmar se bloquean la agenda y los convocados, y se generan los avisos de convocatoria.",
+        note: "La composición es informativa y no se modifica desde Tratamientos. Las asociaciones se realizan exclusivamente desde Seguimiento de anomalías por Administrador o Desarrollador. Después de confirmar la convocatoria se bloquean la agenda y los convocados, y se generan los avisos.",
       },
       {
         title: "Vista 2 — Análisis",
@@ -340,7 +381,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         title: "Qué acciones aparecen",
         paragraphs: [
-          "La pantalla muestra las acciones de tratamientos asignadas al usuario de la sesión. Los filtros permiten localizar por tratamiento, anomalía, estado y otros datos disponibles.",
+          "La pantalla reúne acciones provenientes de Tratamientos y de Observaciones. Los checks de origen permiten mostrar u ocultar cada grupo sin perder los demás filtros.",
         ],
       },
       {
@@ -354,9 +395,9 @@ export const HELP_TOPICS: HelpTopic[] = [
         ],
       },
       {
-        title: "Completadas",
+        title: "Estados y permisos",
         paragraphs: [
-          "Las acciones finalizadas se muestran separadas de las pendientes para conservar el historial sin mezclarlas con el trabajo actual.",
+          "Las tarjetas se mantienen visibles en cualquier estado. Administrador y Desarrollador consultan acciones de todos los usuarios; Mando Medio Activo consulta las propias. Al seleccionar una tarjeta, su detalle aparece en la columna correspondiente al origen.",
         ],
       },
     ],

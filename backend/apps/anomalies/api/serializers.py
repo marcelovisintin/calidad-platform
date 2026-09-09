@@ -132,6 +132,7 @@ class AffectedOrderSerializer(serializers.ModelSerializer):
 
 
 class AffectedOrderListSerializer(serializers.ModelSerializer):
+    anomaly_is_overdue = serializers.BooleanField(source="anomaly.is_overdue", read_only=True)
     order_type = CatalogSummarySerializer(read_only=True)
     anomaly_id = serializers.UUIDField(source="anomaly.id", read_only=True)
     anomaly_code = serializers.CharField(source="anomaly.code", read_only=True)
@@ -151,6 +152,7 @@ class AffectedOrderListSerializer(serializers.ModelSerializer):
             "anomaly_code",
             "anomaly_title",
             "anomaly_status",
+            "anomaly_is_overdue",
             "detected_at",
             "process",
         )
@@ -474,11 +476,13 @@ class AnomalyImmediateActionSerializer(serializers.ModelSerializer):
 
 
 class ObservationActionSerializer(serializers.ModelSerializer):
+    is_overdue = serializers.BooleanField(read_only=True)
     completed_by = UserSummarySerializer(read_only=True)
 
     class Meta:
         model = ObservationAction
         fields = (
+            "is_overdue",
             "id",
             "sequence",
             "detail",
@@ -501,6 +505,8 @@ class ObservationActionCompleteSerializer(serializers.Serializer):
     completed_at = serializers.DateField()
 
 class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin, serializers.ModelSerializer):
+    is_overdue = serializers.BooleanField(read_only=True)
+    deadline = serializers.DateField(read_only=True, allow_null=True)
     site = SiteSummarySerializer(read_only=True)
     area = AreaSummarySerializer(read_only=True)
     imputed_area = AreaSummarySerializer(read_only=True)
@@ -525,6 +531,8 @@ class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin
     class Meta:
         model = Anomaly
         fields = (
+            "is_overdue",
+            "deadline",
             "id",
             "code",
             "title",
@@ -559,6 +567,8 @@ class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin
 
 
 class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMixin, serializers.ModelSerializer):
+    is_overdue = serializers.BooleanField(read_only=True)
+    deadline = serializers.DateField(read_only=True, allow_null=True)
     site = SiteSummarySerializer(read_only=True)
     area = AreaSummarySerializer(read_only=True)
     imputed_area = AreaSummarySerializer(read_only=True)
@@ -626,6 +636,8 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
     class Meta:
         model = Anomaly
         fields = (
+            "is_overdue",
+            "deadline",
             "id",
             "code",
             "title",
@@ -760,12 +772,14 @@ class AnomalyUpdateSerializer(AffectedOrdersWriteMixin, serializers.ModelSeriali
     classification_reason = serializers.CharField(required=False, allow_blank=True, write_only=True)
     observation_due_date = serializers.DateField(required=False, allow_null=True, write_only=True)
     observation_comment = serializers.CharField(required=False, allow_blank=True, write_only=True)
-    treatment_related_anomalies = serializers.PrimaryKeyRelatedField(
-        queryset=Anomaly.objects.all(),
-        many=True,
+    treatment_target = serializers.PrimaryKeyRelatedField(
+        queryset=Treatment.objects.all(),
         required=False,
+        allow_null=True,
         write_only=True,
     )
+    treatment_deadline = serializers.DateField(required=False, allow_null=True, write_only=True)
+    treatment_comment = serializers.CharField(required=False, allow_blank=True, write_only=True)
     affected_orders = AffectedOrderWriteSerializer(many=True, required=False)
 
     class Meta:
@@ -796,7 +810,9 @@ class AnomalyUpdateSerializer(AffectedOrdersWriteMixin, serializers.ModelSeriali
             "classification_reason",
             "observation_due_date",
             "observation_comment",
-            "treatment_related_anomalies",
+            "treatment_target",
+            "treatment_deadline",
+            "treatment_comment",
         )
         extra_kwargs = {
             "title": {"required": False},

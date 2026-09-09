@@ -437,6 +437,7 @@ export interface AnomalyAttachmentSummary {
 }
 
 export interface TreatmentAnomalySummary {
+  is_overdue?: boolean;
   id: UUID;
   code: string;
   title: string;
@@ -639,6 +640,7 @@ export interface ActionWorkItem {
 }
 
 export interface ValidationWorkItem {
+  is_overdue?: boolean;
   id: UUID;
   source: ActionWorkItemSource;
   code: string;
@@ -666,9 +668,13 @@ export interface TreatmentRootCause {
 }
 
 export interface TreatmentSummary {
+  effectiveness_is_overdue?: boolean;
+  is_overdue?: boolean;
   id: UUID;
   code: string;
   status: string;
+  deadline?: string | null;
+  creation_comment?: string;
   scheduled_for?: string | null;
   treatment_location?: string;
   convocation_confirmed_at?: string | null;
@@ -687,11 +693,12 @@ export interface TreatmentSummary {
   };
   is_locked?: boolean;
   can_manage: boolean;
-  can_reconfigure?: boolean;
   can_validate_effectiveness: boolean;
   learned_lesson?: TreatmentLearnedLesson | null;
   primary_anomaly: TreatmentAnomalySummary;
   responsible?: UserSummary | null;
+  tasks_total?: number;
+  tasks_completed?: number;
   created_at: string;
   updated_at: string;
 }
@@ -718,17 +725,11 @@ export interface TreatmentDetail extends TreatmentSummary {
   row_version: number;
 }
 
-export interface TreatmentCandidate extends TreatmentAnomalySummary {
-  anomaly_type?: CatalogSummary | null;
-  severity?: CatalogSummary | null;
-  observation_resolution_path?: ObservationResolutionPath | null;
-  suggested_by_repetition?: boolean;
-  detected_at?: string;
-}
-
 export interface TreatmentWritePayload {
   primary_anomaly: UUID;
   force_create_new?: boolean;
+  deadline?: string | null;
+  creation_comment?: string;
   scheduled_for?: string | null;
   treatment_location?: string;
   status?: "pending" | "scheduled" | "in_progress" | "completed" | "cancelled";
@@ -737,6 +738,8 @@ export interface TreatmentWritePayload {
 }
 
 export interface TreatmentUpdatePayload {
+  deadline?: string | null;
+  creation_comment?: string;
   scheduled_for?: string | null;
   treatment_location?: string;
   status?: "pending" | "scheduled" | "in_progress" | "completed" | "cancelled";
@@ -777,6 +780,7 @@ export interface NotificationInboxSummary {
 }
 
 export interface AnomalyListItem {
+  is_overdue?: boolean;
   id: UUID;
   code: string;
   title: string;
@@ -825,6 +829,7 @@ export interface AffectedOrderInput {
 }
 
 export interface AffectedOrderListItem {
+  anomaly_is_overdue?: boolean;
   id: UUID;
   order_type: CatalogSummary;
   number: string;
@@ -1102,6 +1107,7 @@ export interface ObservationActionPayload {
 }
 
 export interface ObservationAction {
+  is_overdue?: boolean;
   id: UUID;
   sequence: number;
   detail: string;

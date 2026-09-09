@@ -1450,6 +1450,43 @@ small {
   box-shadow: 0 8px 18px rgba(8, 122, 91, 0.3);
 }
 
+.classification-new-treatment-fields {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(35, 116, 102, 0.2);
+}
+
+.associate-anomalies-button {
+  width: 100%;
+}
+
+.association-treatment-panel {
+  width: min(560px, calc(100vw - 3rem));
+}
+
+.association-treatment-list {
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.association-treatment-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  cursor: pointer;
+}
+
+.association-treatment-option input {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.association-treatment-option span,
+.association-treatment-option small {
+  display: block;
+}
+
 .management-card:hover,
 .admin-card:hover {
   transform: translateY(-2px);

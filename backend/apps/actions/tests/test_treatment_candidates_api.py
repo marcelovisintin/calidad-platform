@@ -267,7 +267,21 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("date_from", response.data)
 
-    def test_admin_classification_conforms_locked_treatment_with_unique_responsible(self):
+    def test_new_nonconformity_requires_treatment_deadline(self):
+        response = self.client.patch(
+            f"/api/v1/anomalies/{self.anomaly_three.pk}/",
+            {
+                "severity": str(self.severity.pk),
+                "classification_responsible": str(self.task_user.pk),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("treatment_deadline", response.data)
+        self.assertFalse(TreatmentAnomaly.objects.filter(anomaly=self.anomaly_three).exists())
+
+    def test_admin_classification_creates_treatment_with_deadline_and_comment(self):
         previous_manager = User.objects.create_user(
             username="previous_manager",
             email="previous_manager@example.com",
@@ -307,7 +321,8 @@ class TreatmentCandidatesApiTests(APITestCase):
             {
                 "severity": str(self.severity.pk),
                 "classification_responsible": str(self.task_user.pk),
-                "treatment_related_anomalies": [str(self.anomaly_three.pk)],
+                "treatment_deadline": (timezone.localdate() + timedelta(days=15)).isoformat(),
+                "treatment_comment": "Comentario inicial del tratamiento.",
             },
             format="json",
         )
@@ -315,11 +330,13 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         treatment = Treatment.objects.get(primary_anomaly=primary)
         self.assertEqual(treatment.responsible, self.task_user)
-        self.assertEqual(treatment.anomaly_links.count(), 2)
+        self.assertEqual(treatment.deadline, timezone.localdate() + timedelta(days=15))
+        self.assertEqual(treatment.creation_comment, "Comentario inicial del tratamiento.")
+        self.assertEqual(treatment.anomaly_links.count(), 1)
         primary.refresh_from_db()
         self.anomaly_three.refresh_from_db()
         self.assertEqual(primary.owner, self.task_user)
-        self.assertEqual(self.anomaly_three.owner, self.task_user)
+        self.assertEqual(self.anomaly_three.owner, previous_manager)
         self.assertTrue(can_manage_treatment(self.task_user, treatment))
         self.assertFalse(can_manage_treatment(previous_manager, treatment))
 
@@ -341,13 +358,14 @@ class TreatmentCandidatesApiTests(APITestCase):
             updated_by=self.admin,
         )
         treatment_count = Treatment.objects.count()
+        self.treatment_one.responsible = self.task_user
+        self.treatment_one.save(update_fields=["responsible", "updated_at"])
 
         response = self.client.patch(
             f"/api/v1/anomalies/{primary.pk}/",
             {
                 "severity": str(self.severity.pk),
-                "classification_responsible": str(self.task_user.pk),
-                "treatment_related_anomalies": [str(self.anomaly_one.pk)],
+                "treatment_target": str(self.treatment_one.pk),
             },
             format="json",
         )
@@ -359,8 +377,12 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertEqual(self.treatment_one.responsible, self.task_user)
         self.assertTrue(TreatmentAnomaly.objects.filter(treatment=self.treatment_one, anomaly=primary).exists())
         self.assertFalse(Treatment.objects.filter(primary_anomaly=primary).exists())
+        primary.refresh_from_db()
+        self.assertEqual(primary.severity, self.severity)
+        self.assertEqual(primary.owner, self.task_user)
+        self.assertEqual(primary.current_stage, AnomalyStage.TREATMENT_CREATED)
 
-    def test_admin_classification_consolidates_pending_codes_without_reusing_or_deleting_them(self):
+    def test_admin_association_selects_one_treatment_without_merging_codes(self):
         primary = Anomaly.objects.create(
             code="20269023",
             title="NC para consolidar borradores",
@@ -378,16 +400,14 @@ class TreatmentCandidatesApiTests(APITestCase):
             updated_by=self.admin,
         )
         treatment_count = Treatment.objects.count()
+        self.treatment_two.responsible = self.task_user
+        self.treatment_two.save(update_fields=["responsible", "updated_at"])
 
         response = self.client.patch(
             f"/api/v1/anomalies/{primary.pk}/",
             {
                 "severity": str(self.severity.pk),
-                "classification_responsible": str(self.task_user.pk),
-                "treatment_related_anomalies": [
-                    str(self.anomaly_one.pk),
-                    str(self.anomaly_two.pk),
-                ],
+                "treatment_target": str(self.treatment_two.pk),
             },
             format="json",
         )
@@ -397,13 +417,15 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.treatment_one.refresh_from_db()
         self.treatment_two.refresh_from_db()
         self.assertEqual(self.treatment_one.status, "pending")
-        self.assertEqual(self.treatment_two.status, "cancelled")
-        self.assertIn("TRT-2026-0001", self.treatment_two.observations)
+        self.assertEqual(self.treatment_two.status, "pending")
         self.assertEqual(
             set(self.treatment_one.anomaly_links.values_list("anomaly_id", flat=True)),
-            {self.anomaly_one.pk, self.anomaly_two.pk, primary.pk},
+            {self.anomaly_one.pk},
         )
-        self.assertFalse(self.treatment_two.anomaly_links.exists())
+        self.assertEqual(
+            set(self.treatment_two.anomaly_links.values_list("anomaly_id", flat=True)),
+            {self.anomaly_two.pk, primary.pk},
+        )
         self.assertEqual(
             set(Treatment.objects.values_list("code", flat=True)),
             {"TRT-2026-0001", "TRT-2026-0002"},
@@ -469,7 +491,7 @@ class TreatmentCandidatesApiTests(APITestCase):
         with ThreadPoolExecutor(max_workers=1) as executor:
             executor.submit(clean_committed_counter).result()
 
-    def test_admin_correction_requires_reason_and_is_blocked_after_work_starts(self):
+    def test_treatment_composition_is_read_only_and_association_stays_in_anomaly_tracking(self):
         self.anomaly_three.owner = self.task_user
         self.anomaly_three.save(update_fields=["owner", "updated_at"])
         treatment = create_configured_treatment(
@@ -502,26 +524,9 @@ class TreatmentCandidatesApiTests(APITestCase):
             },
             format="json",
         )
-        self.assertEqual(correction.status_code, status.HTTP_200_OK)
-        self.assertTrue(TreatmentAnomaly.objects.filter(treatment=treatment, anomaly=extra).exists())
-
-        TreatmentParticipant.objects.create(
-            treatment=treatment,
-            user=self.reporter_two,
-            role="convoked",
-            created_by=self.task_user,
-            updated_by=self.task_user,
-        )
-        blocked = self.client.post(
-            f"/api/v1/actions/treatments/{treatment.pk}/reconfigure/",
-            {
-                "responsible": str(self.task_user.pk),
-                "related_anomalies": [],
-                "reason": "Intento posterior al inicio.",
-            },
-            format="json",
-        )
-        self.assertEqual(blocked.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(correction.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("Seguimiento de anomalias", str(correction.data))
+        self.assertFalse(TreatmentAnomaly.objects.filter(treatment=treatment, anomaly=extra).exists())
 
     def test_action_items_reject_invalid_completed_on_filter(self):
         response = self.client.get("/api/v1/actions/items/?completed_on=not-a-date")
@@ -530,12 +535,43 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertIn("completed_on", response.data)
 
     def test_open_options_return_open_treatments_available_for_candidate(self):
+        self.treatment_one.responsible = self.task_user
+        self.treatment_two.responsible = self.task_user
+        self.treatment_one.save(update_fields=["responsible", "updated_at"])
+        self.treatment_two.save(update_fields=["responsible", "updated_at"])
+        TreatmentTask.objects.create(
+            treatment=self.treatment_one,
+            code="TRT-2026-0001-T01",
+            title="Accion completada",
+            description="Accion ya ejecutada.",
+            responsible=self.task_user,
+            status=TreatmentTaskStatus.COMPLETED,
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+        self.treatment_one.status = "in_progress"
+        self.treatment_one.save(update_fields=["status", "updated_at"])
+        self.treatment_two.status = "completed"
+        self.treatment_two.effectiveness_validation_result = "effective"
+        self.treatment_two.save(update_fields=["status", "effectiveness_validation_result", "updated_at"])
+
         response = self.client.get(f"/api/v1/actions/treatments/open-options/?anomaly={self.anomaly_three.pk}")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         treatment_ids = {item["id"] for item in response.data}
         self.assertIn(str(self.treatment_one.pk), treatment_ids)
-        self.assertIn(str(self.treatment_two.pk), treatment_ids)
+        self.assertNotIn(str(self.treatment_two.pk), treatment_ids)
+        treatment_one_data = next(item for item in response.data if item["id"] == str(self.treatment_one.pk))
+        self.assertEqual(treatment_one_data["tasks_total"], 1)
+        self.assertEqual(treatment_one_data["tasks_completed"], 1)
+
+        self.treatment_two.status = "in_progress"
+        self.treatment_two.effectiveness_validation_result = "not_effective"
+        self.treatment_two.save(update_fields=["status", "effectiveness_validation_result", "updated_at"])
+        reopened_response = self.client.get(
+            f"/api/v1/actions/treatments/open-options/?anomaly={self.anomaly_three.pk}"
+        )
+        self.assertIn(str(self.treatment_two.pk), {item["id"] for item in reopened_response.data})
 
     def test_public_create_is_blocked_because_quality_conforms_treatment_during_classification(self):
         response = self.client.post(

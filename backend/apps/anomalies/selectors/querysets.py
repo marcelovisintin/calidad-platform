@@ -29,7 +29,13 @@ def build_anomaly_queryset(*, detailed: bool = False):
         "severity",
         "priority",
         "duplicate_of",
+        "immediate_action",
     ).prefetch_related(
+        "treatment_links__treatment",
+        Prefetch(
+            "observation_actions",
+            queryset=ObservationAction.objects.select_related("completed_by").order_by("sequence", "created_at"),
+        ),
         Prefetch(
             "affected_orders",
             queryset=AffectedOrder.objects.select_related("order_type").order_by(
@@ -63,10 +69,6 @@ def build_anomaly_queryset(*, detailed: bool = False):
             Prefetch(
                 "status_history",
                 queryset=AnomalyStatusHistory.objects.select_related("changed_by").order_by("-changed_at", "-created_at"),
-            ),
-            Prefetch(
-                "observation_actions",
-                queryset=ObservationAction.objects.select_related("completed_by").order_by("sequence", "created_at"),
             ),
             Prefetch(
                 "action_plans",

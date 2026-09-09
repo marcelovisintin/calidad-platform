@@ -45,6 +45,21 @@ class TreatmentEffectivenessValidationResult(models.TextChoices):
 
 
 class Treatment(AuditBaseModel):
+    @property
+    def is_overdue(self) -> bool:
+        from common.deadlines import is_overdue
+
+        return is_overdue(self.deadline, self.status)
+
+    @property
+    def effectiveness_is_overdue(self) -> bool:
+        from common.deadlines import is_overdue
+
+        return is_overdue(
+            self.effectiveness_evaluation_date, self.status,
+            finished=bool(self.effectiveness_validated_at),
+        )
+
     code = models.CharField(max_length=40, unique=True)
     primary_anomaly = models.ForeignKey(
         "anomalies.Anomaly",
@@ -58,6 +73,8 @@ class Treatment(AuditBaseModel):
         null=True,
         blank=True,
     )
+    deadline = models.DateField(null=True, blank=True)
+    creation_comment = models.TextField(blank=True, default="")
     status = models.CharField(max_length=20, choices=TreatmentStatus.choices, default=TreatmentStatus.PENDING)
     scheduled_for = models.DateTimeField(null=True, blank=True)
     treatment_location = models.CharField(max_length=200, blank=True, default="")
@@ -202,6 +219,7 @@ class TreatmentTask(AuditBaseModel):
             self.status in {TreatmentTaskStatus.PENDING, TreatmentTaskStatus.IN_PROGRESS}
             and self.execution_date
             and self.execution_date < timezone.localdate()
+            and self.treatment.status not in {TreatmentStatus.COMPLETED, TreatmentStatus.CANCELLED}
         )
 
 

@@ -242,6 +242,8 @@ def snapshot_treatment(treatment: Treatment) -> dict:
         "primary_anomaly_id": str(treatment.primary_anomaly_id),
         "responsible_id": str(treatment.responsible_id or ""),
         "status": treatment.status,
+        "deadline": treatment.deadline.isoformat() if treatment.deadline else "",
+        "creation_comment": treatment.creation_comment,
         "scheduled_for": treatment.scheduled_for.isoformat() if treatment.scheduled_for else "",
         "treatment_location": treatment.treatment_location,
         "convocation_confirmed_at": (
@@ -296,7 +298,10 @@ def is_treatment_closed_by_effective_validation(treatment: Treatment) -> bool:
 
 
 def is_open_treatment_for_association(treatment: Treatment) -> bool:
-    return treatment.status in OPEN_TREATMENT_STATUSES and not treatment.effectiveness_validation_result
+    return bool(
+        treatment.status in OPEN_TREATMENT_STATUSES
+        and treatment.effectiveness_validation_result != TreatmentEffectivenessValidationResult.EFFECTIVE
+    )
 
 
 def ensure_anomaly_available_for_treatment(anomaly, field: str = "anomaly") -> None:
@@ -822,6 +827,8 @@ def create_treatment(
         primary_anomaly=primary_anomaly,
         responsible=responsible or primary_anomaly.owner,
         status=data.get("status") or TreatmentStatus.PENDING,
+        deadline=data.get("deadline"),
+        creation_comment=(data.get("creation_comment") or "").strip(),
         scheduled_for=data.get("scheduled_for"),
         treatment_location=(data.get("treatment_location") or "").strip(),
         method_used=data.get("method_used", ""),
@@ -883,6 +890,8 @@ def create_configured_treatment(
     user,
     request_id: str = "",
     scheduled_for=None,
+    deadline=None,
+    creation_comment: str = "",
 ) -> Treatment:
     has_global_access = has_global_treatment_management_access(user)
     if not can_create_treatment_for_anomaly(user, primary_anomaly):
@@ -997,7 +1006,12 @@ def create_configured_treatment(
         primary_anomaly=primary_anomaly,
         responsible=responsible,
         user=user,
-        data={"status": TreatmentStatus.PENDING, "scheduled_for": scheduled_for},
+        data={
+            "status": TreatmentStatus.PENDING,
+            "scheduled_for": scheduled_for,
+            "deadline": deadline,
+            "creation_comment": creation_comment,
+        },
         request_id=request_id,
     )
     for anomaly in related_anomalies:
@@ -1112,7 +1126,16 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
     if "treatment_location" in data:
         data["treatment_location"] = (data.get("treatment_location") or "").strip()
 
-    for field in ("scheduled_for", "treatment_location", "method_used", "observations", "effectiveness_evaluation_date", "effectiveness_responsible"):
+    for field in (
+        "deadline",
+        "creation_comment",
+        "scheduled_for",
+        "treatment_location",
+        "method_used",
+        "observations",
+        "effectiveness_evaluation_date",
+        "effectiveness_responsible",
+    ):
         if field in data:
             setattr(locked, field, data[field])
 
@@ -1319,6 +1342,99 @@ def add_treatment_anomaly(*, treatment: Treatment, anomaly, user, request_id: st
         request_id=request_id,
     )
     return link
+
+
+def _stage_for_associated_anomaly(treatment: Treatment) -> tuple[str, str]:
+    tasks = list(treatment.tasks.all())
+    if treatment.effectiveness_validation_result == TreatmentEffectivenessValidationResult.NOT_EFFECTIVE:
+        return AnomalyStage.EXECUTION_AND_FOLLOW_UP, AnomalyStatus.IN_TREATMENT
+    if tasks:
+        all_tasks_completed = all(task.status == TreatmentTaskStatus.COMPLETED for task in tasks)
+        if all_tasks_completed and get_treatment_validation_state(treatment)["available"]:
+            return AnomalyStage.EFFECTIVENESS_VERIFICATION, AnomalyStatus.PENDING_VERIFICATION
+        return AnomalyStage.EXECUTION_AND_FOLLOW_UP, AnomalyStatus.IN_TREATMENT
+    if treatment.root_causes.exists() or (treatment.method_used or "").strip() or (treatment.observations or "").strip():
+        return AnomalyStage.CAUSE_ANALYSIS, AnomalyStatus.IN_ANALYSIS
+    return AnomalyStage.TREATMENT_CREATED, AnomalyStatus.IN_ANALYSIS
+
+
+@transaction.atomic
+def associate_anomaly_to_treatment(*, treatment: Treatment, anomaly: Anomaly, user, request_id: str = "") -> Treatment:
+    if not has_global_treatment_management_access(user):
+        raise PermissionDenied("Solo Administrador o Desarrollador pueden asociar anomalias a tratamientos.")
+
+    locked_treatment = (
+        Treatment.objects.select_for_update(of=("self",))
+        .select_related("primary_anomaly")
+        .prefetch_related("tasks", "root_causes")
+        .get(pk=treatment.pk)
+    )
+    if not is_open_treatment_for_association(locked_treatment):
+        raise ValidationError(
+            {"treatment_target": "El tratamiento ya fue cerrado, cancelado o validado como eficaz."}
+        )
+    if not locked_treatment.responsible_id:
+        raise ValidationError(
+            {"treatment_target": "El tratamiento seleccionado no tiene un responsable asignado."}
+        )
+
+    locked_anomaly = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
+    if TreatmentAnomaly.objects.select_for_update().filter(anomaly=locked_anomaly).exists():
+        raise ValidationError({"treatment_target": "La anomalia ya esta asociada a un tratamiento."})
+    ensure_anomaly_available_for_treatment(locked_anomaly)
+
+    TreatmentAnomaly.objects.create(
+        treatment=locked_treatment,
+        anomaly=locked_anomaly,
+        is_primary=False,
+        created_by=user,
+        updated_by=user,
+    )
+    _ensure_anomaly_owner_is_treatment_participant(
+        treatment=locked_treatment,
+        anomaly=locked_anomaly,
+        actor=user,
+    )
+
+    previous_owner_id = locked_anomaly.owner_id
+    locked_anomaly.owner_id = locked_treatment.responsible_id
+    locked_anomaly.updated_by = user
+    _bump_version(locked_anomaly)
+    locked_anomaly.save(update_fields=["owner", "updated_by", "row_version", "updated_at"])
+
+    if (locked_treatment.method_used or "").strip() or (locked_treatment.observations or "").strip():
+        _sync_treatment_analysis_to_anomalies(treatment=locked_treatment, user=user)
+
+    target_stage, target_status = _stage_for_associated_anomaly(locked_treatment)
+    _transition_anomaly_stage(
+        anomaly=locked_anomaly,
+        user=user,
+        target_stage=target_stage,
+        target_status=target_status,
+        comment=(
+            f"La anomalia se asocia al tratamiento {locked_treatment.code} y adopta su etapa de avance."
+        ),
+    )
+
+    record_audit_event(
+        entity=locked_treatment,
+        action="treatment.anomaly_associated",
+        actor=user,
+        after_data={
+            "anomaly_id": str(locked_anomaly.pk),
+            "responsible_id": str(locked_treatment.responsible_id),
+            "previous_anomaly_owner_id": str(previous_owner_id or ""),
+            "stage": target_stage,
+        },
+        request_id=_request_id(request_id),
+    )
+    _register_history_for_treatment(
+        treatment=locked_treatment,
+        user=user,
+        comment=f"Se asocia la anomalia {locked_anomaly.code} al tratamiento {locked_treatment.code}.",
+    )
+
+    return locked_treatment
 
 
 def _restore_anomaly_after_treatment_removal(*, anomaly: Anomaly, treatment: Treatment, user) -> None:

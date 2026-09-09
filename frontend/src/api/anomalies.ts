@@ -202,7 +202,9 @@ export function classifyAnomalyBySeverity(
     classification_reason?: string;
     observation_due_date?: string;
     observation_comment?: string;
-    treatment_related_anomalies?: string[];
+    treatment_target?: string;
+    treatment_deadline?: string;
+    treatment_comment?: string;
   },
 ) {
   return apiRequest<AnomalyDetail>(`/anomalies/${anomalyId}/`, {

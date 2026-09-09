@@ -173,8 +173,9 @@ Sistema de Gestión de Calidad
 │   │   │   ├── Usuario
 │   │   │   ├── Participación: Convocado
 │   │   │   └── Nota
-│   │   ├── Anomalías incluidas por Calidad [Solo lectura]
-│   │   │   └── Corregir conformación [Admin, antes de iniciar]
+│   │   ├── Anomalías asociadas al tratamiento [Solo lectura]
+│   │   │   ├── Origen
+│   │   │   └── Asociada
 │   │   └── Evidencias de anomalías vinculadas
 │   └── Vista 2 - Análisis [Responsable/Admin]
 │       ├── Método y observaciones

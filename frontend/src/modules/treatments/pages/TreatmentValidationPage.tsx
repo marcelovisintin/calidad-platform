@@ -216,7 +216,7 @@ export function TreatmentValidationPage() {
                     <div className="work-card-meta"><small>Evaluacion: {item.due_date ? formatDate(item.due_date) : "Sin fecha"}</small><small>Responsable: {item.responsible?.full_name || item.responsible?.username || "Sin responsable"}</small></div>
                   </div>
                   <div className="badge-stack align-end">
-                    <StatusBadge value={item.status} compact />
+                    <StatusBadge value={item.status} overdue={item.is_overdue} compact />
                     <small>{statusLabel(item.status)}</small>
                   </div>
                 </button>
@@ -236,7 +236,7 @@ export function TreatmentValidationPage() {
                       <p className="eyebrow">{selectedItem.code}</p>
                       <h2>{selectedItem.title}</h2>
                     </div>
-                    <StatusBadge value={selectedItem.status} />
+                    <StatusBadge value={selectedItem.status} overdue={selectedItem.is_overdue} />
                   </div>
 
                   <dl className="key-grid compact">

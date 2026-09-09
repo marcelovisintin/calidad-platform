@@ -456,7 +456,7 @@ export function DashboardPage({ defaultView = "none" }: { defaultView?: Dashboar
                           <small>{formatDateTime(item.detected_at)}</small>
                         </div>
                         <div className="badge-stack">
-                          <StatusBadge value={item.current_status} compact />
+                          <StatusBadge value={item.current_status} overdue={item.is_overdue} compact />
                           <StatusBadge value={item.current_stage} compact />
                         </div>
                       </Link>
@@ -484,7 +484,7 @@ export function DashboardPage({ defaultView = "none" }: { defaultView?: Dashboar
                           <small>{item.scheduled_for ? `Programado: ${formatDateTime(item.scheduled_for)}` : "Sin fecha programada"}</small>
                         </div>
                         <div className="badge-stack align-end">
-                          <StatusBadge value={item.status} compact />
+                          <StatusBadge value={item.status} overdue={item.is_overdue} compact />
                         </div>
                       </Link>
                     ))}
@@ -511,7 +511,7 @@ export function DashboardPage({ defaultView = "none" }: { defaultView?: Dashboar
                           <small>Compromiso: {item.due_date ? formatDate(item.due_date) : "Sin fecha"}</small>
                         </div>
                         <div className="badge-stack">
-                          <StatusBadge value={item.effective_status || item.status} compact />
+                          <StatusBadge value={item.status} overdue={item.is_overdue} compact />
                         </div>
                       </div>
                     ))}

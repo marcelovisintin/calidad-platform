@@ -25,7 +25,7 @@ export function AnomalyCreatedPage() {
         <article className="panel confirmation-card">
           <div className="confirmation-head">
             <strong>{anomaly.code}</strong>
-            <StatusBadge value={anomaly.current_status} />
+            <StatusBadge value={anomaly.current_status} overdue={anomaly.is_overdue} />
           </div>
           <h2>{anomaly.title}</h2>
           <p>{anomaly.description}</p>

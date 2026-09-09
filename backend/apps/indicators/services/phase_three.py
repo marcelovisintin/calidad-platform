@@ -341,7 +341,7 @@ def _actions_dashboard(params, period, area_id) -> dict:
     on_time = 0
     for row in rows:
         effective = "overdue" if row["status_key"] in open_statuses and row["due_date"] and row["due_date"] < today else row["status_key"]
-        row["effective_status"] = "Vencida" if effective == "overdue" else row["status"]
+        row["effective_status"] = f'{row["status"]} · Vencido' if effective == "overdue" else row["status"]
         status_counts[effective] += 1
         source_counts[row["source"]] += 1
         monthly[_month_key(row["created_at"])][row["source"]] += 1
@@ -434,7 +434,7 @@ def _effectiveness_dashboard(params, period, area_id) -> dict:
         key = row["result_key"]
         if key == "pending" and row["due_date"] and row["due_date"] < today:
             key = "overdue"
-        row["effective_status"] = {"effective": "Eficaz", "not_effective": "No eficaz", "pending": "Pendiente", "overdue": "Vencida"}[key]
+        row["effective_status"] = {"effective": "Eficaz", "not_effective": "No eficaz", "pending": "Pendiente", "overdue": "Pendiente · Vencido"}[key]
         counts[key] += 1
         source_counts[row["source"]] += 1
         if row["verified_at"]:

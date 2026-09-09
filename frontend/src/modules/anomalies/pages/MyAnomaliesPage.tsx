@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 import { fetchUsers } from "../../../api/accounts";
 import { classifyAnomalyBySeverity, fetchMyAnomalies, unlockAnomalyClassificationChange } from "../../../api/anomalies";
 import { fetchCatalogBootstrap } from "../../../api/catalog";
-import { fetchTreatmentCandidates } from "../../../api/treatments";
-import type { CatalogSummary, TreatmentCandidate, UserDirectoryItem } from "../../../api/types";
+import { fetchOpenTreatmentOptions } from "../../../api/treatments";
+import type { CatalogSummary, TreatmentSummary, UserDirectoryItem } from "../../../api/types";
 import { isAdminUser } from "../../../app/access";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { formatDateTime } from "../../../app/utils";
@@ -28,7 +28,14 @@ type PendingClassification = {
   isObservation: boolean;
   observationDueDate: string;
   observationComment: string;
-  relatedAnomalyIds: string[];
+  treatmentDeadline: string;
+  treatmentComment: string;
+};
+
+type PendingAssociation = {
+  anomalyId: string;
+  anomalyCode: string;
+  treatmentId: string;
 };
 
 function buildUserLabel(user: UserDirectoryItem) {
@@ -72,11 +79,11 @@ export function MyAnomaliesPage() {
   const [classificationMessage, setClassificationMessage] = useState<string | null>(null);
   const [updatingAnomalyId, setUpdatingAnomalyId] = useState<string | null>(null);
   const [pendingClassification, setPendingClassification] = useState<PendingClassification | null>(null);
-  const [classificationCandidates, setClassificationCandidates] = useState<TreatmentCandidate[]>([]);
-  const [candidateSearch, setCandidateSearch] = useState("");
-  const [candidateView, setCandidateView] = useState<"suggested" | "all">("suggested");
-  const [candidatesLoading, setCandidatesLoading] = useState(false);
-  const [candidatesError, setCandidatesError] = useState<string | null>(null);
+  const [pendingAssociation, setPendingAssociation] = useState<PendingAssociation | null>(null);
+  const [associationOptions, setAssociationOptions] = useState<TreatmentSummary[]>([]);
+  const [associationSearch, setAssociationSearch] = useState("");
+  const [associationLoading, setAssociationLoading] = useState(false);
+  const [associationError, setAssociationError] = useState<string | null>(null);
 
   const { data, loading, error, reload } = useAsyncTask(async () => {
     if (!user) {
@@ -101,44 +108,22 @@ export function MyAnomaliesPage() {
   const criteria: CatalogSummary[] = data?.criteria ?? [];
   const users: UserDirectoryItem[] = data?.users ?? [];
   const totalCount = data?.anomalies.count ?? 0;
-  const suggestedCandidateCount = useMemo(
-    () => classificationCandidates.filter((candidate) => candidate.suggested_by_repetition).length,
-    [classificationCandidates],
-  );
-  const visibleClassificationCandidates = useMemo(() => {
-    const normalizedSearch = candidateSearch.trim().toLowerCase();
-    return classificationCandidates.filter((candidate) => {
-      if (candidateView === "suggested" && !candidate.suggested_by_repetition) {
-        return false;
-      }
+  const visibleAssociationOptions = useMemo(() => {
+    const normalizedSearch = associationSearch.trim().toLowerCase();
+    return associationOptions.filter((treatment) => {
       if (!normalizedSearch) {
         return true;
       }
       return [
-        candidate.code,
-        candidate.anomaly_type?.code,
-        candidate.anomaly_type?.name,
-        candidate.area?.name,
-        candidate.imputed_area?.name,
-        candidate.severity?.name,
+        treatment.code,
+        treatment.primary_anomaly.code,
+        treatment.primary_anomaly.title,
+        treatment.responsible?.full_name,
+        treatment.responsible?.username,
+        treatment.status,
       ].some((value) => (value || "").toLowerCase().includes(normalizedSearch));
     });
-  }, [candidateSearch, candidateView, classificationCandidates]);
-
-  const toggleRelatedAnomaly = (anomalyId: string) => {
-    setPendingClassification((current) => {
-      if (!current) {
-        return current;
-      }
-      const selected = current.relatedAnomalyIds.includes(anomalyId);
-      return {
-        ...current,
-        relatedAnomalyIds: selected
-          ? current.relatedAnomalyIds.filter((value) => value !== anomalyId)
-          : [...current.relatedAnomalyIds, anomalyId],
-      };
-    });
-  };
+  }, [associationOptions, associationSearch]);
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
     setSearch(event.target.value);
@@ -168,6 +153,7 @@ export function MyAnomaliesPage() {
     const isObservation = criterionIsObservation(criterion);
     setClassificationError(null);
     setClassificationMessage(null);
+    setPendingAssociation(null);
     setPendingClassification({
       anomalyId,
       severityId,
@@ -180,20 +166,72 @@ export function MyAnomaliesPage() {
       isObservation,
       observationDueDate: "",
       observationComment: "",
-      relatedAnomalyIds: [],
+      treatmentDeadline: "",
+      treatmentComment: "",
     });
-    setClassificationCandidates([]);
-    setCandidateSearch("");
-    setCandidateView("suggested");
-    setCandidatesError(null);
-    if (isNonconformity) {
-      setCandidatesLoading(true);
-      void fetchTreatmentCandidates({ anchorId: anomalyId, pageSize: 200 })
-        .then((response) => setClassificationCandidates(response.results))
-        .catch((candidateError) => {
-          setCandidatesError(candidateError instanceof Error ? candidateError.message : "No se pudieron consultar las anomalias elegibles.");
-        })
-        .finally(() => setCandidatesLoading(false));
+  };
+
+  const handleOpenAssociation = async (anomalyId: string, anomalyCode: string, canModifyClassification: boolean) => {
+    if (!canModifyClassification || !adminUser) {
+      return;
+    }
+    if (pendingAssociation?.anomalyId === anomalyId) {
+      setPendingAssociation(null);
+      return;
+    }
+
+    setClassificationError(null);
+    setClassificationMessage(null);
+    setPendingClassification(null);
+    setPendingAssociation({ anomalyId, anomalyCode, treatmentId: "" });
+    setAssociationOptions([]);
+    setAssociationSearch("");
+    setAssociationError(null);
+    setAssociationLoading(true);
+    try {
+      setAssociationOptions(await fetchOpenTreatmentOptions(anomalyId));
+    } catch (err) {
+      setAssociationError(err instanceof Error ? err.message : "No se pudieron consultar los tratamientos disponibles.");
+    } finally {
+      setAssociationLoading(false);
+    }
+  };
+
+  const handleConfirmAssociation = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!pendingAssociation?.treatmentId) {
+      setClassificationError("Debe seleccionar un tratamiento.");
+      return;
+    }
+    const nonconformityCriterion = criteria.find(criterionIsNonconformity);
+    const selectedTreatment = associationOptions.find((item) => item.id === pendingAssociation.treatmentId);
+    if (!nonconformityCriterion || !selectedTreatment) {
+      setClassificationError("No se pudo validar la No Conformidad o el tratamiento seleccionado.");
+      return;
+    }
+    const responsibleLabel = selectedTreatment.responsible?.full_name || selectedTreatment.responsible?.username || "su responsable";
+    if (!window.confirm(
+      `¿Está seguro de asociar la anomalía ${pendingAssociation.anomalyCode} al tratamiento ${selectedTreatment.code}? `
+      + `Se clasificará automáticamente como No Conformidad y quedará a cargo de ${responsibleLabel}.`,
+    )) {
+      return;
+    }
+
+    setClassificationError(null);
+    setClassificationMessage(null);
+    setUpdatingAnomalyId(pendingAssociation.anomalyId);
+    try {
+      await classifyAnomalyBySeverity(pendingAssociation.anomalyId, {
+        severity: nonconformityCriterion.id,
+        treatment_target: selectedTreatment.id,
+      });
+      setClassificationMessage(`Anomalía asociada al tratamiento ${selectedTreatment.code} y clasificada como No Conformidad.`);
+      setPendingAssociation(null);
+      await reload();
+    } catch (err) {
+      setClassificationError(err instanceof Error ? err.message : "No se pudo asociar la anomalía.");
+    } finally {
+      setUpdatingAnomalyId(null);
     }
   };
 
@@ -210,6 +248,11 @@ export function MyAnomaliesPage() {
 
     if (pendingClassification.requiresResponsible && !pendingClassification.responsibleId) {
       setClassificationError("Debe seleccionar un responsable para continuar el flujo.");
+      return;
+    }
+
+    if (pendingClassification.isNonconformity && !pendingClassification.treatmentDeadline) {
+      setClassificationError("Debe indicar la fecha límite del tratamiento.");
       return;
     }
 
@@ -246,8 +289,11 @@ export function MyAnomaliesPage() {
         observation_comment: pendingClassification.isObservation
           ? pendingClassification.observationComment.trim()
           : undefined,
-        treatment_related_anomalies: pendingClassification.isNonconformity
-          ? pendingClassification.relatedAnomalyIds
+        treatment_deadline: pendingClassification.isNonconformity
+          ? pendingClassification.treatmentDeadline
+          : undefined,
+        treatment_comment: pendingClassification.isNonconformity
+          ? pendingClassification.treatmentComment.trim()
           : undefined,
       });
       setClassificationMessage("Revision de hallazgos actualizada.");
@@ -321,6 +367,7 @@ export function MyAnomaliesPage() {
             const canModifyClassification = item.can_modify_classification ?? true;
             const canUnlockClassification = item.can_unlock_classification ?? false;
             const pendingForItem = pendingClassification?.anomalyId === item.id ? pendingClassification : null;
+            const associationForItem = pendingAssociation?.anomalyId === item.id ? pendingAssociation : null;
             const disableClassificationSelect =
               updatingAnomalyId === item.id || criteria.length === 0 || !canModifyClassification;
 
@@ -337,7 +384,7 @@ export function MyAnomaliesPage() {
                 </Link>
 
                 <div className="badge-stack align-end anomaly-row-actions">
-                  <StatusBadge value={item.current_status} compact />
+                  <StatusBadge value={item.current_status} overdue={item.is_overdue} compact />
 
                   {adminUser ? (
                     <div className="anomaly-classification-control">
@@ -428,74 +475,32 @@ export function MyAnomaliesPage() {
                               ) : null}
 
                               {pendingForItem.isNonconformity ? (
-                                <section className="classification-treatment-composition">
-                                  <div className="section-head compact">
-                                    <div>
-                                      <h4>Anomalías relacionadas</h4>
-                                      <small>Opcional. La composición quedará bloqueada para el responsable.</small>
-                                    </div>
-                                    <span className="status-badge info compact">
-                                      {pendingForItem.relatedAnomalyIds.length} seleccionadas
-                                    </span>
-                                  </div>
-                                  <div className="segmented-control" aria-label="Vista de anomalías elegibles">
-                                    <button
-                                      className={candidateView === "suggested" ? "active" : ""}
-                                      onClick={() => setCandidateView("suggested")}
-                                      type="button"
-                                    >
-                                      Coincidencias por tipo y proceso ({suggestedCandidateCount})
-                                    </button>
-                                    <button
-                                      className={candidateView === "all" ? "active" : ""}
-                                      onClick={() => setCandidateView("all")}
-                                      type="button"
-                                    >
-                                      Todas las elegibles
-                                    </button>
-                                  </div>
-                                  <small className="muted-copy">
-                                    Se sugieren anomalías elegibles que coinciden simultáneamente en tipo de desvío y proceso afectado.
-                                  </small>
-                                  <input
-                                    aria-label="Buscar anomalías relacionadas"
-                                    onChange={(event) => setCandidateSearch(event.target.value)}
-                                    placeholder="Buscar por código, tipo de desvío, proceso o clasificación"
-                                    type="search"
-                                    value={candidateSearch}
-                                  />
-                                  {candidatesLoading ? <p className="muted-copy">Consultando anomalías elegibles...</p> : null}
-                                  {candidatesError ? <div className="panel warning">{candidatesError}</div> : null}
-                                  {!candidatesLoading && !candidatesError ? (
-                                    <div className="stack-list compact classification-candidate-list">
-                                      {visibleClassificationCandidates.map((candidate) => (
-                                        <label className="list-card compact classification-candidate" key={candidate.id}>
-                                          <input
-                                            checked={pendingForItem.relatedAnomalyIds.includes(candidate.id)}
-                                            onChange={() => toggleRelatedAnomaly(candidate.id)}
-                                            type="checkbox"
-                                          />
-                                          <span>
-                                            <strong>{candidate.code}</strong>
-                                            <small>{candidate.title}</small>
-                                            <small>
-                                              {candidate.severity?.name || "Sin clasificación"} | {candidate.imputed_area?.name || candidate.area?.name || "Sin proceso"}
-                                            </small>
-                                            {candidate.suggested_by_repetition ? (
-                                              <span className="status-badge success compact">Coincide: tipo de desvío + proceso</span>
-                                            ) : null}
-                                          </span>
-                                        </label>
-                                      ))}
-                                      {!visibleClassificationCandidates.length ? (
-                                        <p className="muted-copy">
-                                          {candidateView === "suggested"
-                                            ? "No hay anomalías elegibles con el mismo tipo de desvío y proceso. Puedes revisar todas las elegibles."
-                                            : "No hay anomalías elegibles para conformar el tratamiento."}
-                                        </p>
-                                      ) : null}
-                                    </div>
-                                  ) : null}
+                                <section className="classification-new-treatment-fields">
+                                  <label className="field">
+                                    <span>Fecha límite del tratamiento</span>
+                                    <input
+                                      onChange={(event) =>
+                                        setPendingClassification((current) => current && current.anomalyId === item.id
+                                          ? { ...current, treatmentDeadline: event.target.value }
+                                          : current)
+                                      }
+                                      required
+                                      type="date"
+                                      value={pendingForItem.treatmentDeadline}
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>Comentario (opcional)</span>
+                                    <textarea
+                                      onChange={(event) =>
+                                        setPendingClassification((current) => current && current.anomalyId === item.id
+                                          ? { ...current, treatmentComment: event.target.value }
+                                          : current)
+                                      }
+                                      rows={3}
+                                      value={pendingForItem.treatmentComment}
+                                    />
+                                  </label>
                                 </section>
                               ) : null}
                             </>
@@ -506,6 +511,78 @@ export function MyAnomaliesPage() {
                               {updatingAnomalyId === item.id ? "Confirmando..." : "Confirmar"}
                             </button>
                             <button className="button button-secondary" onClick={() => setPendingClassification(null)} type="button">
+                              Cancelar
+                            </button>
+                          </div>
+                        </form>
+                      ) : null}
+
+                      {canModifyClassification ? (
+                        <button
+                          className="button button-secondary associate-anomalies-button"
+                          disabled={updatingAnomalyId === item.id}
+                          onClick={() => void handleOpenAssociation(item.id, item.code, canModifyClassification)}
+                          type="button"
+                        >
+                          {associationForItem ? "Cerrar asociación" : "Asociar anomalías"}
+                        </button>
+                      ) : null}
+
+                      {associationForItem ? (
+                        <form className="form-section compact association-treatment-panel" onSubmit={handleConfirmAssociation}>
+                          <div className="section-head compact">
+                            <div>
+                              <h3>Asociar a un tratamiento existente</h3>
+                              <small>La anomalía se clasificará como No Conformidad y heredará el responsable del tratamiento.</small>
+                            </div>
+                          </div>
+                          <input
+                            aria-label="Buscar tratamientos disponibles"
+                            onChange={(event) => setAssociationSearch(event.target.value)}
+                            placeholder="Buscar por tratamiento, anomalía, responsable o estado"
+                            type="search"
+                            value={associationSearch}
+                          />
+                          {associationLoading ? <p className="muted-copy">Consultando tratamientos disponibles...</p> : null}
+                          {associationError ? <div className="panel warning">{associationError}</div> : null}
+                          {!associationLoading && !associationError ? (
+                            <div className="stack-list compact association-treatment-list">
+                              {visibleAssociationOptions.map((treatment) => (
+                                <label className="list-card compact association-treatment-option" key={treatment.id}>
+                                  <input
+                                    checked={associationForItem.treatmentId === treatment.id}
+                                    onChange={(event) =>
+                                      setPendingAssociation((current) => current && current.anomalyId === item.id
+                                        ? { ...current, treatmentId: event.target.checked ? treatment.id : "" }
+                                        : current)
+                                    }
+                                    type="checkbox"
+                                  />
+                                  <span>
+                                    <strong>{treatment.code}</strong>
+                                    <small>{treatment.primary_anomaly.code} | {treatment.primary_anomaly.title}</small>
+                                    <small>
+                                      Responsable: {treatment.responsible?.full_name || treatment.responsible?.username || "Sin responsable"}
+                                    </small>
+                                    <small>Acciones completadas: {treatment.tasks_completed ?? 0} de {treatment.tasks_total ?? 0}</small>
+                                  </span>
+                                  <StatusBadge value={treatment.status} overdue={treatment.is_overdue} compact />
+                                </label>
+                              ))}
+                              {!visibleAssociationOptions.length ? (
+                                <p className="muted-copy">No hay tratamientos disponibles para asociar.</p>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          <div className="form-actions association-confirm-actions">
+                            <button
+                              className="button button-primary"
+                              disabled={!associationForItem.treatmentId || updatingAnomalyId === item.id}
+                              type="submit"
+                            >
+                              {updatingAnomalyId === item.id ? "Asociando..." : "Confirmar asociación"}
+                            </button>
+                            <button className="button button-secondary" onClick={() => setPendingAssociation(null)} type="button">
                               Cancelar
                             </button>
                           </div>

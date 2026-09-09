@@ -10,6 +10,7 @@ from .action_service import (
 from .treatment_service import (
     add_root_cause,
     add_treatment_anomaly,
+    associate_anomaly_to_treatment,
     add_treatment_evidence,
     add_treatment_participant,
     add_treatment_task,
@@ -48,6 +49,7 @@ __all__ = [
     "update_action_plan",
     "add_root_cause",
     "add_treatment_anomaly",
+    "associate_anomaly_to_treatment",
     "add_treatment_evidence",
     "add_treatment_participant",
     "add_treatment_task",

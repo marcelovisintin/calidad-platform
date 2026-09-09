@@ -73,7 +73,7 @@ function InboxCard({ item, busy, history = false, onConfirm, onOpen, onRead }: I
           <strong>{item.title}</strong>
           <p>{item.body}</p>
         </div>
-        <StatusBadge compact value={item.task_status || item.delivery_status} />
+        <StatusBadge compact value={item.task_status || item.delivery_status} dueDate={item.is_task ? item.due_at : null} />
       </div>
 
       <dl className="key-grid compact notification-card-meta">

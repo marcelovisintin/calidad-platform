@@ -37,6 +37,7 @@ ACTION_STATUS_LABELS = OrderedDict(
 
 TREATMENT_STATUS_LABELS = OrderedDict(
     [
+        ("overdue", "Vencidos"),
         (TreatmentStatus.PENDING, "Abiertos"),
         (TreatmentStatus.SCHEDULED, "Programados"),
         (TreatmentStatus.IN_PROGRESS, "En tratamiento"),
@@ -104,16 +105,11 @@ def _treatment_queryset_for_user(user):
 
 
 def _count_anomalies(queryset):
-    today = timezone.localdate()
-    overdue = queryset.filter(
-        due_at__date__lt=today,
-    ).exclude(current_status__in=[AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED]).count()
-    counts = {"overdue": overdue}
-    for status in AnomalyStatus.values:
-        status_queryset = queryset.filter(current_status=status)
-        if status not in {AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED}:
-            status_queryset = status_queryset.exclude(due_at__date__lt=today)
-        counts[status] = status_queryset.count()
+    counts = dict.fromkeys(["overdue", *AnomalyStatus.values], 0)
+    for anomaly in queryset.select_related("immediate_action").prefetch_related(
+        "treatment_links__treatment", "observation_actions",
+    ):
+        counts["overdue" if anomaly.is_overdue else anomaly.current_status] += 1
     return counts
 
 
@@ -161,7 +157,11 @@ def _count_action_work(querysets):
 
 
 def _count_treatments(queryset):
-    return {status: queryset.filter(status=status).count() for status in TreatmentStatus.values}
+    expired = Q(deadline__lt=timezone.localdate()) & ~Q(status__in=["completed", "cancelled"])
+    return {
+        "overdue": queryset.filter(expired).count(),
+        **{status: queryset.filter(status=status).exclude(expired).count() for status in TreatmentStatus.values},
+    }
 
 
 def _validation_queryset_for_user(user):
@@ -170,7 +170,7 @@ def _validation_queryset_for_user(user):
 
 def _count_validations(queryset):
     today = timezone.localdate()
-    unfinished = queryset.filter(effectiveness_validation_result="")
+    unfinished = queryset.filter(effectiveness_validated_at__isnull=True).exclude(status__in=["completed", "cancelled"])
     return {
         "overdue": unfinished.filter(effectiveness_evaluation_date__lt=today).count(),
         "pending": unfinished.filter(

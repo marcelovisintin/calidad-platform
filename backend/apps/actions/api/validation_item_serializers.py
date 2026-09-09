@@ -4,6 +4,7 @@ from apps.actions.api.work_item_serializers import WorkItemUserSerializer
 
 
 class ValidationItemSerializer(serializers.Serializer):
+    is_overdue = serializers.BooleanField(read_only=True)
     id = serializers.UUIDField(read_only=True)
     source = serializers.ChoiceField(choices=("treatment", "observation"), read_only=True)
     code = serializers.CharField(read_only=True)

@@ -123,7 +123,7 @@ def _treatment_items_queryset(user, params):
         queryset = queryset.filter(
             status__in=[TreatmentTaskStatus.PENDING, TreatmentTaskStatus.IN_PROGRESS],
             execution_date__lt=timezone.localdate(),
-        )
+        ).exclude(treatment__status__in=["completed", "cancelled"])
     elif status_value:
         queryset = queryset.filter(status=status_value)
 
@@ -167,7 +167,7 @@ def _observation_items_queryset(user, params):
         queryset = queryset.filter(
             status=ObservationActionStatus.PENDING,
             estimated_completion_date__lt=timezone.localdate(),
-        )
+        ).exclude(anomaly__current_status__in=["closed", "cancelled"])
     elif status_value:
         queryset = queryset.filter(status=status_value)
 
@@ -236,10 +236,7 @@ def _observation_work_item(action, user) -> dict:
         "due_date": action.estimated_completion_date,
         "completed_on": action.completed_at,
         "effectiveness_due_date": action.effectiveness_due_date,
-        "is_overdue": bool(
-            action.status == ObservationActionStatus.PENDING
-            and action.estimated_completion_date < timezone.localdate()
-        ),
+        "is_overdue": action.is_overdue,
         "responsible": responsible,
         "completed_by": action.completed_by,
         "treatment": None,

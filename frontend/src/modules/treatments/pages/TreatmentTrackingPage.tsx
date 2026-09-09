@@ -250,7 +250,7 @@ export function TreatmentTrackingPage() {
                 >
                   <div className="section-head compact">
                     <strong>{treatment.code}</strong>
-                    <StatusBadge compact value={treatmentDisplayStatus(treatment)} />
+                    <StatusBadge compact value={treatmentDisplayStatus(treatment)} overdue={treatment.is_overdue} />
                   </div>
                   <p className="treatment-title">{treatment.primary_anomaly.title}</p>
                   <small>
@@ -277,7 +277,7 @@ export function TreatmentTrackingPage() {
                         Anomalia asociada: <strong>{detail.primary_anomaly.code}</strong> | {detail.primary_anomaly.title}
                       </p>
                     </div>
-                    <StatusBadge value={treatmentDisplayStatus(detail)} />
+                    <StatusBadge value={treatmentDisplayStatus(detail)} overdue={detail.is_overdue} />
                   </div>
 
                   <div className="panel info compact-inline-panel">
@@ -290,10 +290,15 @@ export function TreatmentTrackingPage() {
                       <div><dt>Codigo</dt><dd>{detail.code}</dd></div>
                       <div><dt>Estado</dt><dd>{humanizeToken(treatmentDisplayStatus(detail))}</dd></div>
                       <div><dt>Area</dt><dd>{detail.primary_anomaly.area?.name || selectedProcess}</dd></div>
+                      <div><dt>Fecha límite</dt><dd>{formatDate(detail.deadline)}</dd></div>
                       <div><dt>Programado</dt><dd>{formatDateTime(detail.scheduled_for)}</dd></div>
                       <div><dt>Creado</dt><dd>{formatDateTime(detail.created_at)}</dd></div>
                       <div><dt>Actualizado</dt><dd>{formatDateTime(detail.updated_at)}</dd></div>
                     </dl>
+                    <div className="readonly-block">
+                      <strong>Comentario de creación</strong>
+                      <p>{detail.creation_comment?.trim() || "Sin comentario"}</p>
+                    </div>
                     <div className="readonly-block">
                       <strong>Metodo</strong>
                       <p>{detail.method_used ? humanizeToken(detail.method_used) : "Sin metodo cargado"}</p>
@@ -361,7 +366,7 @@ export function TreatmentTrackingPage() {
                             <p>{link.anomaly.title}</p>
                             <small>{link.anomaly.area?.name || "-"} | {link.anomaly.reporter?.full_name || link.anomaly.reporter?.username || "-"}</small>
                           </div>
-                          <StatusBadge compact value={link.anomaly.current_status} />
+                          <StatusBadge compact value={link.anomaly.current_status} overdue={link.anomaly.is_overdue} />
                         </div>
                       ))}
                     </div>
@@ -417,14 +422,14 @@ export function TreatmentTrackingPage() {
                               </ul>
                             ) : null}
                           </div>
-                          <StatusBadge compact value={task.status} />
+                          <StatusBadge compact value={task.status} overdue={task.is_overdue} />
                         </div>
                       )) : <p className="muted-copy">Sin tareas registradas.</p>}
                     </div>
                   </section>
 
                   <section className="form-section">
-                    <div className="section-head compact"><h3>Evaluacion y validacion</h3></div>
+                    <div className="section-head compact"><h3>Evaluacion y validacion</h3><StatusBadge compact value={detail.effectiveness_validated_at ? "completed" : detail.status === "cancelled" ? "cancelled" : "pending"} overdue={detail.effectiveness_is_overdue} /></div>
                     <dl className="key-grid compact">
                       <div><dt>Fecha evaluacion</dt><dd>{formatDate(detail.effectiveness_evaluation_date)}</dd></div>
                       <div><dt>Responsable evaluacion</dt><dd>{detail.effectiveness_responsible?.full_name || detail.effectiveness_responsible?.username || "-"}</dd></div>

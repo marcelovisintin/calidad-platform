@@ -558,7 +558,9 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     classification_reason = (data.pop("classification_reason", "") or "").strip()
     observation_due_date = data.pop("observation_due_date", None)
     observation_comment = (data.pop("observation_comment", "") or "").strip()
-    treatment_related_anomalies = list(data.pop("treatment_related_anomalies", []) or [])
+    treatment_target = data.pop("treatment_target", None)
+    treatment_deadline = data.pop("treatment_deadline", None)
+    treatment_comment = (data.pop("treatment_comment", "") or "").strip()
     affected_orders = data.pop("affected_orders", None)
     legacy_order_changed = "manufacturing_order_number" in data or "affected_quantity" in data
     if affected_orders is not None:
@@ -607,10 +609,29 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
         requires_responsible = bool(getattr(locked.severity, "requires_classification_responsible", True))
         is_observation = is_immediate_action_value(locked.severity.code) or is_immediate_action_value(severity_name)
 
-        if treatment_related_anomalies and not is_nonconformity_anomaly(locked):
-            raise ValidationError(
-                {"treatment_related_anomalies": "Solo una No Conformidad puede conformar un tratamiento desde esta revision."}
+        if treatment_target is not None:
+            from apps.actions.services import is_open_treatment_for_association
+
+            _require_admin_access_level(
+                user,
+                "Solo usuarios ADMIN pueden asociar anomalias a tratamientos.",
             )
+            if not is_nonconformity_anomaly(locked):
+                raise ValidationError(
+                    {"treatment_target": "La asociacion clasifica automaticamente la anomalia como No Conformidad."}
+                )
+            if not is_open_treatment_for_association(treatment_target):
+                raise ValidationError(
+                    {"treatment_target": "El tratamiento ya fue cerrado, cancelado o validado como eficaz."}
+                )
+            if not treatment_target.responsible_id:
+                raise ValidationError(
+                    {"treatment_target": "El tratamiento seleccionado no tiene un responsable asignado."}
+                )
+            classification_responsible = treatment_target.responsible
+
+        if is_nonconformity_anomaly(locked) and treatment_target is None and not treatment_deadline:
+            raise ValidationError({"treatment_deadline": "Debe indicar la fecha limite del tratamiento."})
 
         if closes_as_invalid:
             if not classification_reason:
@@ -780,26 +801,27 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
         and (is_immediate_action_value(locked.severity.code) or is_immediate_action_value(locked.severity.name))
     )
     if should_sync_classification and is_nonconformity_anomaly(locked):
-        from apps.actions.services import create_configured_treatment
+        if treatment_target is not None:
+            from apps.actions.services import associate_anomaly_to_treatment
 
-        related_ids = {item.pk for item in treatment_related_anomalies if item.pk != locked.pk}
-        related_anomalies = list(
-            Anomaly.objects.select_for_update(of=("self",))
-            .select_related("severity")
-            .filter(pk__in=related_ids)
-            .order_by("pk")
-        )
-        if len(related_anomalies) != len(related_ids):
-            raise ValidationError(
-                {"treatment_related_anomalies": "Una o mas anomalias seleccionadas ya no estan disponibles."}
+            configured_treatment = associate_anomaly_to_treatment(
+                treatment=treatment_target,
+                anomaly=locked,
+                user=user,
+                request_id=request_id,
             )
-        configured_treatment = create_configured_treatment(
-            primary_anomaly=locked,
-            related_anomalies=related_anomalies,
-            responsible=classification_responsible,
-            user=user,
-            request_id=request_id,
-        )
+        else:
+            from apps.actions.services import create_configured_treatment
+
+            configured_treatment = create_configured_treatment(
+                primary_anomaly=locked,
+                related_anomalies=[],
+                responsible=classification_responsible,
+                user=user,
+                request_id=request_id,
+                deadline=treatment_deadline,
+                creation_comment=treatment_comment,
+            )
     elif is_observation_classification:
         save_observation_load(
             anomaly=locked,

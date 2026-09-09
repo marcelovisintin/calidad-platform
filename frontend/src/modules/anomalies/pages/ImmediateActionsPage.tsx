@@ -458,7 +458,7 @@ export function ImmediateActionsPage() {
                     </small>
                   </div>
                   <div className="badge-stack align-end">
-                    <StatusBadge value={anomaly.current_status} compact />
+                    <StatusBadge value={anomaly.current_status} overdue={anomaly.is_overdue} compact />
                     <StatusBadge value={anomaly.current_stage} compact />
                   </div>
                 </button>
@@ -477,7 +477,7 @@ export function ImmediateActionsPage() {
                       <h2>{selectedAnomaly.code}</h2>
                     </div>
                     <div className="badge-stack align-end">
-                      <StatusBadge value={selectedAnomaly.current_status} compact />
+                      <StatusBadge value={selectedAnomaly.current_status} overdue={selectedAnomaly.is_overdue} compact />
                       <StatusBadge value={selectedAnomaly.current_stage} compact />
                     </div>
                   </div>
@@ -605,7 +605,7 @@ export function ImmediateActionsPage() {
                               {action.completed_at ? <small>Finalizada: {action.completed_at}</small> : null}
                             </div>
                             <div className="badge-stack align-end">
-                              <StatusBadge compact value={action.status} />
+                              <StatusBadge compact value={action.status} overdue={action.is_overdue} />
                               {action.status === "pending" ? (
                                 <>
                                   <input
@@ -640,6 +640,11 @@ export function ImmediateActionsPage() {
                     <form className="form-section" onSubmit={handleVerifyEffectiveness}>
                       <div className="section-head compact">
                         <h3>Verificacion de eficacia</h3>
+                        <StatusBadge
+                          compact
+                          value={selectedAnomaly.immediate_action?.effectiveness_verified_at ? "completed" : ["closed", "cancelled"].includes(selectedAnomaly.current_status) ? selectedAnomaly.current_status : "pending"}
+                          dueDate={effectivenessReferenceAction?.effectiveness_due_date || selectedAnomaly.immediate_action?.effectiveness_due_at}
+                        />
                       </div>
 
                       {hasPendingObservationActions ? (

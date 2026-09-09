@@ -378,7 +378,7 @@ export function MyActionsPage() {
         <div className="user-management-grid actions-two-column">
         {selectedWorkItem?.source === "observation" ? (
           <section className="panel action-detail-fixed">
-            <div className="section-head compact"><div><SourceBadge source={selectedWorkItem.source} /><h2>{selectedWorkItem.code}</h2></div><StatusBadge value={selectedWorkItem.is_overdue ? "overdue" : selectedWorkItem.status} /></div>
+            <div className="section-head compact"><div><SourceBadge source={selectedWorkItem.source} /><h2>{selectedWorkItem.code}</h2></div><StatusBadge value={selectedWorkItem.status} overdue={selectedWorkItem.is_overdue} /></div>
             <p>{selectedWorkItem.description}</p>
             <dl className="key-grid compact">
               <div><dt>Anomalia</dt><dd>{selectedWorkItem.anomalies.map((item) => item.code).join(", ")}</dd></div>
@@ -399,7 +399,7 @@ export function MyActionsPage() {
 
         {selectedWorkItem?.source === "treatment" ? (
           <section className="panel action-detail-fixed">
-            <div className="section-head compact"><div><SourceBadge source={selectedWorkItem.source} /><h2>{`${selectedIsTerminal ? "Detalle" : "Editar tarea"} | ${selectedWorkItem.code || selectedWorkItem.title}`}</h2></div><StatusBadge value={selectedWorkItem.is_overdue ? "overdue" : selectedWorkItem.status} /></div>
+            <div className="section-head compact"><div><SourceBadge source={selectedWorkItem.source} /><h2>{`${selectedIsTerminal ? "Detalle" : "Editar tarea"} | ${selectedWorkItem.code || selectedWorkItem.title}`}</h2></div><StatusBadge value={selectedWorkItem.status} overdue={selectedWorkItem.is_overdue} /></div>
             <p className="muted-copy">Tratamiento: {selectedWorkItem.treatment?.code || "Sin tratamiento"} | Anomalias: {selectedWorkItem.anomalies.map((item) => item.code).join(", ") || "Sin asociar"}</p>
             <dl className="key-grid compact">
               <div><dt>Estado tratamiento</dt><dd>{selectedWorkItem.treatment?.status || "-"}</dd></div>
@@ -440,7 +440,7 @@ export function MyActionsPage() {
             const key = getWorkItemKey(item);
             return (
               <article className={`panel action-card work-list-card${selectedWorkItemKey === key ? " active" : ""}`} key={key} onClick={() => setSelectedWorkItemKey(key)} onKeyDown={(event) => handleCardKeyDown(event, item)} role="button" tabIndex={0}>
-                <div className="section-head compact work-card-header"><div className="work-card-main"><div className="work-card-heading"><SourceBadge source={item.source} /><strong>{item.code || item.title}</strong><span>{item.title}</span></div><small>{item.description || "Sin descripcion."}</small><div className="work-card-meta"><small>Fecha prevista: {formatDate(item.due_date)}</small><small>Responsable: {item.responsible ? getUserLabel(item.responsible) : "Sin asignar"}</small></div></div><StatusBadge value={item.is_overdue ? "overdue" : item.status} /></div>
+                <div className="section-head compact work-card-header"><div className="work-card-main"><div className="work-card-heading"><SourceBadge source={item.source} /><strong>{item.code || item.title}</strong><span>{item.title}</span></div><small>{item.description || "Sin descripcion."}</small><div className="work-card-meta"><small>Fecha prevista: {formatDate(item.due_date)}</small><small>Responsable: {item.responsible ? getUserLabel(item.responsible) : "Sin asignar"}</small></div></div><StatusBadge value={item.status} overdue={item.is_overdue} /></div>
               </article>
             );
           })}

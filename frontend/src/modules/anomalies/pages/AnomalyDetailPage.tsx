@@ -173,7 +173,7 @@ export function AnomalyDetailPage() {
                   <p className="muted-copy">{`Tipo de desvio: ${data.anomaly_type?.name || "Sin tipo de desvio"}`}</p>
                 </div>
                 <div className="badge-stack align-end">
-                  <StatusBadge value={data.current_status} />
+                  <StatusBadge value={data.current_status} overdue={data.is_overdue} />
                   <StatusBadge value={data.current_stage} />
                 </div>
               </div>
@@ -252,8 +252,7 @@ export function AnomalyDetailPage() {
                             {task.root_cause_description ? <small>Causa raiz: {task.root_cause_description}</small> : null}
                           </div>
                           <div className="badge-stack align-end">
-                            <StatusBadge value={task.status} compact />
-                            {task.is_overdue ? <StatusBadge value="overdue" compact /> : null}
+                            <StatusBadge value={task.status} overdue={task.is_overdue} compact />
                             {task.treatment?.id ? (
                               <button
                                 className="button button-secondary"
