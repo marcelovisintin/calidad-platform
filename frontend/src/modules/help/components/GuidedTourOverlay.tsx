@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { GuidedTourDefinition, GuidedTourStep } from "../guidedTours";
 
@@ -48,11 +48,12 @@ export function GuidedTourOverlay({ open, tour, onFinish }: GuidedTourOverlayPro
     setStepIndex(0);
   }, [onFinish, open, tour]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open || !currentStep) {
       return;
     }
 
+    setTargetRect(null);
     const target = document.querySelector<HTMLElement>(currentStep.selector);
     if (!target) {
       return;
@@ -63,15 +64,20 @@ export function GuidedTourOverlay({ open, tour, onFinish }: GuidedTourOverlayPro
       setTargetRect({ top: rect.top, left: rect.left, width: rect.width, height: rect.height, bottom: rect.bottom });
     };
 
-    target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    target.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
     updateRect();
-    const settleTimer = window.setTimeout(updateRect, 320);
+    const animationFrame = window.requestAnimationFrame(updateRect);
+    const settleTimer = window.setTimeout(updateRect, 100);
+    const resizeObserver = new ResizeObserver(updateRect);
+    resizeObserver.observe(target);
     window.addEventListener("resize", updateRect);
     window.addEventListener("scroll", updateRect, true);
     nextButtonRef.current?.focus();
 
     return () => {
+      window.cancelAnimationFrame(animationFrame);
       window.clearTimeout(settleTimer);
+      resizeObserver.disconnect();
       window.removeEventListener("resize", updateRect);
       window.removeEventListener("scroll", updateRect, true);
     };

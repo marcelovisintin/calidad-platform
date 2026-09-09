@@ -1410,7 +1410,7 @@ class AnomalyCreateApiTests(APITestCase):
         )
 
 
-    def test_admin_can_search_anomalies_by_area_and_status_not_reporter(self):
+    def test_admin_can_search_anomalies_by_assigned_area_and_status_not_reporter(self):
         reporter_a = User.objects.create_user(
             username="usuario_busqueda",
             email="busqueda@example.com",
@@ -1438,6 +1438,7 @@ class AnomalyCreateApiTests(APITestCase):
         )
 
         year = timezone.localdate().year
+        assigned_area = Area.objects.create(site=self.site, code="A02", name="Area asignada")
         Anomaly.objects.create(
             code=f"{year}9010",
             title="Anomalia registrada",
@@ -1446,6 +1447,7 @@ class AnomalyCreateApiTests(APITestCase):
             current_stage=AnomalyStage.REGISTRATION,
             site=self.site,
             area=self.area,
+            imputed_area=assigned_area,
             reporter=reporter_a,
             anomaly_type=self.anomaly_type,
             anomaly_origin=self.anomaly_origin,
@@ -1462,6 +1464,7 @@ class AnomalyCreateApiTests(APITestCase):
             current_stage=AnomalyStage.CAUSE_ANALYSIS,
             site=self.site,
             area=self.area,
+            imputed_area=assigned_area,
             reporter=reporter_b,
             anomaly_type=self.anomaly_type,
             anomaly_origin=self.anomaly_origin,
@@ -1477,9 +1480,13 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(response_reporter.status_code, status.HTTP_200_OK)
         self.assertEqual(response_reporter.data["count"], 0)
 
-        response_area = self.client.get("/api/v1/anomalies/?search=Area 1")
-        self.assertEqual(response_area.status_code, status.HTTP_200_OK)
-        self.assertEqual(response_area.data["count"], 2)
+        response_assigned_area = self.client.get("/api/v1/anomalies/?search=Area asignada")
+        self.assertEqual(response_assigned_area.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_assigned_area.data["count"], 2)
+
+        response_origin_area = self.client.get("/api/v1/anomalies/?search=Area 1")
+        self.assertEqual(response_origin_area.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_origin_area.data["count"], 0)
 
         response_status = self.client.get("/api/v1/anomalies/?search=en%20an%C3%A1lisis")
         self.assertEqual(response_status.status_code, status.HTTP_200_OK)

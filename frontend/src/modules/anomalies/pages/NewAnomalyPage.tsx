@@ -418,7 +418,7 @@ export function NewAnomalyPage() {
                 })}
               </div>
             </div>
-            <label className="field field-span-2">
+            <label className="field field-span-2" data-tour="anomaly-observation">
               <span>Observacion</span>
               <textarea
                 name="description"

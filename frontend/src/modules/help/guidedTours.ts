@@ -36,7 +36,7 @@ const TOURS: Record<string, GuidedTourDefinition> = {
       { selector: '[name="anomaly_type"]', title: "Tipo de anomalía", content: "Elige el tipo de desvío que mejor representa el hallazgo." },
       { selector: ".anomaly-form .form-section:nth-of-type(2)", title: "Paso 2 — Contexto", content: "Describe el hecho con claridad y agrega órdenes afectadas o evidencias cuando correspondan." },
       { selector: ".affected-orders-editor", title: "Órdenes afectadas", content: "Esta sección es opcional. Cada fila utilizada requiere tipo, número y cantidad mayor que cero." },
-      { selector: '[name="description"]', title: "Observación", content: "Explica qué ocurrió, dónde se detectó y cualquier dato necesario para comprender el hallazgo." },
+      { selector: '[data-tour="anomaly-observation"]', title: "Observación", content: "Explica qué ocurrió, dónde se detectó y cualquier dato necesario para comprender el hallazgo." },
       { selector: ".submit-bar", title: "Confirmar registro", content: "Revisa la información y confirma. La anomalía quedará Registrada y disponible para seguimiento." },
     ],
   },

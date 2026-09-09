@@ -137,8 +137,10 @@ def build_tracking_search_query(term: str) -> Q:
     query = (
         Q(code__icontains=term)
         | Q(title__icontains=term)
-        | Q(area__code__icontains=term)
-        | Q(area__name__icontains=term)
+        | Q(imputed_area__code__icontains=term)
+        | Q(imputed_area__name__icontains=term)
+        | Q(imputed_area__isnull=True, area__code__icontains=term)
+        | Q(imputed_area__isnull=True, area__name__icontains=term)
         | Q(affected_orders__number__icontains=term)
         | Q(affected_orders__order_type__code__icontains=term)
     )

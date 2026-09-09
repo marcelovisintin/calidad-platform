@@ -347,7 +347,7 @@ export function MyAnomaliesPage() {
           id: "search",
           label: "Buscar",
           active: Boolean(search),
-          content: <input aria-label="Buscar anomalias" onChange={handleSearchChange} placeholder="Codigo, titulo, area o estado de hallazgo" type="search" value={search} />,
+          content: <input aria-label="Buscar anomalias" onChange={handleSearchChange} placeholder="Codigo, titulo, asignado a o estado de hallazgo" type="search" value={search} />,
         }]}
       />
 
