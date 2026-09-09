@@ -505,12 +505,6 @@ class AnomalyViewSet(viewsets.ModelViewSet):
         queryset = build_anomaly_queryset(detailed=self.action in detailed_actions)
         queryset = filter_anomaly_queryset_for_user(queryset, self.request.user)
 
-        # Seguimiento muestra solamente las anomalias principales. Las anomalias
-        # incorporadas como secundarias a un tratamiento permanecen disponibles
-        # en el detalle y en la trazabilidad del tratamiento.
-        if self.action == "list":
-            queryset = queryset.exclude(treatment_links__is_primary=False)
-
         params = self.request.query_params
         if status_value := params.get("status"):
             queryset = queryset.filter(current_status=status_value)

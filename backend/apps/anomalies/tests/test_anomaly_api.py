@@ -1267,7 +1267,7 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertIn(f"{year}9001", codes)
         self.assertIn(f"{year}9002", codes)
 
-    def test_tracking_list_excludes_secondary_treatment_anomalies(self):
+    def test_tracking_list_includes_associated_treatment_anomalies(self):
         year = timezone.localdate().year
         parent = Anomaly.objects.create(
             code=f"{year}9010",
@@ -1328,7 +1328,7 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         anomaly_ids = {item["id"] for item in response.data["results"]}
         self.assertIn(str(parent.pk), anomaly_ids)
-        self.assertNotIn(str(child.pk), anomaly_ids)
+        self.assertIn(str(child.pk), anomaly_ids)
 
         detail_response = self.client.get(f"/api/v1/anomalies/{child.pk}/")
         self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
