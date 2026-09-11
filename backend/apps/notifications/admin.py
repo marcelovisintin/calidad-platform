@@ -10,6 +10,8 @@ class NotificationRecipientInline(admin.TabularInline):
         "user",
         "channel",
         "destination",
+        "email_subject",
+        "email_body",
         "delivery_status",
         "delivery_attempts",
         "last_delivery_attempt_at",

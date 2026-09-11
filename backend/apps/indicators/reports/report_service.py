@@ -32,6 +32,7 @@ from apps.notifications.models import (
     NotificationStatus,
     RecipientTaskStatus,
 )
+from apps.notifications.services.email_template_catalog import render_email_template
 
 
 REPORT_COLUMNS = {
@@ -196,12 +197,27 @@ def create_and_queue_report(*, key: str, params, recipient_ids: list, actor) -> 
         updated_by=actor,
     )
     report.report_file.save(filename, ContentFile(pdf), save=True)
+    default_subject = f"Informe de Calidad: {payload['title']}"
+    default_body = (
+        f"Se adjunta el informe {payload['title']} correspondiente al periodo "
+        f"{payload['period']['date_from']} al {payload['period']['date_to']}."
+    )
+    email_subject, email_body = render_email_template(
+        code="indicator_report",
+        context={
+            "report_title": payload["title"],
+            "date_from": payload["period"]["date_from"],
+            "date_to": payload["period"]["date_to"],
+        },
+        fallback_subject=default_subject,
+        fallback_body=default_body,
+    )
     notification = Notification.objects.create(
         source_type="indicators.indicatorreport",
         source_id=report.pk,
         template_code="indicator_report",
-        title=f"Informe de Calidad: {payload['title']}",
-        body=f"Se adjunta el informe {payload['title']} correspondiente al periodo {payload['period']['date_from']} al {payload['period']['date_to']}.",
+        title=default_subject,
+        body=default_body,
         category=NotificationCategory.INFO,
         status=NotificationStatus.PENDING,
         context_data={"include_action_url_in_email": False, "indicator_report_id": str(report.pk)},
@@ -215,6 +231,8 @@ def create_and_queue_report(*, key: str, params, recipient_ids: list, actor) -> 
                 user=user,
                 channel=NotificationChannel.EMAIL,
                 destination=user.email.strip(),
+                email_subject=email_subject,
+                email_body=email_body,
                 delivery_status=DeliveryStatus.PENDING,
                 task_status=RecipientTaskStatus.NONE,
                 created_by=actor,

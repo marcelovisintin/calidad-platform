@@ -32,7 +32,7 @@ def _absolute_action_url(action_url: str) -> str:
 
 def _email_body(recipient: NotificationRecipient) -> str:
     notification = recipient.notification
-    parts = [notification.body.strip()]
+    parts = [(recipient.email_body or notification.body).strip()]
     include_action_url = (
         notification.template_code not in {"treatment_participant_invited", "treatment_task_assigned"}
         and notification.context_data.get("include_action_url_in_email", True)
@@ -163,7 +163,7 @@ def _send_claimed_recipient(recipient_id) -> str:
 
     try:
         message = EmailMultiAlternatives(
-            subject=recipient.notification.title.replace("\r", " ").replace("\n", " "),
+            subject=(recipient.email_subject or recipient.notification.title).replace("\r", " ").replace("\n", " "),
             body=_email_body(recipient),
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[recipient.destination],

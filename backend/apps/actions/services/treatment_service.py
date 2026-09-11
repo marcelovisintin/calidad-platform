@@ -42,6 +42,7 @@ from apps.anomalies.services.classification_rules import is_immediate_action_ano
 from apps.notifications.services import (
     complete_treatment_effectiveness_assignment,
     dismiss_treatment_task_assignment_tasks,
+    notify_treatment_anomaly_associated,
     notify_treatment_closed,
     notify_treatment_effectiveness_assigned,
     notify_treatment_learned_lesson_published,
@@ -1022,6 +1023,7 @@ def create_configured_treatment(
             anomaly=anomaly,
             user=user,
             request_id=request_id,
+            notify_responsible=False,
         )
 
     record_audit_event(
@@ -1273,7 +1275,14 @@ def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str,
 
 
 @transaction.atomic
-def add_treatment_anomaly(*, treatment: Treatment, anomaly, user, request_id: str = "") -> TreatmentAnomaly:
+def add_treatment_anomaly(
+    *,
+    treatment: Treatment,
+    anomaly,
+    user,
+    request_id: str = "",
+    notify_responsible: bool = True,
+) -> TreatmentAnomaly:
     if not has_global_treatment_management_access(user):
         raise PermissionDenied("Solo Calidad puede conformar las anomalias de un tratamiento.")
     locked_treatment = Treatment.objects.select_for_update().get(pk=treatment.pk)
@@ -1333,14 +1342,13 @@ def add_treatment_anomaly(*, treatment: Treatment, anomaly, user, request_id: st
             after_data={"owner_id": str(anomaly.owner_id), "treatment_id": str(locked_treatment.pk)},
             request_id=_request_id(request_id),
         )
-    from apps.notifications.services import notify_finding_management_assigned
-
-    notify_finding_management_assigned(
-        anomaly=anomaly,
-        responsible=None,
-        actor=user,
-        request_id=request_id,
-    )
+    if notify_responsible:
+        notify_treatment_anomaly_associated(
+            treatment=locked_treatment,
+            anomaly=anomaly,
+            actor=user,
+            request_id=request_id,
+        )
     return link
 
 
@@ -1432,6 +1440,12 @@ def associate_anomaly_to_treatment(*, treatment: Treatment, anomaly: Anomaly, us
         treatment=locked_treatment,
         user=user,
         comment=f"Se asocia la anomalia {locked_anomaly.code} al tratamiento {locked_treatment.code}.",
+    )
+    notify_treatment_anomaly_associated(
+        treatment=locked_treatment,
+        anomaly=locked_anomaly,
+        actor=user,
+        request_id=request_id,
     )
 
     return locked_treatment
@@ -1542,6 +1556,7 @@ def reconfigure_treatment(
             link.delete()
             _restore_anomaly_after_treatment_removal(anomaly=anomaly, treatment=locked, user=user)
 
+    added_anomalies = []
     for anomaly_id, anomaly in related_by_id.items():
         if anomaly_id not in current_by_id:
             add_treatment_anomaly(
@@ -1549,7 +1564,9 @@ def reconfigure_treatment(
                 anomaly=anomaly,
                 user=user,
                 request_id=request_id,
+                notify_responsible=False,
             )
+            added_anomalies.append(anomaly)
 
     if locked.responsible_id != responsible.pk:
         previous_responsible_id = locked.responsible_id
@@ -1591,6 +1608,14 @@ def reconfigure_treatment(
             actor=user,
         )
 
+    for added_anomaly in added_anomalies:
+        notify_treatment_anomaly_associated(
+            treatment=locked,
+            anomaly=added_anomaly,
+            actor=user,
+            request_id=request_id,
+        )
+
     record_audit_event(
         entity=locked,
         action="treatment.composition_corrected",
@@ -1629,6 +1654,7 @@ def confirm_treatment_convocation(
         raise ValidationError(
             {"convocation": "La convocatoria debe confirmarse antes de iniciar el analisis del tratamiento."}
         )
+
     if not locked.participants.exclude(role=TreatmentParticipantRole.OWNER).exists():
         raise ValidationError(
             {"participants": "Debe convocar al menos un usuario antes de completar y confirmar la agenda."}

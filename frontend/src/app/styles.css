@@ -4554,6 +4554,136 @@ small {
   }
 }
 
+.email-template-note p {
+  margin: 0.35rem 0 0;
+}
+
+.email-template-workspace {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.7fr) minmax(0, 1.8fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.email-template-directory {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow: hidden;
+}
+
+.email-template-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-height: calc(100vh - 180px);
+  padding-right: 0.2rem;
+  overflow-y: auto;
+}
+
+.email-template-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.18rem;
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid rgba(15, 44, 53, 0.16);
+  border-radius: 13px;
+  color: inherit;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.68);
+  cursor: pointer;
+}
+
+.email-template-card:hover,
+.email-template-card.active {
+  border-color: var(--primary);
+  background: rgba(21, 132, 111, 0.1);
+}
+
+.email-template-card > span,
+.email-template-card > em {
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.email-template-card > em {
+  color: var(--muted);
+}
+
+.email-template-state {
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(86, 114, 123, 0.12);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.email-template-state.customized {
+  color: var(--primary-dark);
+  background: rgba(21, 132, 111, 0.16);
+}
+
+.email-template-metadata {
+  margin: 0;
+  padding: 0.85rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.email-template-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.email-template-fields button {
+  padding: 0.3rem 0.52rem;
+  border: 1px solid rgba(21, 132, 111, 0.35);
+  border-radius: 8px;
+  color: var(--primary-dark);
+  background: rgba(255, 255, 255, 0.76);
+  font-family: monospace;
+  cursor: pointer;
+}
+
+.email-template-preview {
+  padding: 1rem;
+  border-left: 4px solid var(--primary);
+  border-radius: 10px;
+  background: white;
+}
+
+.email-template-preview > strong {
+  display: block;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.email-template-preview > p:last-child {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .email-template-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .email-template-directory {
+    position: static;
+    max-height: none;
+  }
+
+  .email-template-list {
+    max-height: 320px;
+  }
+}
+
 /* Recorridos guiados */
 .guided-tour-layer {
   position: fixed;

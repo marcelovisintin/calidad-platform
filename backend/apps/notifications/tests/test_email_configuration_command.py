@@ -3,7 +3,7 @@ from io import StringIO
 from django.core import mail
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import SimpleTestCase, override_settings
+from django.test import TestCase, override_settings
 
 
 @override_settings(
@@ -12,7 +12,7 @@ from django.test import SimpleTestCase, override_settings
     EMAIL_HOST_PASSWORD="test-app-password",
     DEFAULT_FROM_EMAIL="marcelo.v@schneider.ar",
 )
-class TestEmailConfigurationCommandTests(SimpleTestCase):
+class TestEmailConfigurationCommandTests(TestCase):
     def test_confirmation_is_required(self):
         with self.assertRaises(CommandError):
             call_command("test_email_configuration", recipient="marcelo.v@schneider.ar")

@@ -1171,6 +1171,39 @@ export interface CatalogBootstrap {
   orderTypes: CatalogSummary[];
 }
 
+export interface EmailTemplateField {
+  key: string;
+  label: string;
+  example: string;
+}
+
+export interface EmailTemplateDefinition {
+  code: string;
+  case_number: string;
+  name: string;
+  stage: string;
+  recipient: string;
+  description: string;
+  conditions: string;
+  allowed_fields: EmailTemplateField[];
+  default_subject_template: string;
+  default_body_template: string;
+  subject_template: string;
+  body_template: string;
+  preview_subject: string;
+  preview_body: string;
+  is_customized: boolean;
+  row_version: number | null;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+export interface EmailTemplateUpdatePayload {
+  subject_template: string;
+  body_template: string;
+  row_version: number | null;
+}
+
 
 
 

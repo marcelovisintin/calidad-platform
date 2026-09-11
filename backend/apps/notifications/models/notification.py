@@ -106,6 +106,8 @@ class NotificationRecipient(AuditBaseModel):
         default=DeliveryStatus.PENDING,
     )
     destination = models.CharField(max_length=254, blank=True, default="")
+    email_subject = models.CharField(max_length=255, blank=True, default="")
+    email_body = models.TextField(blank=True, default="")
     delivery_attempts = models.PositiveSmallIntegerField(default=0)
     last_delivery_attempt_at = models.DateTimeField(null=True, blank=True)
     delivered_at = models.DateTimeField(null=True, blank=True)

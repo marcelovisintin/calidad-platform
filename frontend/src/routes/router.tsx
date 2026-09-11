@@ -5,6 +5,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { ChangePasswordPage } from "../modules/accounts/pages/ChangePasswordPage";
 import { LoginPage } from "../modules/accounts/pages/LoginPage";
 import { CatalogManagementPage } from "../modules/admin/pages/CatalogManagementPage";
+import { EmailTemplateManagementPage } from "../modules/admin/pages/EmailTemplateManagementPage";
 import { UserBulkImportPage } from "../modules/admin/pages/UserBulkImportPage";
 import { UserManagementPage } from "../modules/admin/pages/UserManagementPage";
 import { UserScopesPage } from "../modules/admin/pages/UserScopesPage";
@@ -72,6 +73,7 @@ export const router = createBrowserRouter([
       { path: "management/users/import", element: <UserBulkImportPage /> },
       { path: "management/user-scopes", element: <UserScopesPage /> },
       { path: "management/catalogs", element: <CatalogManagementPage /> },
+      { path: "management/email-templates", element: <EmailTemplateManagementPage /> },
     ],
   },
   {

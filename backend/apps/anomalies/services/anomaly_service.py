@@ -835,7 +835,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
             request_id=request_id,
         )
 
-    if should_sync_classification:
+    if should_sync_classification and treatment_target is None:
         notify_finding_management_assigned(
             anomaly=locked,
             responsible=None if closes_as_invalid else classification_responsible,
@@ -843,6 +843,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
             request_id=request_id,
             treatment=configured_treatment,
         )
+    if should_sync_classification:
         if closes_as_invalid and transition_from_status != AnomalyStatus.CLOSED:
             notify_anomaly_closed(
                 anomaly=locked,

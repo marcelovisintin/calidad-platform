@@ -95,6 +95,7 @@ def create_due_notification_digests(*, digest_date=None, reminder_days: int | No
         omitted = max(0, len(user_recipients) - 100)
         if omitted:
             lines.extend(["", f"Hay {omitted} pendiente(s) adicional(es) para consultar en el sistema."])
+        pending_details = "\n".join(lines[2:])
         lines.extend(["", "Ingresá al Sistema de Gestión de Calidad con tu propio usuario para revisar tus pendientes."])
 
         notification = create_internal_notification(
@@ -119,6 +120,13 @@ def create_due_notification_digests(*, digest_date=None, reminder_days: int | No
                 "include_action_url_in_email": False,
             },
             email_enabled=True,
+            email_template_code=DAILY_DUE_DIGEST_TEMPLATE,
+            email_context={
+                "recipient_name": user_recipients[0].user.full_name,
+                "overdue_count": len(overdue),
+                "upcoming_count": len(upcoming),
+                "pending_details": pending_details,
+            },
         )
         if notification:
             created += 1

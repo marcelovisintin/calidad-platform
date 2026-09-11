@@ -121,6 +121,7 @@ const adminSections = [
   { title: "Orden operativo", description: "Criterios internos de ordenamiento operativo y tratamiento.", to: "/management/catalogs?entity=priorities" },
   { title: "Tipos de accion", description: "Contencion, correctiva, preventiva o mejora.", to: "/management/catalogs?entity=action-types" },
   { title: "Tipos de ordenes afectadas", description: "Maestro de OP, OF, OM y otros tipos de orden.", to: "/management/catalogs?entity=order-types" },
+  { title: "Edición correos", description: "Asunto y cuerpo de cada correo saliente, con campos y vista previa.", to: "/management/email-templates" },
   { title: "Panel admin Django", description: "Acceso completo al panel tecnico y maestros.", href: "/admin/" },
 ];
 

@@ -7,6 +7,13 @@ class NotificationsApiRootSerializer(serializers.Serializer):
     inbox = serializers.CharField()
     tasks = serializers.CharField()
     summary = serializers.CharField()
+    email_templates = serializers.CharField()
+
+
+class EmailTemplateUpdateSerializer(serializers.Serializer):
+    subject_template = serializers.CharField(max_length=255, trim_whitespace=True)
+    body_template = serializers.CharField(trim_whitespace=True)
+    row_version = serializers.IntegerField(min_value=1, required=False, allow_null=True)
 
 
 class NotificationInboxItemSerializer(serializers.ModelSerializer):

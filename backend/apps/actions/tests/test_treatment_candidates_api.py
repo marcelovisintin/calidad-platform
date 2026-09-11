@@ -4,8 +4,10 @@ from threading import Barrier
 from unittest import skipIf
 
 from django.contrib.auth.models import Permission
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import close_old_connections, connection, connections, transaction
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -38,7 +40,8 @@ from apps.anomalies.models import (
     ObservationResolutionPath,
 )
 from apps.catalog.models import AnomalyOrigin, AnomalyType, Area, Priority, Severity, Site
-from apps.notifications.models import NotificationRecipient
+from apps.notifications.models import NotificationChannel, NotificationRecipient
+from apps.notifications.services.email_delivery import dispatch_pending_email_notifications
 
 
 class TreatmentCandidatesApiTests(APITestCase):
@@ -381,6 +384,61 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertEqual(primary.severity, self.severity)
         self.assertEqual(primary.owner, self.task_user)
         self.assertEqual(primary.current_stage, AnomalyStage.TREATMENT_CREATED)
+
+    @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
+    def test_associating_anomaly_queues_email_for_treatment_responsible(self):
+        primary = Anomaly.objects.create(
+            code="20269024",
+            title="Nueva NC para notificar",
+            description="Debe notificar al responsable del tratamiento.",
+            current_status=AnomalyStatus.REGISTERED,
+            current_stage=AnomalyStage.REGISTRATION,
+            site=self.site,
+            area=self.area_one,
+            reporter=self.reporter_one,
+            anomaly_type=self.anomaly_type,
+            anomaly_origin=self.anomaly_origin,
+            priority=self.priority,
+            detected_at=timezone.now(),
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+        self.task_user.email_notifications_enabled = True
+        self.task_user.save(update_fields=["email_notifications_enabled", "updated_at"])
+        self.treatment_one.responsible = self.task_user
+        self.treatment_one.save(update_fields=["responsible", "updated_at"])
+
+        response = self.client.patch(
+            f"/api/v1/anomalies/{primary.pk}/",
+            {
+                "severity": str(self.severity.pk),
+                "treatment_target": str(self.treatment_one.pk),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        recipient = NotificationRecipient.objects.select_related("notification").get(
+            user=self.task_user,
+            channel=NotificationChannel.EMAIL,
+            notification__template_code="treatment_anomaly_associated",
+            notification__source_id=self.treatment_one.pk,
+        )
+        self.assertFalse(
+            NotificationRecipient.objects.filter(
+                user=self.task_user,
+                notification__template_code="finding_management_assigned",
+                notification__source_id=primary.pk,
+            ).exists()
+        )
+        self.assertEqual(recipient.destination, self.task_user.email)
+        self.assertIn(f"Calidad asoció la anomalía Nro. {primary.code}", recipient.notification.body)
+        self.assertIn(f"Al tratamiento Nro. {self.treatment_one.code}", recipient.notification.body)
+        dispatch_pending_email_notifications()
+        message = next(item for item in mail.outbox if item.subject == recipient.notification.title)
+        self.assertEqual(message.to, [self.task_user.email])
+        self.assertIn(f"Calidad asoció la anomalía Nro. {primary.code}", message.body)
+        self.assertIn(f"Al tratamiento Nro. {self.treatment_one.code}", message.body)
 
     def test_admin_association_selects_one_treatment_without_merging_codes(self):
         primary = Anomaly.objects.create(

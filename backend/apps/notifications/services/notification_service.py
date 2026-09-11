@@ -53,6 +53,7 @@ FINDING_MANAGEMENT_TEMPLATE = "finding_management_assigned"
 TREATMENT_EFFECTIVENESS_TEMPLATE = "treatment_effectiveness_assigned"
 OBSERVATION_EFFECTIVENESS_TEMPLATE = "observation_effectiveness_assigned"
 ANOMALY_CLOSED_TEMPLATE = "anomaly_closed"
+TREATMENT_ANOMALY_ASSOCIATED_TEMPLATE = "treatment_anomaly_associated"
 TREATMENT_CLOSED_TEMPLATE = "treatment_closed"
 TREATMENT_REPORTER_CLOSURE_TEMPLATE = "anomalies_closed_by_treatment"
 TREATMENT_LEARNED_LESSON_TEMPLATE = "treatment_learned_lesson_published"
@@ -163,6 +164,8 @@ def create_internal_notification(
     context_data: dict | None = None,
     request_id: str = "",
     email_enabled: bool = False,
+    email_template_code: str = "",
+    email_context: dict | None = None,
 ):
     users = _unique_active_users(recipients)
     if not users:
@@ -196,6 +199,18 @@ def create_internal_notification(
     notification.full_clean()
     notification.save()
 
+    email_subject = title
+    email_body = body
+    if email_users and email_template_code:
+        from apps.notifications.services.email_template_catalog import render_email_template
+
+        email_subject, email_body = render_email_template(
+            code=email_template_code,
+            context=email_context,
+            fallback_subject=title,
+            fallback_body=body,
+        )
+
     assigned_at = timezone.now() if is_task else None
     task_status = RecipientTaskStatus.PENDING if is_task else RecipientTaskStatus.NONE
     recipient_objects = [
@@ -217,6 +232,8 @@ def create_internal_notification(
             user=user,
             channel=NotificationChannel.EMAIL,
             destination=user.email.strip(),
+            email_subject=email_subject,
+            email_body=email_body,
             delivery_status=DeliveryStatus.PENDING,
             task_status=task_status,
             assigned_at=assigned_at,
@@ -793,12 +810,14 @@ def notify_finding_management_assigned(
     if treatment is not None:
         linked_count = treatment.anomaly_links.count()
         if has_global_access(actor):
+            email_template_code = "finding_management_configured_quality"
             title = f"Tratamiento {treatment.code} conformado por Calidad"
             instruction = (
                 f"Calidad conformó el tratamiento con {linked_count} anomalía"
                 f"{'s' if linked_count != 1 else ''}. Debes convocar a los participantes y realizar su gestión."
             )
         else:
+            email_template_code = "finding_management_configured_observation"
             title = f"Tratamiento {treatment.code} conformado"
             instruction = (
                 f"Conformaste el tratamiento desde la Observación TRT con {linked_count} anomalía"
@@ -806,10 +825,12 @@ def notify_finding_management_assigned(
             )
         action_url = f"/treatments?treatment={treatment.pk}"
     elif is_observation_treatment:
+        email_template_code = "finding_management_observation_treatment"
         title = f"Tratamiento requerido para la observación TRT {anomaly.code}"
         instruction = "La observación fue marcada como plausible de tratamiento. Debes crear o coordinar su tratamiento."
         action_url = f"/treatments?anomaly={anomaly.pk}"
     elif is_observation:
+        email_template_code = "finding_management_observation_direct"
         title = f"Gestión requerida para la observación {anomaly.code}"
         instruction = (
             "La observación fue confirmada para gestión directa. Debes revisar sus datos generales, "
@@ -817,6 +838,7 @@ def notify_finding_management_assigned(
         )
         action_url = "/anomalies/observations"
     else:
+        email_template_code = "finding_management_treatment_required"
         title = f"Tratamiento requerido para la anomalía {anomaly.code}"
         instruction = "Debes crear y coordinar el tratamiento, convocando a los participantes necesarios."
         action_url = f"/treatments?anomaly={anomaly.pk}"
@@ -853,6 +875,16 @@ def notify_finding_management_assigned(
         },
         request_id=request_id,
         email_enabled=True,
+        email_template_code=email_template_code,
+        email_context={
+            "recipient_name": responsible.full_name,
+            "anomaly_code": anomaly.code,
+            "anomaly_title": anomaly.title,
+            "classification": anomaly.severity.name,
+            "area_name": anomaly.area.name,
+            "treatment_code": treatment.code if treatment is not None else "",
+            "linked_count": linked_count if treatment is not None else "",
+        },
     )
 
 
@@ -888,6 +920,16 @@ def notify_anomaly_created(*, anomaly, actor=None, request_id: str = ""):
         },
         request_id=request_id,
         email_enabled=True,
+        email_template_code="anomaly_created",
+        email_context={
+            "recipient_name": anomaly.reporter.full_name,
+            "anomaly_code": anomaly.code,
+            "anomaly_title": anomaly.title,
+            "area_name": anomaly.area.name,
+            "detected_at": detected_at,
+            "initial_status": anomaly.get_current_status_display(),
+            "responsible_name": responsible_label,
+        },
     )
 
 
@@ -927,6 +969,15 @@ def notify_action_item_assigned(*, action_item, actor=None, reassigned: bool = F
         },
         request_id=request_id,
         email_enabled=True,
+        email_template_code="action_item_reassigned" if reassigned else "action_item_assigned",
+        email_context={
+            "recipient_name": action_item.assigned_to.full_name,
+            "action_code": action_item.code or action_item.title,
+            "action_title": action_item.title,
+            "action_description": action_item.description or "Sin descripción",
+            "anomaly_code": action_item.action_plan.anomaly.code,
+            "due_date": due_label,
+        },
     )
 
 
@@ -979,6 +1030,16 @@ def notify_treatment_task_assigned(*, treatment_task, actor=None, reassigned: bo
         },
         request_id=request_id,
         email_enabled=True,
+        email_template_code="treatment_task_reassigned" if reassigned else "treatment_task_assigned",
+        email_context={
+            "recipient_name": treatment_task.responsible.full_name,
+            "task_code": treatment_task.code or treatment_task.title,
+            "task_title": treatment_task.title,
+            "task_description": treatment_task.description,
+            "treatment_code": treatment.code,
+            "anomaly_codes": anomaly_label,
+            "execution_date": execution_label,
+        },
     )
 
 
@@ -1043,6 +1104,13 @@ def notify_treatment_effectiveness_assigned(*, treatment, actor=None, request_id
         },
         request_id=request_id,
         email_enabled=True,
+        email_template_code=TREATMENT_EFFECTIVENESS_TEMPLATE,
+        email_context={
+            "recipient_name": responsible.full_name,
+            "treatment_code": treatment.code,
+            "anomaly_codes": anomaly_label,
+            "due_date": due_label,
+        },
     )
 
 
@@ -1100,6 +1168,14 @@ def notify_observation_effectiveness_assigned(*, anomaly, immediate_action, acto
         },
         request_id=request_id,
         email_enabled=True,
+        email_template_code=OBSERVATION_EFFECTIVENESS_TEMPLATE,
+        email_context={
+            "recipient_name": responsible.full_name,
+            "anomaly_code": anomaly.code,
+            "anomaly_title": anomaly.title,
+            "actions_taken": immediate_action.actions_taken,
+            "due_date": due_label,
+        },
     )
 
 
@@ -1188,6 +1264,53 @@ def notify_treatment_participant_invited(*, treatment, participant, actor=None, 
         },
         request_id=request_id,
         email_enabled=True,
+        email_template_code="treatment_participant_invited",
+        email_context={
+            "recipient_name": participant.user.full_name,
+            "treatment_code": treatment.code,
+            "anomaly_code": anomaly.code,
+            "anomaly_title": anomaly.title,
+            "participant_role": participant.get_role_display(),
+            "scheduled_at": scheduled_label,
+            "location": location_label,
+        },
+    )
+
+
+def notify_treatment_anomaly_associated(*, treatment, anomaly, actor=None, request_id: str = ""):
+    responsible = treatment.responsible
+    if not responsible:
+        return None
+
+    return create_internal_notification(
+        recipients=[responsible],
+        title=f"Anomalía {anomaly.code} asociada al tratamiento {treatment.code}",
+        body=(
+            f"Hola {responsible.full_name},\n\n"
+            f"Calidad asoció la anomalía Nro. {anomaly.code}\n"
+            f"Al tratamiento Nro. {treatment.code}."
+        ),
+        source_type="actions.treatment",
+        source_id=treatment.pk,
+        actor=actor,
+        category=NotificationCategory.ANOMALY,
+        template_code=TREATMENT_ANOMALY_ASSOCIATED_TEMPLATE,
+        action_url=f"/treatments?treatment={treatment.pk}",
+        context_data={
+            "treatment_id": str(treatment.pk),
+            "treatment_code": treatment.code,
+            "anomaly_id": str(anomaly.pk),
+            "anomaly_code": anomaly.code,
+            "responsible_id": str(responsible.pk),
+        },
+        request_id=request_id,
+        email_enabled=True,
+        email_template_code=TREATMENT_ANOMALY_ASSOCIATED_TEMPLATE,
+        email_context={
+            "recipient_name": responsible.full_name,
+            "anomaly_code": anomaly.code,
+            "treatment_code": treatment.code,
+        },
     )
 
 
@@ -1247,6 +1370,14 @@ def notify_anomaly_closed(
         },
         request_id=request_id,
         email_enabled=True,
+        email_template_code=ANOMALY_CLOSED_TEMPLATE,
+        email_context={
+            "recipient_name": anomaly.reporter.full_name,
+            "anomaly_code": anomaly.code,
+            "anomaly_title": anomaly.title,
+            "closure_reason": path_label,
+            "closure_summary": summary,
+        },
     )
 
 
@@ -1296,6 +1427,12 @@ def notify_treatment_closed(
                 },
                 request_id=request_id,
                 email_enabled=True,
+                email_template_code=TREATMENT_CLOSED_TEMPLATE,
+                email_context={
+                    "treatment_code": treatment.code,
+                    "anomaly_codes": anomaly_label,
+                    "validation_comment": validation_comment,
+                },
             )
         )
 
@@ -1346,6 +1483,13 @@ def notify_treatment_closed(
                 },
                 request_id=request_id,
                 email_enabled=True,
+                email_template_code=TREATMENT_REPORTER_CLOSURE_TEMPLATE,
+                email_context={
+                    "recipient_name": reporter.full_name,
+                    "reported_anomalies": reported_label,
+                    "treatment_code": treatment.code,
+                    "validation_comment": validation_comment,
+                },
             )
         )
     return [notification for notification in notifications if notification is not None]
@@ -1397,6 +1541,12 @@ def notify_treatment_learned_lesson_published(*, lesson, actor=None, request_id:
         },
         request_id=request_id,
         email_enabled=True,
+        email_template_code=TREATMENT_LEARNED_LESSON_TEMPLATE,
+        email_context={
+            "treatment_code": treatment.code,
+            "learning_summary": learning_summary,
+            "procedure_summary": procedure_summary,
+        },
     )
 
 
@@ -1434,6 +1584,11 @@ def notify_treatment_not_effective(*, treatment, actor=None, request_id: str = "
         },
         request_id=request_id,
         email_enabled=True,
+        email_template_code=TREATMENT_NOT_EFFECTIVE_TEMPLATE,
+        email_context={
+            "treatment_code": treatment.code,
+            "validation_comment": comment,
+        },
     )
 
 
@@ -1473,4 +1628,9 @@ def notify_observation_not_effective(
         },
         request_id=request_id,
         email_enabled=True,
+        email_template_code=OBSERVATION_NOT_EFFECTIVE_TEMPLATE,
+        email_context={
+            "anomaly_code": anomaly.code,
+            "validation_comment": comment,
+        },
     )
