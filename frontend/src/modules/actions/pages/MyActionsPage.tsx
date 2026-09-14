@@ -399,7 +399,7 @@ export function MyActionsPage() {
 
         {selectedWorkItem?.source === "treatment" ? (
           <section className="panel action-detail-fixed">
-            <div className="section-head compact"><div><SourceBadge source={selectedWorkItem.source} /><h2>{`${selectedIsTerminal ? "Detalle" : "Editar tarea"} | ${selectedWorkItem.code || selectedWorkItem.title}`}</h2></div><StatusBadge value={selectedWorkItem.status} overdue={selectedWorkItem.is_overdue} /></div>
+            <div className="section-head compact"><div><SourceBadge source={selectedWorkItem.source} /><h2>{`${selectedIsTerminal ? "Detalle" : "Editar acción"} | ${selectedWorkItem.code || selectedWorkItem.title}`}</h2></div><StatusBadge value={selectedWorkItem.status} overdue={selectedWorkItem.is_overdue} /></div>
             <p className="muted-copy">Tratamiento: {selectedWorkItem.treatment?.code || "Sin tratamiento"} | Anomalias: {selectedWorkItem.anomalies.map((item) => item.code).join(", ") || "Sin asociar"}</p>
             <dl className="key-grid compact">
               <div><dt>Estado tratamiento</dt><dd>{selectedWorkItem.treatment?.status || "-"}</dd></div>
@@ -410,9 +410,9 @@ export function MyActionsPage() {
             </dl>
             {!selectedIsTerminal ? (
               <form className="form-section nested-form" onSubmit={handleUpdateTask}>
-                <div className="section-head compact"><h3>Datos de la tarea</h3><div className="task-save-controls">{statusEvidenceError ? <span className="inline-form-alert" role="alert">{statusEvidenceError}</span> : null}<button className="button button-primary" disabled={busy || !selectedWorkItem.can_update_status} type="submit">Guardar tarea</button></div></div>
+                <div className="section-head compact"><h3>Datos de la acción</h3><div className="task-save-controls">{statusEvidenceError ? <span className="inline-form-alert" role="alert">{statusEvidenceError}</span> : null}<button className="button button-primary" disabled={busy || !selectedWorkItem.can_update_status} type="submit">Guardar tarea</button></div></div>
                 <div className="form-grid">
-                  <label className="field"><span>Titulo</span><input disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("title", event.target.value)} required type="text" value={taskDraft.title} /></label>
+                  <label className="field"><span>Acción</span><input disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("title", event.target.value)} required type="text" value={taskDraft.title} /></label>
                   <label className="field"><span>Estado</span><select disabled={!selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("status", event.target.value as TaskDraft["status"])} value={taskDraft.status}>{TASK_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                   <label className="field"><span>Responsable</span><select disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("responsible", event.target.value)} value={taskDraft.responsible}><option value="">Sin asignar</option>{(usersData?.results ?? []).map((user) => <option key={user.id} value={user.id}>{getUserLabel(user)}</option>)}</select></label>
                   <label className="field"><span>Fecha ejecucion</span><input disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("execution_date", event.target.value)} type="date" value={taskDraft.execution_date} /></label>
@@ -422,7 +422,7 @@ export function MyActionsPage() {
               </form>
             ) : null}
             <section className="form-section nested-form">
-              <div className="section-head compact"><h3>Evidencias de la tarea</h3>{!selectedIsTerminal ? <button className="button button-primary" disabled={busy || !selectedWorkItem.can_add_evidence || !taskEvidenceFile} onClick={() => void handleAddTaskEvidence()} type="button">Cargar evidencia</button> : null}</div>
+              <div className="section-head compact"><h3>Evidencia de la acción</h3>{!selectedIsTerminal ? <button className="button button-primary" disabled={busy || !selectedWorkItem.can_add_evidence || !taskEvidenceFile} onClick={() => void handleAddTaskEvidence()} type="button">Cargar evidencia</button> : null}</div>
               {!selectedIsTerminal ? <div className="form-grid"><label className="field field-span-2"><span>Archivo</span><input accept={EVIDENCE_ACCEPT} disabled={!selectedWorkItem.can_add_evidence} key={taskEvidenceInputKey} onChange={(event) => setTaskEvidenceFile(event.target.files?.[0] ?? null)} type="file" /></label><label className="field field-span-2"><span>Nota de evidencia (opcional)</span><textarea disabled={!selectedWorkItem.can_add_evidence} onChange={(event) => setTaskEvidenceNote(event.target.value)} rows={3} value={taskEvidenceNote} /></label></div> : null}
               <div className="stack-list compact">
                 {selectedWorkItem.evidences.length ? selectedWorkItem.evidences.map((evidence) => <div className="list-card compact" key={evidence.id}><div className="evidence-block"><a href={normalizeProtectedFileUrl(evidence.file_url)} onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)} rel="noopener noreferrer" target="_blank">{evidence.original_name}</a><small>{formatDateTime(evidence.created_at)}</small><p>{evidence.note || "Sin nota"}</p></div></div>) : <p className="muted-copy">Todavia no hay evidencias cargadas en esta tarea.</p>}
