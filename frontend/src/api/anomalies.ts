@@ -5,6 +5,8 @@ import type {
   AnomalyCreatePayload,
   AnomalyDetail,
   AnomalyListItem,
+  AnomalyLearning,
+  AnomalyLearningPayload,
   AnomalyRepetitionStudyResponse,
   AffectedOrderListResponse,
   ImmediateActionPayload,
@@ -12,6 +14,7 @@ import type {
   ObservationAction,
   ObservationActionCreatePayload,
   ObservationLoadPayload,
+  ObservationLearnedLessonItem,
   ObservationVerificationPayload,
   PagedResponse,
   WorkflowMetadata,
@@ -155,6 +158,31 @@ export function saveObservationActionTaken(anomalyId: string, payload: Observati
   });
 }
 
+export function fetchObservationLearnedLessons(page = 1, search = "") {
+  const params = new URLSearchParams({ page: String(page), page_size: "10" });
+  if (search.trim()) {
+    params.set("search", search.trim());
+  }
+  return apiRequest<PagedResponse<ObservationLearnedLessonItem>>(
+    `/anomalies/observation-learned-lessons/?${params.toString()}`,
+  );
+}
+
+export function saveObservationLearnedLesson(anomalyId: string, payload: AnomalyLearningPayload) {
+  const formData = new FormData();
+  formData.append("has_learning", String(payload.has_learning));
+  formData.append("learned_text", payload.learned_text ?? "");
+  formData.append("no_learning_reason", payload.no_learning_reason ?? "");
+  formData.append("procedure_modified", String(payload.procedure_modified));
+  formData.append("procedure_modification_notes", payload.procedure_modification_notes ?? "");
+  formData.append("confirm_modification", String(payload.confirm_modification ?? false));
+  (payload.evidences ?? []).forEach((file) => formData.append("evidences", file));
+  return apiRequest<AnomalyLearning>(`/anomalies/${anomalyId}/learning/`, {
+    method: "POST",
+    body: formData,
+  });
+}
+
 export function createObservationAction(anomalyId: string, payload: ObservationActionCreatePayload) {
   return apiRequest<ObservationAction>(`/anomalies/${anomalyId}/observation/actions/`, {
     method: "POST",
@@ -201,7 +229,6 @@ export function classifyAnomalyBySeverity(
     classification_responsible?: string;
     classification_reason?: string;
     observation_due_date?: string;
-    observation_comment?: string;
     treatment_target?: string;
     treatment_deadline?: string;
     treatment_comment?: string;

@@ -177,7 +177,7 @@ export function ImmediateActionsPage() {
       return;
     }
 
-    if (selectedAnomaly?.immediate_action && !requiresTreatment) {
+    if (selectedAnomaly?.immediate_action?.observation?.trim() && !requiresTreatment) {
       setGeneralStepConfirmed(true);
       setFormError(null);
       return;
@@ -290,7 +290,7 @@ export function ImmediateActionsPage() {
     }
 
     if (!actionCompletedAt || !actionsTaken.trim() || !effectivenessDueAt) {
-      setFormError("Completa fecha de realizado, detalle de la accion y fecha de verificacion de eficacia.");
+      setFormError("Completa fecha de realizado, detalle de la accion y fecha de validacion.");
       return;
     }
 
@@ -335,8 +335,17 @@ export function ImmediateActionsPage() {
       return;
     }
 
-    if (!effectivenessVerifiedAt || !effectivenessResult) {
-      setFormError("Completa fecha de verificacion y selecciona si fue eficaz.");
+    if (!canVerifyEffectiveness) {
+      setFormError(`La verificacion de eficacia se habilitara el ${effectivenessDueDate}.`);
+      return;
+    }
+
+    if (!effectivenessVerifiedAt || !effectivenessResult || !effectivenessComment.trim()) {
+      setFormError("Completa la fecha de realizacion de la validacion, el resultado y el fundamento de eficacia.");
+      return;
+    }
+    if (effectivenessVerifiedAt.slice(0, 10) < effectivenessDueDate) {
+      setFormError("La fecha de realizacion no puede ser anterior a la fecha de validacion.");
       return;
     }
 
@@ -350,7 +359,7 @@ export function ImmediateActionsPage() {
       const updatedAnomaly = await verifyObservationEffectiveness(selectedAnomalyId, {
         effectiveness_verified_at: toOffsetIso(effectivenessVerifiedAt),
         effectiveness_is_effective: isEffective,
-        effectiveness_comment: effectivenessComment.trim() || undefined,
+        effectiveness_comment: effectivenessComment.trim(),
       });
 
       await Promise.all([reload(), reloadDetail()]);
@@ -370,7 +379,8 @@ export function ImmediateActionsPage() {
 
   const anomalies = listData?.anomalies.results ?? [];
   const totalCount = listData?.anomalies.count ?? 0;
-  const hasLoadedAction = Boolean(selectedAnomaly?.immediate_action);
+  const hasLoadedAction = Boolean(selectedAnomaly?.immediate_action?.observation?.trim());
+  const hasAssignedObservation = Boolean(selectedAnomaly?.immediate_action);
   const observationActions = selectedAnomaly?.observation_actions ?? [];
   const hasObservationActions = observationActions.length > 0;
   const hasConfirmedActions = hasObservationActions || Boolean(selectedAnomaly?.immediate_action?.actions_taken);
@@ -387,6 +397,8 @@ export function ImmediateActionsPage() {
     null,
   );
   const hasPendingObservationActions = observationActions.some((action) => action.status !== "completed");
+  const effectivenessDueDate = effectivenessReferenceAction?.effectiveness_due_date || selectedAnomaly?.immediate_action?.effectiveness_due_at || "";
+  const canVerifyEffectiveness = Boolean(effectivenessDueDate && nowAsDate() >= effectivenessDueDate);
   const notEffective = selectedAnomaly?.immediate_action?.effectiveness_is_effective === false || effectivenessResult === "not_effective";
   const assignedResponsible = selectedAnomaly?.immediate_action?.responsible || selectedAnomaly?.owner || selectedAnomaly?.current_responsible || null;
   usePublishHelpWorkContext(selectedAnomaly ? resolveAnomalyHelpWorkContext(selectedAnomaly, isAdminUser(user)) : null);
@@ -511,7 +523,7 @@ export function ImmediateActionsPage() {
 
                       <label className="field">
                         <span>Fecha limite de ejecucion</span>
-                        <input disabled={hasLoadedAction} onChange={(event) => setActionDate(event.target.value)} required type="date" value={actionDate} />
+                        <input disabled={hasAssignedObservation} onChange={(event) => setActionDate(event.target.value)} required type="date" value={actionDate} />
                       </label>
 
                       <label className="field field-span-2">
@@ -556,7 +568,7 @@ export function ImmediateActionsPage() {
                         </label>
 
                         <label className="field">
-                          <span>Fecha estimada de verificacion de eficacia</span>
+                          <span>Fecha de validacion</span>
                           <input onChange={(event) => setActionEffectivenessDueDate(event.target.value)} required type="date" value={actionEffectivenessDueDate} />
                         </label>
 
@@ -600,7 +612,7 @@ export function ImmediateActionsPage() {
                               <strong>{`Accion ${action.sequence}`}</strong>
                               <p>{action.detail}</p>
                               <small>
-                                Realizacion estimada: {action.estimated_completion_date} | Verificacion estimada: {action.effectiveness_due_date}
+                                Realizacion estimada: {action.estimated_completion_date} | Fecha de validacion: {action.effectiveness_due_date}
                               </small>
                               {action.completed_at ? <small>Finalizada: {action.completed_at}</small> : null}
                             </div>
@@ -653,10 +665,15 @@ export function ImmediateActionsPage() {
                         </div>
                       ) : null}
                       {notEffective ? <div className="panel warning">La ultima verificacion no fue eficaz; puede cargar nuevas acciones.</div> : null}
+                      {!canVerifyEffectiveness ? (
+                        <div className="panel warning">
+                          La verificacion permanecera bloqueada hasta la fecha de validacion: {effectivenessDueDate || "sin fecha definida"}.
+                        </div>
+                      ) : null}
 
                       <div className="form-grid">
                         <label className="field">
-                          <span>Fecha estimada de verificacion de eficacia</span>
+                          <span>Fecha de validacion</span>
                           <input
                             disabled
                             type="date"
@@ -674,8 +691,9 @@ export function ImmediateActionsPage() {
                         </div>
 
                         <label className="field">
-                          <span>Fecha de realizacion de la verificacion</span>
+                          <span>Fecha de realizacion de la validacion</span>
                           <input
+                            disabled={!canVerifyEffectiveness}
                             onChange={(event) => setEffectivenessVerifiedAt(event.target.value)}
                             required
                             type="datetime-local"
@@ -685,7 +703,7 @@ export function ImmediateActionsPage() {
 
                         <label className="field">
                           <span>Resultado</span>
-                          <select onChange={(event) => setEffectivenessResult(event.target.value as "" | "effective" | "not_effective")} required value={effectivenessResult}>
+                          <select disabled={!canVerifyEffectiveness} onChange={(event) => setEffectivenessResult(event.target.value as "" | "effective" | "not_effective")} required value={effectivenessResult}>
                             <option value="">Seleccionar...</option>
                             <option value="effective">Eficaz</option>
                             <option value="not_effective">No eficaz</option>
@@ -693,8 +711,8 @@ export function ImmediateActionsPage() {
                         </label>
 
                         <label className="field field-span-2">
-                          <span>Detalle de la verificacion</span>
-                          <textarea onChange={(event) => setEffectivenessComment(event.target.value)} rows={3} value={effectivenessComment} />
+                          <span>Fundamento de eficacia</span>
+                          <textarea disabled={!canVerifyEffectiveness} onChange={(event) => setEffectivenessComment(event.target.value)} required rows={3} value={effectivenessComment} />
                         </label>
                       </div>
 
@@ -702,7 +720,7 @@ export function ImmediateActionsPage() {
                     {message ? <div className="panel success">{message}</div> : null}
 
                     <div className="form-actions">
-                      <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed"} type="submit">
+                      <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed" || !canVerifyEffectiveness || !effectivenessComment.trim()} type="submit">
                         {submitting ? "Guardando..." : "Guardar verificacion"}
                       </button>
                     </div>

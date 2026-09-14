@@ -832,6 +832,49 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.treatment_one.refresh_from_db()
         self.assertIsNone(self.treatment_one.convocation_confirmed_at)
 
+    def test_convocation_requires_treatment_location(self):
+        TreatmentParticipant.objects.create(
+            treatment=self.treatment_one,
+            user=self.reporter_two,
+            role="convoked",
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+
+        response = self.client.post(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/confirm-convocation/",
+            {
+                "scheduled_for": (timezone.now() + timedelta(days=2)).isoformat(),
+                "treatment_location": "   ",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("treatment_location", response.data)
+        self.treatment_one.refresh_from_db()
+        self.assertIsNone(self.treatment_one.convocation_confirmed_at)
+
+    def test_convocation_requires_scheduled_date_and_time(self):
+        TreatmentParticipant.objects.create(
+            treatment=self.treatment_one,
+            user=self.reporter_two,
+            role="convoked",
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+
+        response = self.client.post(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/confirm-convocation/",
+            {"treatment_location": "Sala de Calidad"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("scheduled_for", response.data)
+        self.treatment_one.refresh_from_db()
+        self.assertIsNone(self.treatment_one.convocation_confirmed_at)
+
     def test_manager_can_remove_convoked_user_before_confirmation(self):
         participant = TreatmentParticipant.objects.create(
             treatment=self.treatment_one,
@@ -1272,7 +1315,9 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(TreatmentTask.objects.filter(treatment=self.treatment_one).count(), 1)
-        self.assertFalse(TreatmentTask.objects.get(treatment=self.treatment_one).anomaly_links.exists())
+        task = TreatmentTask.objects.get(treatment=self.treatment_one)
+        self.assertEqual(task.code, f"{self.treatment_one.code}-A01")
+        self.assertFalse(task.anomaly_links.exists())
 
     def test_add_treatment_task_accepts_active_responsible_without_invitation(self):
         root_cause = TreatmentRootCause.objects.create(
@@ -1299,6 +1344,32 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         task = TreatmentTask.objects.get(treatment=self.treatment_one)
         self.assertEqual(task.responsible, self.other_task_user)
+
+    def test_new_treatment_task_must_start_pending(self):
+        root_cause = TreatmentRootCause.objects.create(
+            treatment=self.treatment_one,
+            sequence=1,
+            description="Causa para accion nueva",
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+
+        response = self.client.post(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/tasks/",
+            {
+                "title": "Accion creada como completada",
+                "description": "No debe permitirse omitir el estado inicial.",
+                "root_cause": str(root_cause.pk),
+                "responsible": str(self.task_user.pk),
+                "execution_date": timezone.localdate().isoformat(),
+                "status": TreatmentTaskStatus.COMPLETED,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("status", response.data)
+        self.assertFalse(TreatmentTask.objects.filter(treatment=self.treatment_one).exists())
 
     def test_save_analysis_requires_effectiveness_evaluation_date(self):
         TreatmentParticipant.objects.create(
@@ -1536,12 +1607,30 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         response = self.client.post(
             f"/api/v1/actions/treatments/{treatment.pk}/validation/",
-            {"result": "effective"},
+            {"result": "effective", "comment": "Fundamento de prueba."},
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("validation", response.data)
+
+    def test_treatment_not_available_before_validation_date(self):
+        treatment = self._prepare_treatment_for_validation()
+        treatment.effectiveness_evaluation_date = timezone.localdate() + timedelta(days=1)
+        treatment.save(update_fields=["effectiveness_evaluation_date", "updated_at"])
+        self.client.force_authenticate(user=self.task_user)
+
+        response = self.client.post(
+            f"/api/v1/actions/treatments/{treatment.pk}/validation/",
+            {"result": "effective", "comment": "Fundamento anticipado."},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("validation", response.data)
+        treatment.refresh_from_db()
+        self.assertEqual(treatment.status, "in_progress")
+        self.assertEqual(treatment.effectiveness_validation_result, "")
 
     def test_validation_ready_list_only_returns_ready_treatments_for_responsible_user(self):
         ready_treatment = self._prepare_treatment_for_validation(treatment=self.treatment_one, responsible=self.task_user)
@@ -1580,7 +1669,7 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         response = self.client.post(
             f"/api/v1/actions/treatments/{self.treatment_one.pk}/validation/",
-            {"result": "effective"},
+            {"result": "effective", "comment": "Fundamento de prueba."},
             format="json",
         )
 
@@ -1594,7 +1683,7 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         response = self.client.post(
             f"/api/v1/actions/treatments/{treatment.pk}/validation/",
-            {"result": "effective"},
+            {"result": "effective", "comment": "Fundamento de prueba."},
             format="json",
         )
 
@@ -1610,7 +1699,7 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         response = self.client.post(
             f"/api/v1/actions/treatments/{treatment.pk}/validation/",
-            {"result": "effective"},
+            {"result": "effective", "comment": "Fundamento de prueba."},
             format="json",
         )
 
@@ -1623,7 +1712,7 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         response = self.client.post(
             f"/api/v1/actions/treatments/{treatment.pk}/validation/",
-            {"result": "effective"},
+            {"result": "effective", "comment": "Fundamento de prueba."},
             format="json",
         )
 
@@ -1642,11 +1731,27 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         response = self.client.post(
             f"/api/v1/actions/treatments/{treatment.pk}/validation/",
-            {"result": "effective"},
+            {"result": "effective", "comment": "Fundamento de prueba."},
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_treatment_validation_requires_effectiveness_basis(self):
+        treatment = self._prepare_treatment_for_validation()
+        self.client.force_authenticate(user=self.task_user)
+
+        response = self.client.post(
+            f"/api/v1/actions/treatments/{treatment.pk}/validation/",
+            {"result": "effective", "comment": "   "},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("comment", response.data)
+        treatment.refresh_from_db()
+        self.assertEqual(treatment.status, "in_progress")
+        self.assertEqual(treatment.effectiveness_validation_result, "")
 
     def test_responsible_can_validate_effective_and_close_treatment(self):
         treatment = self._prepare_treatment_for_validation()

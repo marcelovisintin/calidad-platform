@@ -137,6 +137,38 @@ class ValidationItemsApiTests(APITestCase):
             },
         )
 
+    def test_future_validation_dates_block_both_origins_until_the_due_date(self):
+        self.manager_treatment.effectiveness_evaluation_date = timezone.localdate() + timedelta(days=1)
+        self.manager_treatment.save(update_fields=["effectiveness_evaluation_date", "updated_at"])
+        self.client.force_authenticate(user=self.manager)
+
+        future_response = self.client.get(self.endpoint)
+        future_items = {
+            item["source"]: item
+            for item in future_response.data["results"]
+        }
+        for source in ("treatment", "observation"):
+            self.assertEqual(future_items[source]["status"], "blocked")
+            self.assertFalse(future_items[source]["available"])
+            self.assertFalse(future_items[source]["can_validate"])
+            self.assertTrue(
+                any("fecha de validacion" in blocker.lower() for blocker in future_items[source]["blockers"])
+            )
+
+        self.manager_treatment.effectiveness_evaluation_date = timezone.localdate()
+        self.manager_treatment.save(update_fields=["effectiveness_evaluation_date", "updated_at"])
+        self.manager_anomaly.observation_actions.update(effectiveness_due_date=timezone.localdate())
+
+        due_response = self.client.get(self.endpoint)
+        due_items = {
+            item["source"]: item
+            for item in due_response.data["results"]
+        }
+        for source in ("treatment", "observation"):
+            self.assertEqual(due_items[source]["status"], "pending")
+            self.assertTrue(due_items[source]["available"])
+            self.assertTrue(due_items[source]["can_validate"])
+
     def test_source_checks_support_each_origin_and_neither(self):
         self.client.force_authenticate(user=self.admin)
         treatments = self.client.get(f"{self.endpoint}?source=treatment")

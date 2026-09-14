@@ -12,7 +12,15 @@ const PAGE_SIZE = 10;
 
 function isTaskStatusHistory(item: AnomalyStatusHistory) {
   const comment = item.comment.toLowerCase();
-  return comment.includes("se actualiza la tarea") && comment.includes("estado");
+  return (comment.includes("se actualiza la accion") || comment.includes("se actualiza la tarea")) && comment.includes("estado");
+}
+
+function displayHistoryComment(comment: string) {
+  return comment
+    .replace(/\bTareas\b/g, "Acciones")
+    .replace(/\btareas\b/g, "acciones")
+    .replace(/\bTarea\b/g, "Acción")
+    .replace(/\btarea\b/g, "acción");
 }
 
 function getEvidenceText(item: AnomalyStatusHistory) {
@@ -53,7 +61,7 @@ export function Timeline({ items }: TimelineProps) {
                   <span className="timeline-arrow">a</span>
                   <StatusBadge value={item.to_stage} compact />
                 </div>
-                <p className="timeline-comment">{item.comment}</p>
+                <p className="timeline-comment">{displayHistoryComment(item.comment)}</p>
                 {evidenceText ? (
                   <p className="timeline-evidence" style={{ whiteSpace: "pre-line" }}>
                     <strong>Evidencia:</strong> {evidenceText}

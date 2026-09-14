@@ -552,7 +552,7 @@ class TreatmentUpdateSerializer(serializers.Serializer):
 
 class TreatmentConfirmConvocationSerializer(serializers.Serializer):
     scheduled_for = serializers.DateTimeField(required=True, allow_null=False)
-    treatment_location = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    treatment_location = serializers.CharField(required=True, allow_blank=False, max_length=200, trim_whitespace=True)
 
 
 class TreatmentAddAnomalySerializer(serializers.Serializer):
@@ -604,7 +604,14 @@ class TreatmentUpdateTaskSerializer(serializers.Serializer):
 
 class TreatmentValidateSerializer(serializers.Serializer):
     result = serializers.ChoiceField(choices=TreatmentEffectivenessValidationResult.choices, required=True)
-    comment = serializers.CharField(required=False, allow_blank=True)
+    comment = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        error_messages={
+            "required": "Debe completar el fundamento de eficacia.",
+            "blank": "Debe completar el fundamento de eficacia.",
+        },
+    )
 
 
 class TreatmentLearnedLessonWriteSerializer(serializers.Serializer):

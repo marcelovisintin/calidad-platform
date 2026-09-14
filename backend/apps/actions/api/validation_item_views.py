@@ -1,4 +1,5 @@
 from django.db.models import Prefetch, Q
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 
@@ -141,7 +142,19 @@ def _observation_validation_item(anomaly, user) -> dict:
         if observation.effectiveness_is_effective is False
         else ""
     )
+    validation_date = (
+        reference_action.effectiveness_due_date
+        if reference_action
+        else observation.effectiveness_due_at
+    )
     blockers = [] if has_action else ["Debe cargar al menos una accion antes de verificar eficacia."]
+    if not validation_date:
+        blockers.append("Debe tener cargada la fecha de validacion.")
+    elif timezone.localdate() < validation_date:
+        blockers.append(
+            "La validacion no puede realizarse antes de la fecha de validacion "
+            f"{validation_date.isoformat()}."
+        )
     if anomaly.current_status == AnomalyStatus.CANCELLED:
         blockers.append("La Observacion esta anulada.")
     available = not blockers and not result
@@ -149,18 +162,14 @@ def _observation_validation_item(anomaly, user) -> dict:
         "id": anomaly.pk,
         "source": "observation",
         "is_overdue": is_overdue(
-            reference_action.effectiveness_due_date if reference_action else observation.effectiveness_due_at,
+            validation_date,
             anomaly.current_status,
             finished=bool(observation.effectiveness_verified_at),
         ),
         "code": anomaly.code,
         "title": anomaly.title,
         "status": "completed" if result else ("pending" if available else "blocked"),
-        "due_date": (
-            reference_action.effectiveness_due_date
-            if reference_action
-            else observation.effectiveness_due_at
-        ),
+        "due_date": validation_date,
         "responsible": observation.responsible,
         "result": result,
         "validated_at": observation.effectiveness_verified_at,

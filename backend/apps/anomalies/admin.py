@@ -141,9 +141,9 @@ class AnomalyEffectivenessCheckAdmin(admin.ModelAdmin):
 
 @admin.register(AnomalyLearning)
 class AnomalyLearningAdmin(admin.ModelAdmin):
-    list_display = ("anomaly", "recorded_by", "recorded_at", "shared_at")
+    list_display = ("anomaly", "recorded_by", "recorded_at", "has_learning", "procedure_modified")
     list_select_related = ("anomaly", "recorded_by")
-    search_fields = ("anomaly__code", "recorded_by__username", "lessons_learned")
+    search_fields = ("anomaly__code", "recorded_by__username", "learned_text")
 
 
 

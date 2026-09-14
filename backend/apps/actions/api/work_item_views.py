@@ -10,6 +10,7 @@ from apps.accounts.services.access_policy import (
     can_manage_assigned_process,
     has_global_access,
 )
+from apps.audit.models import AuditEvent
 from apps.actions.api.work_item_serializers import ActionWorkItemSerializer
 from apps.actions.models import (
     TreatmentTask,
@@ -188,7 +189,39 @@ def _anomaly_summary(anomaly) -> dict:
     }
 
 
-def _treatment_work_item(task, user) -> dict:
+def _status_evidences_by_task(tasks) -> dict[str, list[dict]]:
+    task_ids = {str(task.pk) for task in tasks}
+    treatment_ids = {task.treatment_id for task in tasks}
+    evidences_by_task = {task_id: [] for task_id in task_ids}
+    events = (
+        AuditEvent.objects.filter(
+            entity_type="actions.treatment",
+            entity_id__in=treatment_ids,
+            action="treatment.task_updated",
+        )
+        .select_related("actor")
+        .order_by("-created_at")
+    )
+    for event in events:
+        event_data = event.after_data or {}
+        task_id = str(event_data.get("task_id") or "")
+        note = str(event_data.get("evidence_note") or "").strip()
+        if task_id not in evidences_by_task or not note:
+            continue
+        evidences_by_task[task_id].append(
+            {
+                "id": event.pk,
+                "from_status": event_data.get("previous_status") or "",
+                "to_status": event_data.get("status") or "",
+                "note": note,
+                "changed_by": event.actor,
+                "changed_at": event.created_at,
+            }
+        )
+    return evidences_by_task
+
+
+def _treatment_work_item(task, user, status_evidences=None) -> dict:
     anomalies = [link.anomaly for link in task.anomaly_links.all()]
     if not anomalies:
         anomalies = [task.treatment.primary_anomaly]
@@ -214,6 +247,8 @@ def _treatment_work_item(task, user) -> dict:
         "anomalies": [_anomaly_summary(anomaly) for anomaly in anomalies],
         "root_causes": list(task.root_causes.all()),
         "evidences": list(task.evidences.all()),
+        "status_evidences": status_evidences or [],
+        "can_cancel": task.status == TreatmentTaskStatus.PENDING and not status_evidences,
         "can_manage": can_manage_treatment(user, task.treatment),
         "can_update_status": can_execute_assignment(user, task.responsible_id),
         "can_add_evidence": can_execute_assignment(user, task.responsible_id),
@@ -243,6 +278,8 @@ def _observation_work_item(action, user) -> dict:
         "anomalies": [_anomaly_summary(action.anomaly)],
         "root_causes": [],
         "evidences": [],
+        "status_evidences": [],
+        "can_cancel": False,
         "can_manage": can_manage,
         "can_update_status": can_manage,
         "can_add_evidence": False,
@@ -260,9 +297,17 @@ class ActionWorkItemListAPIView(APIView):
         items = []
 
         if "treatment" in sources:
+            treatment_tasks = list(
+                _treatment_items_queryset(request.user, request.query_params)
+            )
+            status_evidences = _status_evidences_by_task(treatment_tasks)
             items.extend(
-                _treatment_work_item(task, request.user)
-                for task in _treatment_items_queryset(request.user, request.query_params)
+                _treatment_work_item(
+                    task,
+                    request.user,
+                    status_evidences.get(str(task.pk), []),
+                )
+                for task in treatment_tasks
             )
         if "observation" in sources and not (request.query_params.get("treatment") or "").strip():
             items.extend(

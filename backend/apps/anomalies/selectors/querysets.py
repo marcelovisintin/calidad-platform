@@ -83,6 +83,7 @@ def build_anomaly_queryset(*, detailed: bool = False):
             "classification__classified_by",
             "cause_analysis__analyzed_by",
             "learning__recorded_by",
+            "learning__evidences__uploaded_by",
             "immediate_action__responsible",
         )
     return queryset

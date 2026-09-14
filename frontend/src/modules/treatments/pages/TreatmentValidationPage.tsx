@@ -135,6 +135,10 @@ export function TreatmentValidationPage() {
       setFormError("Debe seleccionar si la validacion fue eficaz o no eficaz.");
       return;
     }
+    if (!validationComment.trim()) {
+      setFormError("Debe completar el fundamento de eficacia.");
+      return;
+    }
     if (!selectedItem.can_validate) {
       setFormError("La validacion no esta disponible para el usuario actual.");
       return;
@@ -153,7 +157,7 @@ export function TreatmentValidationPage() {
         await verifyObservationEffectiveness(selectedItem.id, {
           effectiveness_verified_at: toOffsetIso(verifiedAt),
           effectiveness_is_effective: validationResult === "effective",
-          effectiveness_comment: validationComment.trim() || undefined,
+          effectiveness_comment: validationComment.trim(),
         });
       }
       setMessage("Validacion registrada correctamente.");
@@ -213,7 +217,7 @@ export function TreatmentValidationPage() {
                 >
                   <div className="work-card-main">
                     <div className="work-card-heading"><SourceBadge source={item.source} /><strong>{item.code}</strong><span>{item.title}</span></div>
-                    <div className="work-card-meta"><small>Evaluacion: {item.due_date ? formatDate(item.due_date) : "Sin fecha"}</small><small>Responsable: {item.responsible?.full_name || item.responsible?.username || "Sin responsable"}</small></div>
+                    <div className="work-card-meta"><small>Fecha de validacion: {item.due_date ? formatDate(item.due_date) : "Sin fecha"}</small><small>Responsable: {item.responsible?.full_name || item.responsible?.username || "Sin responsable"}</small></div>
                   </div>
                   <div className="badge-stack align-end">
                     <StatusBadge value={item.status} overdue={item.is_overdue} compact />
@@ -240,14 +244,17 @@ export function TreatmentValidationPage() {
                   </div>
 
                   <dl className="key-grid compact">
-                    <div><dt>Fecha estimada</dt><dd>{selectedItem.due_date ? formatDate(selectedItem.due_date) : "Sin fecha"}</dd></div>
+                    <div><dt>Fecha de validacion</dt><dd>{selectedItem.due_date ? formatDate(selectedItem.due_date) : "Sin fecha"}</dd></div>
                     <div><dt>Responsable</dt><dd>{selectedItem.responsible?.full_name || selectedItem.responsible?.username || "Sin responsable"}</dd></div>
                     <div><dt>Resultado actual</dt><dd>{resultLabel(selectedItem.result)}</dd></div>
                     <div><dt>Fecha de validacion</dt><dd>{selectedItem.validated_at ? formatDateTime(selectedItem.validated_at) : "Sin validar"}</dd></div>
                   </dl>
 
                   {selectedItem.validation_comment ? (
-                    <div className="readonly-block"><strong>Comentario registrado</strong><p>{selectedItem.validation_comment}</p></div>
+                    <div className="readonly-block">
+                      <strong>Fundamento de eficacia registrado</strong>
+                      <p>{selectedItem.validation_comment}</p>
+                    </div>
                   ) : null}
 
                   {selectedItem.blockers.length ? (
@@ -287,12 +294,22 @@ export function TreatmentValidationPage() {
                           </select>
                         </label>
                         <label className="field field-span-2">
-                          <span>Observacion</span>
-                          <textarea disabled={!selectedItem.can_validate || busy} onChange={(event) => setValidationComment(event.target.value)} rows={3} value={validationComment} />
+                          <span>Fundamento de eficacia</span>
+                          <textarea
+                            disabled={!selectedItem.can_validate || busy}
+                            onChange={(event) => setValidationComment(event.target.value)}
+                            required
+                            rows={3}
+                            value={validationComment}
+                          />
                         </label>
                       </div>
                       <div className="form-actions">
-                        <button className="button button-primary" disabled={busy || !validationResult || !selectedItem.can_validate} type="submit">
+                        <button
+                          className="button button-primary"
+                          disabled={busy || !validationResult || !selectedItem.can_validate || !validationComment.trim()}
+                          type="submit"
+                        >
                           {busy ? "Guardando..." : "Registrar validacion"}
                         </button>
                       </div>

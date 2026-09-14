@@ -298,7 +298,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         title: "Resolución directa",
         steps: [
           "Revisa los datos generales confirmados y pulsa Siguiente.",
-          "Registra una o más acciones con su fecha estimada de realización y de verificación de eficacia.",
+          "Registra una o más acciones con su fecha estimada de realización y su fecha de validación.",
           "Finaliza cada acción indicando su fecha real.",
           "Adjunta evidencia cuando corresponda.",
           "Registra la verificación usando como referencia la acción con la fecha de eficacia más lejana.",
@@ -333,7 +333,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         title: "Quién puede gestionarlo",
         paragraphs: [
-          "El Mando medio activo designado como responsable único gestiona el tratamiento. Administrador y Desarrollador pueden gestionarlo de forma global. Los demás usuarios relacionados lo consultan o actúan solo en las tareas que les fueron asignadas.",
+          "El Mando medio activo designado como responsable único gestiona el tratamiento. Administrador y Desarrollador pueden gestionarlo de forma global. Los demás usuarios relacionados lo consultan o actúan solo en las acciones que les fueron asignadas.",
         ],
       },
       {
@@ -373,7 +373,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Realizar acciones asignadas",
     summary: "Consulta tus acciones, actualiza su avance y registra la evidencia de ejecución.",
     audience: "all",
-    keywords: ["acciones", "tareas", "asignada", "completar", "evidencia", "fecha"],
+    keywords: ["acciones", "asignada", "completar", "evidencia", "fecha"],
     route: "/actions/mine",
     routeLabel: "Ir a Acciones",
     quick: true,
@@ -389,8 +389,9 @@ export const HELP_TOPICS: HelpTopic[] = [
         steps: [
           "Abre la acción asignada.",
           "Revisa descripción, causa relacionada y fecha prevista.",
-          "Cambia el estado según el avance.",
-          "Registra el comentario solicitado para dejar trazabilidad.",
+          "Desde Pendiente avanza a En curso o directamente a Completada; desde En curso solo avanza a Completada.",
+          "Cancela únicamente antes del primer cambio de estado. No se permiten retrocesos.",
+          "Registra una nota de evidencia propia para cada cambio de estado.",
           "Carga evidencia cuando corresponda y confirma.",
         ],
       },

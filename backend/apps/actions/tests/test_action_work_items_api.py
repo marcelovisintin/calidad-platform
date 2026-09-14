@@ -244,6 +244,132 @@ class ActionWorkItemsApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("source", response.data)
 
+    def test_treatment_action_includes_status_change_evidence_notes(self):
+        self.client.force_authenticate(user=self.manager)
+        update_response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment.pk}/tasks/{self.manager_task.pk}/",
+            {
+                "status": TreatmentTaskStatus.IN_PROGRESS,
+                "evidence_note": "Material preparado para ejecutar la accion.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        second_update_response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment.pk}/tasks/{self.manager_task.pk}/",
+            {
+                "status": TreatmentTaskStatus.COMPLETED,
+                "evidence_note": "Accion terminada con el material recibido.",
+            },
+            format="json",
+        )
+        self.assertEqual(second_update_response.status_code, status.HTTP_200_OK)
+
+        response = self.client.get(f"{self.endpoint}?source=treatment")
+        item = next(
+            item
+            for item in response.data["results"]
+            if item["id"] == str(self.manager_task.pk)
+        )
+        self.assertEqual(len(item["status_evidences"]), 2)
+        self.assertEqual(
+            item["status_evidences"][0]["note"],
+            "Accion terminada con el material recibido.",
+        )
+        self.assertEqual(
+            item["status_evidences"][0]["from_status"],
+            TreatmentTaskStatus.IN_PROGRESS,
+        )
+        self.assertEqual(
+            item["status_evidences"][0]["to_status"],
+            TreatmentTaskStatus.COMPLETED,
+        )
+        self.assertEqual(
+            item["status_evidences"][0]["changed_by"]["id"],
+            str(self.manager.pk),
+        )
+        self.assertEqual(
+            item["status_evidences"][1]["note"],
+            "Material preparado para ejecutar la accion.",
+        )
+        self.assertFalse(item["can_cancel"])
+
+    def test_treatment_action_can_complete_directly_but_cannot_go_back(self):
+        self.client.force_authenticate(user=self.manager)
+        completed_response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment.pk}/tasks/{self.manager_task.pk}/",
+            {
+                "status": TreatmentTaskStatus.COMPLETED,
+                "evidence_note": "Accion resuelta directamente.",
+            },
+            format="json",
+        )
+        self.assertEqual(completed_response.status_code, status.HTTP_200_OK)
+
+        backwards_response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment.pk}/tasks/{self.manager_task.pk}/",
+            {
+                "status": TreatmentTaskStatus.IN_PROGRESS,
+                "evidence_note": "Intento de retroceso.",
+            },
+            format="json",
+        )
+        self.assertEqual(backwards_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("status", backwards_response.data)
+
+    def test_treatment_action_can_only_cancel_before_first_change(self):
+        self.client.force_authenticate(user=self.manager)
+        cancel_response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment.pk}/tasks/{self.manager_task.pk}/",
+            {
+                "status": TreatmentTaskStatus.CANCELLED,
+                "evidence_note": "Accion cancelada antes de comenzar.",
+            },
+            format="json",
+        )
+        self.assertEqual(cancel_response.status_code, status.HTTP_200_OK)
+
+        started_task = TreatmentTask.objects.create(
+            treatment=self.treatment,
+            code="TRT-WORK-STARTED",
+            title="Accion que ya comenzo",
+            responsible=self.manager,
+            execution_date=timezone.localdate() + timedelta(days=1),
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+        start_response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment.pk}/tasks/{started_task.pk}/",
+            {
+                "status": TreatmentTaskStatus.IN_PROGRESS,
+                "evidence_note": "Se inicia la accion.",
+            },
+            format="json",
+        )
+        self.assertEqual(start_response.status_code, status.HTTP_200_OK)
+        backwards_response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment.pk}/tasks/{started_task.pk}/",
+            {
+                "status": TreatmentTaskStatus.PENDING,
+                "evidence_note": "Intento de volver a pendiente.",
+            },
+            format="json",
+        )
+        self.assertEqual(backwards_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("status", backwards_response.data)
+
+        second_cancel_response = self.client.patch(
+            f"/api/v1/actions/treatments/{self.treatment.pk}/tasks/{started_task.pk}/",
+            {
+                "status": TreatmentTaskStatus.CANCELLED,
+                "evidence_note": "Intento de cancelar luego de comenzar.",
+            },
+            format="json",
+        )
+        self.assertEqual(second_cancel_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("status", second_cancel_response.data)
+
     def test_api_root_advertises_unified_work_items(self):
         self.client.force_authenticate(user=self.admin)
 

@@ -615,6 +615,15 @@ export interface ActionWorkItemTreatment {
   status: string;
 }
 
+export interface ActionStatusEvidence {
+  id: UUID;
+  from_status: string;
+  to_status: string;
+  note: string;
+  changed_by?: UserSummary | null;
+  changed_at: string;
+}
+
 export interface ActionWorkItem {
   id: UUID;
   source: ActionWorkItemSource;
@@ -632,6 +641,8 @@ export interface ActionWorkItem {
   anomalies: ActionWorkItemAnomaly[];
   root_causes: TreatmentTaskHistoryRootCause[];
   evidences: TreatmentTaskEvidence[];
+  status_evidences: ActionStatusEvidence[];
+  can_cancel: boolean;
   can_manage: boolean;
   can_update_status: boolean;
   can_add_evidence: boolean;
@@ -712,7 +723,7 @@ export interface TreatmentAuditEvent {
 
 export interface TreatmentValidationPayload {
   result: "effective" | "not_effective";
-  comment?: string;
+  comment: string;
 }
 
 export interface TreatmentDetail extends TreatmentSummary {
@@ -988,11 +999,42 @@ export interface AnomalyLearning {
   id: UUID;
   recorded_by?: UserSummary | null;
   recorded_at: string;
-  standardization_actions?: string;
-  lessons_learned?: string;
-  document_changes?: string;
-  shared_with?: string;
-  shared_at?: string | null;
+  has_learning: boolean | null;
+  learned_text: string;
+  no_learning_reason: string;
+  procedure_modified: boolean | null;
+  procedure_modification_notes: string;
+  evidences: AnomalyLearningEvidence[];
+}
+
+export interface AnomalyLearningEvidence {
+  id: UUID;
+  original_name: string;
+  content_type: string;
+  file_url: string;
+  uploaded_by?: UserSummary | null;
+  created_at: string;
+}
+
+export interface ObservationLearnedLessonItem {
+  id: UUID;
+  code: string;
+  title: string;
+  area?: CatalogSummary | null;
+  closed_at?: string | null;
+  responsible?: UserSummary | null;
+  effectiveness_verified_at?: string | null;
+  learning?: AnomalyLearning | null;
+}
+
+export interface AnomalyLearningPayload {
+  has_learning: boolean;
+  learned_text?: string;
+  no_learning_reason?: string;
+  procedure_modified: boolean;
+  procedure_modification_notes?: string;
+  evidences?: File[];
+  confirm_modification?: boolean;
 }
 
 export interface AnomalyImmediateAction {
@@ -1128,7 +1170,7 @@ export interface ObservationActionCreatePayload {
 export interface ObservationVerificationPayload {
   effectiveness_verified_at: string;
   effectiveness_is_effective: boolean;
-  effectiveness_comment?: string;
+  effectiveness_comment: string;
   closure_comment?: string;
 }
 

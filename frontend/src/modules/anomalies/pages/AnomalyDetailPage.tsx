@@ -233,7 +233,7 @@ export function AnomalyDetailPage() {
                     <div className="section-head compact">
                       <div>
                         <strong>Acciones asignadas</strong>
-                        <p>Tareas de tratamientos vinculados a esta anomalia.</p>
+                        <p>Acciones de tratamientos vinculados a esta anomalía.</p>
                       </div>
                     </div>
                     <div className="stack-list compact">
@@ -283,7 +283,7 @@ export function AnomalyDetailPage() {
                 <div><dt>Tratamiento creado</dt><dd>{treatmentCreatedLabel}</dd></div>
                 <div><dt>Analisis de causa</dt><dd>{causeAnalysisLabel}</dd></div>
                 <div><dt>Eficacia</dt><dd>{data.effectiveness_summary || "Sin verificacion de eficacia"}</dd></div>
-                <div><dt>Aprendizaje</dt><dd>{data.learning?.lessons_learned || "Sin aprendizaje registrado"}</dd></div>
+                <div><dt>Aprendizaje</dt><dd>{data.learning?.has_learning === false ? data.learning.no_learning_reason : data.learning?.learned_text || "Sin aprendizaje registrado"}</dd></div>
                 <div><dt>Participantes</dt><dd>{data.participants.length ? data.participants.map((item) => item.user?.full_name || item.role).join(", ") : "Sin participantes"}</dd></div>
               </dl>
             </article>

@@ -28,6 +28,7 @@ from apps.actions.models import (
     TreatmentTaskEvidence,
     TreatmentTaskStatus,
 )
+from apps.audit.models import AuditEvent
 from apps.audit.services import record_audit_event
 from apps.anomalies.models import (
     AnalysisMethod,
@@ -231,7 +232,58 @@ def _next_root_cause_sequence(treatment: Treatment) -> int:
 
 def _next_task_code(treatment: Treatment) -> str:
     seq = treatment.tasks.count() + 1
-    return f"{treatment.code}-T{seq:02d}"
+    while treatment.tasks.filter(code=f"{treatment.code}-A{seq:02d}").exists():
+        seq += 1
+    return f"{treatment.code}-A{seq:02d}"
+
+
+def _treatment_task_has_status_changes(treatment_task: TreatmentTask) -> bool:
+    events = AuditEvent.objects.filter(
+        entity_type="actions.treatment",
+        entity_id=treatment_task.treatment_id,
+        action="treatment.task_updated",
+        after_data__task_id=str(treatment_task.pk),
+    ).only("after_data")
+    return any(
+        (event.after_data or {}).get("previous_status")
+        != (event.after_data or {}).get("status")
+        for event in events
+    )
+
+
+def _validate_treatment_task_status_transition(
+    treatment_task: TreatmentTask,
+    next_status: str,
+) -> None:
+    current_status = treatment_task.status
+    if next_status == current_status:
+        return
+    if next_status == TreatmentTaskStatus.CANCELLED:
+        if (
+            current_status == TreatmentTaskStatus.PENDING
+            and not _treatment_task_has_status_changes(treatment_task)
+        ):
+            return
+        raise ValidationError(
+            {"status": "La accion solo puede cancelarse antes de su primer cambio de estado."}
+        )
+
+    allowed_next_statuses = {
+        TreatmentTaskStatus.PENDING: {
+            TreatmentTaskStatus.IN_PROGRESS,
+            TreatmentTaskStatus.COMPLETED,
+        },
+        TreatmentTaskStatus.IN_PROGRESS: {TreatmentTaskStatus.COMPLETED},
+    }.get(current_status, set())
+    if next_status not in allowed_next_statuses:
+        raise ValidationError(
+            {
+                "status": (
+                    "El estado solo puede avanzar de Pendiente a En curso o Completada, "
+                    "y de En curso a Completada. No se permiten retrocesos."
+                )
+            }
+        )
 
 
 
@@ -267,7 +319,7 @@ def _validate_effectiveness_assignment(*, treatment: Treatment, data: dict) -> N
     responsible = data.get("effectiveness_responsible", treatment.effectiveness_responsible)
 
     if not evaluation_date:
-        raise ValidationError({"effectiveness_evaluation_date": "Debe indicar la fecha de evaluacion de eficacia."})
+        raise ValidationError({"effectiveness_evaluation_date": "Debe indicar la fecha de validacion."})
     if not responsible:
         raise ValidationError({"effectiveness_responsible": "Debe seleccionar el responsable de evaluacion de eficacia."})
     is_participant = treatment.participants.filter(user_id=responsible.pk).exists()
@@ -391,8 +443,15 @@ def get_treatment_validation_state(treatment: Treatment) -> dict:
     elif any(not (cause.description or "").strip() for cause in root_causes):
         blockers.append("Todas las causas raiz deben tener detalle.")
 
-    if not treatment.effectiveness_evaluation_date or not treatment.effectiveness_responsible_id:
-        blockers.append("Debe tener cargada la evaluacion de eficacia con fecha y responsable.")
+    if not treatment.effectiveness_evaluation_date:
+        blockers.append("Debe tener cargada la fecha de validacion.")
+    elif timezone.localdate() < treatment.effectiveness_evaluation_date:
+        blockers.append(
+            "La validacion no puede realizarse antes de la fecha de validacion "
+            f"{treatment.effectiveness_evaluation_date.isoformat()}."
+        )
+    if not treatment.effectiveness_responsible_id:
+        blockers.append("Debe tener asignado un responsable de evaluacion de eficacia.")
 
     incomplete_tasks = [
         task.code or task.title
@@ -400,7 +459,7 @@ def get_treatment_validation_state(treatment: Treatment) -> dict:
         if task.status != "completed"
     ]
     if incomplete_tasks:
-        blockers.append("Todas las tareas surgidas del tratamiento deben estar completadas.")
+        blockers.append("Todas las acciones surgidas del tratamiento deben estar completadas.")
 
     return {"available": not blockers, "blockers": blockers}
 
@@ -1212,6 +1271,9 @@ def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str,
         raise ValidationError({"effectiveness_responsible": "El tratamiento no tiene responsable de evaluacion de eficacia."})
     if not can_validate_treatment_effectiveness(user, locked):
         raise PermissionDenied("Solo el responsable designado puede validar la eficacia del tratamiento.")
+    validation_comment = (comment or "").strip()
+    if not validation_comment:
+        raise ValidationError({"comment": "Debe completar el fundamento de eficacia."})
 
     validation_state = get_treatment_validation_state(locked)
     if not validation_state["available"]:
@@ -1229,7 +1291,7 @@ def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str,
     locked.effectiveness_validation_result = result
     locked.effectiveness_validated_at = now
     locked.effectiveness_validated_by = user
-    locked.effectiveness_validation_comment = (comment or "").strip()
+    locked.effectiveness_validation_comment = validation_comment
     locked.updated_by = user
     _bump_version(locked)
     locked.full_clean()
@@ -1661,10 +1723,13 @@ def confirm_treatment_convocation(
         )
     if not scheduled_for:
         raise ValidationError({"scheduled_for": "Debe indicar la fecha y hora programada."})
+    normalized_treatment_location = (treatment_location or "").strip()
+    if not normalized_treatment_location:
+        raise ValidationError({"treatment_location": "Debe indicar el lugar de tratamiento."})
 
     before = snapshot_treatment(locked)
     locked.scheduled_for = scheduled_for
-    locked.treatment_location = (treatment_location or "").strip()
+    locked.treatment_location = normalized_treatment_location
     locked.convocation_confirmed_at = timezone.now()
     locked.convocation_confirmed_by = user
     if locked.status == TreatmentStatus.PENDING:
@@ -1834,15 +1899,15 @@ def add_root_cause(*, treatment: Treatment, description: str, user, request_id: 
 
 @transaction.atomic
 def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: str = "") -> TreatmentTask:
-    _require_treatment_management(user, "No tiene permisos para registrar tareas de tratamiento.", treatment)
+    _require_treatment_management(user, "No tiene permisos para registrar acciones de tratamiento.", treatment)
     ensure_treatment_is_editable(treatment)
     title = (data.get("title") or "").strip()
     if not title:
-        raise ValidationError({"title": "El titulo de la tarea es obligatorio."})
+        raise ValidationError({"title": "La accion es obligatoria."})
 
     description = (data.get("description") or "").strip()
     if not description:
-        raise ValidationError({"description": "La descripcion de la tarea es obligatoria."})
+        raise ValidationError({"description": "La descripcion de la accion es obligatoria."})
 
     root_causes = list(data.get("root_cause_ids") or [])
     if data.get("root_cause") and data["root_cause"] not in root_causes:
@@ -1852,14 +1917,16 @@ def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: st
 
     responsible = data.get("responsible")
     if not responsible:
-        raise ValidationError({"responsible": "Debe seleccionar un responsable para la tarea."})
+        raise ValidationError({"responsible": "Debe seleccionar un responsable para la accion."})
     _validate_treatment_task_responsible(treatment=treatment, responsible=responsible)
 
     execution_date = data.get("execution_date")
     if not execution_date:
-        raise ValidationError({"execution_date": "Debe indicar la fecha de ejecucion."})
+        raise ValidationError({"execution_date": "Debe indicar la fecha limite de ejecucion."})
 
     initial_status = data.get("status") or TreatmentTaskStatus.PENDING
+    if initial_status != TreatmentTaskStatus.PENDING:
+        raise ValidationError({"status": "Toda accion nueva debe comenzar en estado Pendiente."})
     task = TreatmentTask(
         treatment=treatment,
         root_cause=root_causes[0],
@@ -1887,7 +1954,7 @@ def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: st
     _register_history_for_treatment(
         treatment=treatment,
         user=user,
-        comment=f"Tratamiento {treatment.code}: se crea la tarea {task.code or task.title}.",
+        comment=f"Tratamiento {treatment.code}: se crea la accion {task.code or task.title}.",
     )
     notify_treatment_task_assigned(
         treatment_task=task,
@@ -1906,13 +1973,13 @@ def add_treatment_task(*, treatment: Treatment, data: dict, user, request_id: st
 @transaction.atomic
 def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, request_id: str = "") -> TreatmentTask:
     if not can_update_treatment_task(user, treatment_task):
-        raise PermissionDenied("No tiene permisos para actualizar esta tarea de tratamiento.")
+        raise PermissionDenied("No tiene permisos para actualizar esta accion de tratamiento.")
     task_manager = can_manage_treatment(user, treatment_task.treatment)
     if not task_manager:
         restricted_fields = set(data) - {"status", "evidence_note"}
         if restricted_fields:
             raise PermissionDenied(
-                "El responsable asignado solo puede actualizar el estado de su tarea y registrar la nota de evidencia."
+                "El responsable asignado solo puede actualizar el estado de su accion y registrar la nota de evidencia."
             )
     ensure_treatment_is_editable(treatment_task.treatment)
     locked = TreatmentTask.objects.select_for_update().get(pk=treatment_task.pk)
@@ -1923,10 +1990,13 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
     evidence_note = (data.pop("evidence_note", "") or "").strip()
 
     if status_changed and locked.responsible_id != getattr(user, "id", None):
-        raise PermissionDenied("Solo el responsable asignado puede actualizar el estado de esta tarea.")
+        raise PermissionDenied("Solo el responsable asignado puede actualizar el estado de esta accion.")
+
+    if status_changed:
+        _validate_treatment_task_status_transition(locked, next_status)
 
     if status_changed and not evidence_note:
-        raise ValidationError({"evidence_note": "Debe cargar una nota de evidencia para cambiar el estado de la tarea."})
+        raise ValidationError({"evidence_note": "Debe cargar una nota de evidencia para cambiar el estado de la accion."})
 
     root_causes = None
     if "root_cause_ids" in data or "root_cause" in data:
@@ -1974,7 +2044,7 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
             treatment=locked.treatment,
             user=user,
             comment=(
-                f"Tratamiento {locked.treatment.code}: se actualiza la tarea "
+                f"Tratamiento {locked.treatment.code}: se actualiza la accion "
                 f"{locked.code or locked.title} de estado {previous_status} a estado {locked.status}."
             ),
             evidence_note=evidence_note,
@@ -1983,7 +2053,7 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
         _register_history_for_treatment(
             treatment=locked.treatment,
             user=user,
-            comment=f"Tratamiento {locked.treatment.code}: se actualiza la tarea {locked.code or locked.title}.",
+            comment=f"Tratamiento {locked.treatment.code}: se actualiza la accion {locked.code or locked.title}.",
         )
     if previous_responsible_id != locked.responsible_id:
         dismiss_treatment_task_assignment_tasks(
@@ -2049,7 +2119,7 @@ def add_treatment_evidence(*, treatment: Treatment, user, data: dict, request_id
 def add_treatment_task_evidence(*, treatment_task: TreatmentTask, user, data: dict, request_id: str = "") -> TreatmentTaskEvidence:
     treatment = treatment_task.treatment
     if not can_execute_assignment(user, treatment_task.responsible_id):
-        raise PermissionDenied("Solo el responsable asignado puede agregar evidencias a esta tarea.")
+        raise PermissionDenied("Solo el responsable asignado puede agregar evidencias a esta accion.")
     ensure_treatment_is_editable(treatment)
 
     file_obj = data.get("file")
@@ -2073,7 +2143,7 @@ def add_treatment_task_evidence(*, treatment_task: TreatmentTask, user, data: di
     _ensure_treatment_in_progress(
         treatment=treatment,
         user=user,
-        reason=f"Tratamiento {treatment.code}: pasa a en curso por carga de evidencias en tareas.",
+        reason=f"Tratamiento {treatment.code}: pasa a en curso por carga de evidencias en acciones.",
     )
 
     record_audit_event(
@@ -2091,6 +2161,6 @@ def add_treatment_task_evidence(*, treatment_task: TreatmentTask, user, data: di
     _register_history_for_treatment(
         treatment=treatment,
         user=user,
-        comment=f"Tratamiento {treatment.code}: se agrega evidencia en tarea {treatment_task.code or treatment_task.title}.",
+        comment=f"Tratamiento {treatment.code}: se agrega evidencia en accion {treatment_task.code or treatment_task.title}.",
     )
     return evidence

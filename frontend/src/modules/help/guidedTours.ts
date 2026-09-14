@@ -92,7 +92,7 @@ const TOURS: Record<string, GuidedTourDefinition> = {
       { selector: ".action-source-selector", title: "Origen de las acciones", content: "Usa los checks para mostrar u ocultar acciones de Tratamientos y Observaciones." },
       { selector: ".tabbed-filters", title: "Filtros", content: "Busca por tratamiento, anomalía, estado, fecha o responsable según los controles disponibles." },
       { selector: ".action-card", title: "Tarjeta de acción", content: "Selecciona una tarjeta para revisar su definición, responsable, fechas y estado." },
-      { selector: ".action-detail-fixed", title: "Detalle por origen", content: "El detalle se abre en la columna de Tratamientos u Observaciones correspondiente. Desde allí se registra el avance permitido para esa acción." },
+      { selector: ".action-detail-fixed", title: "Cambiar el estado", content: "Las acciones comienzan Pendientes. Desde Pendiente pueden pasar a En curso o directamente a Completada. Desde En curso solo avanzan a Completada y nunca pueden retroceder. Cancelar solo está disponible antes del primer cambio de estado. Cada cambio exige su propia nota de evidencia, que queda listada en el detalle." },
     ],
   },
   validation: {

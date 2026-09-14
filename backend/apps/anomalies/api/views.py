@@ -41,6 +41,7 @@ from apps.anomalies.api.serializers import (
     AnomalyObservationActionWriteSerializer,
     ObservationActionCompleteSerializer,
     ObservationActionCreateSerializer,
+    ObservationLearnedLessonSerializer,
     ObservationActionSerializer,
     AnomalyObservationLoadWriteSerializer,
     AnomalyObservationVerificationWriteSerializer,
@@ -58,6 +59,7 @@ from apps.anomalies.models import (
     Anomaly,
     AnomalyAttachment,
     AnomalyCommentType,
+    AnomalyLearningEvidence,
     AnomalyStage,
     AnomalyStatus,
     ObservationResolutionPath,
@@ -198,6 +200,27 @@ class AnomalyAttachmentDownloadAPIView(APIView):
         )
         if attachment.content_type:
             response["Content-Type"] = attachment.content_type
+        return response
+
+
+class AnomalyLearnedLessonEvidenceDownloadAPIView(APIView):
+    def get(self, request, evidence_id):
+        visible_anomalies = filter_anomaly_queryset_for_user(build_anomaly_queryset(detailed=False), request.user)
+        evidence = get_object_or_404(
+            AnomalyLearningEvidence.objects.select_related("learned_lesson", "learned_lesson__anomaly"),
+            pk=evidence_id,
+            learned_lesson__anomaly_id__in=visible_anomalies.values("id"),
+        )
+        if not evidence.file:
+            raise Http404("Evidencia sin archivo asociado.")
+
+        response = FileResponse(
+            evidence.file.open("rb"),
+            as_attachment=True,
+            filename=evidence.original_name or evidence.file.name.rsplit("/", 1)[-1],
+        )
+        if evidence.content_type:
+            response["Content-Type"] = evidence.content_type
         return response
 
 
@@ -660,6 +683,39 @@ class AnomalyViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
         return Response(serializer.data)
 
+    @action(detail=False, methods=["get"], url_path="observation-learned-lessons")
+    def observation_learned_lessons(self, request):
+        queryset = (
+            filter_anomaly_queryset_for_user(build_anomaly_queryset(detailed=True), request.user)
+            .filter(
+                observation_resolution_path=ObservationResolutionPath.OBSERVATION,
+                current_status=AnomalyStatus.CLOSED,
+                immediate_action__effectiveness_is_effective=True,
+            )
+            .distinct()
+            .order_by("-immediate_action__effectiveness_verified_at", "-closed_at")
+        )
+
+        if search := (request.query_params.get("search") or "").strip():
+            queryset = queryset.filter(
+                Q(code__icontains=search)
+                | Q(title__icontains=search)
+                | Q(area__name__icontains=search)
+                | Q(immediate_action__responsible__username__icontains=search)
+                | Q(immediate_action__responsible__first_name__icontains=search)
+                | Q(immediate_action__responsible__last_name__icontains=search)
+            )
+
+        page = self.paginate_queryset(queryset)
+        serializer = ObservationLearnedLessonSerializer(
+            page if page is not None else queryset,
+            many=True,
+            context=self.get_serializer_context(),
+        )
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
     @action(detail=True, methods=["post"], url_path="immediate-action")
     def save_immediate_action(self, request, pk=None):
         anomaly = self.get_object()
@@ -870,7 +926,12 @@ class AnomalyViewSet(viewsets.ModelViewSet):
         output = AnomalyEffectivenessCheckSerializer(check, context=self.get_serializer_context())
         return Response(output.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["post"], url_path="learning")
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="learning",
+        parser_classes=[MultiPartParser, FormParser],
+    )
     def save_learning(self, request, pk=None):
         anomaly = self.get_object()
         serializer = self.get_serializer(data=request.data)
@@ -879,6 +940,7 @@ class AnomalyViewSet(viewsets.ModelViewSet):
             anomaly=anomaly,
             user=request.user,
             data=dict(serializer.validated_data),
+            files=request.FILES.getlist("evidences"),
             request_id=self._request_id(),
         )
         output = AnomalyLearningSerializer(learning, context=self.get_serializer_context())

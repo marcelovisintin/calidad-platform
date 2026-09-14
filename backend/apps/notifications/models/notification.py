@@ -33,7 +33,7 @@ class NotificationCategory(models.TextChoices):
 
 
 class NotificationTaskType(models.TextChoices):
-    NONE = "", "Sin tarea"
+    NONE = "", "Sin accion"
     ACTION_ASSIGNMENT = "action_assignment", "Asignacion de accion"
     ANALYSIS_PARTICIPATION = "analysis_participation", "Participacion en analisis"
     FINDING_MANAGEMENT = "finding_management", "Gestion de hallazgo"
@@ -42,7 +42,7 @@ class NotificationTaskType(models.TextChoices):
 
 
 class RecipientTaskStatus(models.TextChoices):
-    NONE = "none", "Sin tarea"
+    NONE = "none", "Sin accion"
     PENDING = "pending", "Pendiente"
     IN_PROGRESS = "in_progress", "En curso"
     COMPLETED = "completed", "Completada"
@@ -87,7 +87,7 @@ class Notification(AuditBaseModel):
 
     def clean(self):
         if self.is_task and not self.task_type:
-            raise ValidationError({"task_type": "Debe informar task_type cuando la notificacion representa una tarea."})
+            raise ValidationError({"task_type": "Debe informar task_type cuando la notificacion representa una accion."})
         if not self.is_task and self.task_type:
             raise ValidationError({"task_type": "Solo corresponde informar task_type cuando is_task es verdadero."})
 
@@ -142,8 +142,8 @@ class NotificationRecipient(AuditBaseModel):
 
     def clean(self):
         if self.notification.is_task and self.task_status == RecipientTaskStatus.NONE:
-            raise ValidationError({"task_status": "Debe informar el estado de tarea para notificaciones con tarea."})
+            raise ValidationError({"task_status": "Debe informar el estado de accion para notificaciones con accion."})
         if not self.notification.is_task and self.task_status != RecipientTaskStatus.NONE:
-            raise ValidationError({"task_status": "Solo corresponde task_status cuando la notificacion es una tarea."})
+            raise ValidationError({"task_status": "Solo corresponde task_status cuando la notificacion es una accion."})
         if self.resolved_at and self.task_status not in {RecipientTaskStatus.COMPLETED, RecipientTaskStatus.DISMISSED}:
-            raise ValidationError({"resolved_at": "Solo puede informar resolved_at para tareas completadas o descartadas."})
+            raise ValidationError({"resolved_at": "Solo puede informar resolved_at para acciones completadas o descartadas."})

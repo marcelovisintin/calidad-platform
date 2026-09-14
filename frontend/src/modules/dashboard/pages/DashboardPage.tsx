@@ -551,7 +551,7 @@ export function DashboardPage({ defaultView = "none" }: { defaultView?: Dashboar
                     <span className="status-badge info">Acceso restringido</span>
                   </div>
                   <p className="page-description admin-panel-copy">
-                    Estos accesos abren formularios internos de gestion y, cuando corresponde, el admin de Django para tareas avanzadas.
+                    Estos accesos abren formularios internos de gestión y, cuando corresponde, el admin de Django para funciones avanzadas.
                   </p>
                   <div className="admin-grid">
                     {adminSections.map((section) => {

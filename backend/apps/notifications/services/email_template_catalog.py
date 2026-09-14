@@ -42,7 +42,7 @@ ANOMALY_CODE = _field("anomaly_code", "Número de anomalía", "20269024")
 ANOMALY_TITLE = _field("anomaly_title", "Título de la anomalía", "Desvío dimensional")
 TREATMENT_CODE = _field("treatment_code", "Número de tratamiento", "TRT-2026-0001")
 ACTION_CODE = _field("action_code", "Código de acción", "ACT-20269024-01")
-TASK_CODE = _field("task_code", "Código de tarea", "TRT-2026-0001-T01")
+TASK_CODE = _field("task_code", "Código de acción", "TRT-2026-0001-A01")
 
 
 EMAIL_TEMPLATE_DEFINITIONS = (
@@ -245,20 +245,20 @@ EMAIL_TEMPLATE_DEFINITIONS = (
     EmailTemplateDefinition(
         code="treatment_task_assigned",
         case_number="7",
-        name="Tarea de tratamiento asignada",
-        stage="Análisis de causa / Plan de tareas / Ejecución",
-        recipient="Responsable de la tarea",
-        description="Comunica una nueva tarea del tratamiento.",
+        name="Acción de tratamiento asignada",
+        stage="Análisis de causa / Plan de acciones / Ejecución",
+        recipient="Responsable de la acción",
+        description="Comunica una nueva acción del tratamiento.",
         conditions="No incluye enlace en el correo.",
-        subject_template="Tarea {task_code} asignada",
+        subject_template="Acción {task_code} asignada",
         body_template=(
-            "Hola {recipient_name},\n\nSe te asignó la tarea {task_code} del tratamiento {treatment_code}.\n"
+            "Hola {recipient_name},\n\nSe te asignó la acción {task_code} del tratamiento {treatment_code}.\n"
             "Título: {task_title}\nDescripción: {task_description}\nAnomalía(s): {anomaly_codes}\n"
             "Fecha de ejecución: {execution_date}.\n\nIngresá al Sistema de Gestión de Calidad con tu propio usuario "
-            "para consultar y gestionar la tarea."
+            "para consultar y gestionar la acción."
         ),
         fields=(RECIPIENT, TASK_CODE, TREATMENT_CODE,
-                _field("task_title", "Título de la tarea", "Ajustar dispositivo"),
+                _field("task_title", "Título de la acción", "Ajustar dispositivo"),
                 _field("task_description", "Descripción", "Corregir el tope lateral"),
                 _field("anomaly_codes", "Anomalías", "20269024, 20269025"),
                 _field("execution_date", "Fecha de ejecución", "20/09/2026")),
@@ -266,20 +266,20 @@ EMAIL_TEMPLATE_DEFINITIONS = (
     EmailTemplateDefinition(
         code="treatment_task_reassigned",
         case_number="8",
-        name="Tarea de tratamiento reasignada",
+        name="Acción de tratamiento reasignada",
         stage="Ejecución y seguimiento",
-        recipient="Nuevo responsable de la tarea",
-        description="Comunica la reasignación de una tarea del tratamiento.",
+        recipient="Nuevo responsable de la acción",
+        description="Comunica la reasignación de una acción del tratamiento.",
         conditions="Descarta el pendiente anterior y no incluye enlace en el correo.",
-        subject_template="Tarea {task_code} reasignada",
+        subject_template="Acción {task_code} reasignada",
         body_template=(
-            "Hola {recipient_name},\n\nSe te asignó la tarea {task_code} del tratamiento {treatment_code}.\n"
+            "Hola {recipient_name},\n\nSe te asignó la acción {task_code} del tratamiento {treatment_code}.\n"
             "Título: {task_title}\nDescripción: {task_description}\nAnomalía(s): {anomaly_codes}\n"
             "Fecha de ejecución: {execution_date}.\n\nIngresá al Sistema de Gestión de Calidad con tu propio usuario "
-            "para consultar y gestionar la tarea."
+            "para consultar y gestionar la acción."
         ),
         fields=(RECIPIENT, TASK_CODE, TREATMENT_CODE,
-                _field("task_title", "Título de la tarea", "Ajustar dispositivo"),
+                _field("task_title", "Título de la acción", "Ajustar dispositivo"),
                 _field("task_description", "Descripción", "Corregir el tope lateral"),
                 _field("anomaly_codes", "Anomalías", "20269024, 20269025"),
                 _field("execution_date", "Fecha de ejecución", "20/09/2026")),

@@ -425,7 +425,6 @@ class AnomalyCreateApiTests(APITestCase):
                 "severity": str(self.severity_observation.pk),
                 "classification_responsible": str(self.user.pk),
                 "observation_due_date": due_date.isoformat(),
-                "observation_comment": "Seguimiento normal desde clasificacion.",
             },
             format="json",
         )
@@ -433,8 +432,19 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["observation_resolution_path"], ObservationResolutionPath.OBSERVATION)
         self.assertEqual(response.data["immediate_action"]["action_date"], due_date.isoformat())
-        self.assertEqual(response.data["immediate_action"]["observation"], "Seguimiento normal desde clasificacion.")
+        self.assertEqual(response.data["immediate_action"]["observation"], "")
         self.assertFalse(Treatment.objects.filter(anomaly_links__anomaly_id=create_response.data["id"]).exists())
+
+        missing_cause_response = self.client.post(
+            f"/api/v1/anomalies/{create_response.data['id']}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": due_date.isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(missing_cause_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("observation", missing_cause_response.data)
 
     def test_assigned_manager_decides_observation_trt_from_observation_flow(self):
         manager = User.objects.create_user(
@@ -705,7 +715,7 @@ class AnomalyCreateApiTests(APITestCase):
             {
                 "action_completed_at": timezone.localdate().isoformat(),
                 "actions_taken": "Se ajusto el proceso y se comunico al responsable",
-                "effectiveness_due_at": (timezone.localdate() + timedelta(days=7)).isoformat(),
+                "effectiveness_due_at": timezone.localdate().isoformat(),
             },
             format="json",
         )
@@ -764,6 +774,90 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertTrue(
             any("Anomalia cerrada" in item["comment"] for item in effective_response.data["status_history"])
         )
+
+    def test_effective_observation_is_available_for_learned_lessons(self):
+        anomaly = self._immediate_anomaly("OBS-LESSON-001")
+        verified_at = timezone.now()
+        anomaly.owner = self.user
+        anomaly.observation_resolution_path = ObservationResolutionPath.OBSERVATION
+        anomaly.current_stage = AnomalyStage.CLOSURE
+        anomaly.current_status = AnomalyStatus.CLOSED
+        anomaly.closed_at = verified_at
+        anomaly.save(
+            update_fields=[
+                "owner",
+                "observation_resolution_path",
+                "current_stage",
+                "current_status",
+                "closed_at",
+                "updated_at",
+            ]
+        )
+        AnomalyImmediateAction.objects.create(
+            anomaly=anomaly,
+            responsible=self.user,
+            action_date=timezone.localdate(),
+            observation="Observacion eficaz con aprendizaje pendiente.",
+            effectiveness_verified_at=verified_at,
+            effectiveness_is_effective=True,
+            created_by=self.user,
+            updated_by=self.user,
+        )
+
+        list_response = self.client.get("/api/v1/anomalies/observation-learned-lessons/")
+
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        result = next(item for item in list_response.data["results"] if item["id"] == str(anomaly.pk))
+        self.assertEqual(result["code"], anomaly.code)
+        self.assertIsNone(result["learning"])
+
+        save_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/learning/",
+            {
+                "has_learning": "true",
+                "learned_text": "Se debe verificar el ajuste antes de liberar el proceso.",
+                "no_learning_reason": "",
+                "procedure_modified": "true",
+                "procedure_modification_notes": "Actualizar el procedimiento de inspeccion.",
+                "confirm_modification": "false",
+                "evidences": SimpleUploadedFile(
+                    "aprendizaje-observacion.pdf",
+                    b"%PDF-1.4 evidencia de aprendizaje",
+                    content_type="application/pdf",
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(save_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            save_response.data["learned_text"],
+            "Se debe verificar el ajuste antes de liberar el proceso.",
+        )
+        self.assertTrue(save_response.data["procedure_modified"])
+        self.assertEqual(len(save_response.data["evidences"]), 1)
+
+        unconfirmed_update = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/learning/",
+            {
+                "has_learning": "false",
+                "no_learning_reason": "No surgieron cambios adicionales.",
+                "procedure_modified": "false",
+            },
+            format="multipart",
+        )
+        self.assertEqual(unconfirmed_update.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("confirm_modification", unconfirmed_update.data)
+
+        refreshed_list = self.client.get("/api/v1/anomalies/observation-learned-lessons/")
+        refreshed_result = next(
+            item for item in refreshed_list.data["results"] if item["id"] == str(anomaly.pk)
+        )
+        self.assertEqual(
+            refreshed_result["learning"]["learned_text"],
+            "Se debe verificar el ajuste antes de liberar el proceso.",
+        )
+        self.assertEqual(len(refreshed_result["learning"]["evidences"]), 1)
 
     def test_observation_trt_creates_treatment_immediately(self):
         anomaly = self._immediate_anomaly("AI-TRT-001")
@@ -878,7 +972,7 @@ class AnomalyCreateApiTests(APITestCase):
             format="json",
         )
         created_actions = []
-        for sequence, due_days in ((1, 5), (2, 10)):
+        for sequence, due_days in ((1, -2), (2, 0)):
             response = self.client.post(
                 f"/api/v1/anomalies/{anomaly.pk}/observation/actions/",
                 {
@@ -912,7 +1006,7 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(effectiveness_audit.after_data["reference_action_sequence"], 2)
         self.assertEqual(
             effectiveness_audit.after_data["effectiveness_due_date"],
-            (timezone.localdate() + timedelta(days=10)).isoformat(),
+            timezone.localdate().isoformat(),
         )
         self.assertFalse(effectiveness_audit.after_data["all_actions_completed"])
         self.assertEqual(len(effectiveness_audit.after_data["pending_action_ids"]), 2)
@@ -961,7 +1055,7 @@ class AnomalyCreateApiTests(APITestCase):
             {
                 "detail": "Primera accion.",
                 "estimated_completion_date": timezone.localdate().isoformat(),
-                "effectiveness_due_date": (timezone.localdate() + timedelta(days=5)).isoformat(),
+                "effectiveness_due_date": timezone.localdate().isoformat(),
             },
             format="json",
         )
@@ -1025,6 +1119,85 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertIn("actions_taken", response.data)
         anomaly.refresh_from_db()
         self.assertNotEqual(anomaly.current_status, AnomalyStatus.CLOSED)
+
+    def test_observation_effectiveness_requires_effectiveness_basis(self):
+        anomaly = self._immediate_anomaly("OBS-BASIS-001")
+        self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": timezone.localdate().isoformat(),
+                "observation": "Causa asignada confirmada.",
+            },
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions-taken/",
+            {
+                "action_completed_at": timezone.localdate().isoformat(),
+                "actions_taken": "Accion terminada.",
+                "effectiveness_due_at": timezone.localdate().isoformat(),
+            },
+            format="json",
+        )
+
+        response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/effectiveness/",
+            {
+                "effectiveness_verified_at": timezone.now().isoformat(),
+                "effectiveness_is_effective": True,
+                "effectiveness_comment": "   ",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("effectiveness_comment", response.data)
+        anomaly.refresh_from_db()
+        self.assertEqual(anomaly.current_status, AnomalyStatus.PENDING_VERIFICATION)
+        self.assertFalse(anomaly.effectiveness_checks.exists())
+
+    def test_observation_effectiveness_cannot_be_verified_before_due_date(self):
+        anomaly = self._immediate_anomaly("OBS-EARLY-VERIFY-001")
+        self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": timezone.localdate().isoformat(),
+                "observation": "Causa asignada por el responsable.",
+            },
+            format="json",
+        )
+        action_response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/",
+            {
+                "detail": "Accion con verificacion futura.",
+                "estimated_completion_date": timezone.localdate().isoformat(),
+                "effectiveness_due_date": (timezone.localdate() + timedelta(days=5)).isoformat(),
+            },
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action_response.data['id']}/complete/",
+            {"completed_at": timezone.localdate().isoformat()},
+            format="json",
+        )
+
+        response = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/effectiveness/",
+            {
+                "effectiveness_verified_at": timezone.now().isoformat(),
+                "effectiveness_is_effective": True,
+                "effectiveness_comment": "Intento anticipado.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("effectiveness_verified_at", response.data)
+        anomaly.refresh_from_db()
+        self.assertEqual(anomaly.current_status, AnomalyStatus.PENDING_VERIFICATION)
+        self.assertFalse(anomaly.effectiveness_checks.exists())
 
     def test_unassigned_user_cannot_manage_observation_actions_or_effectiveness(self):
         responsible = User.objects.create_user(
@@ -1128,7 +1301,7 @@ class AnomalyCreateApiTests(APITestCase):
         self.user.email_notifications_enabled = True
         self.user.save(update_fields=["email_notifications_enabled", "updated_at"])
         anomaly = self._immediate_anomaly("AI-NOTIFY-001")
-        due_date = timezone.localdate() + timedelta(days=7)
+        due_date = timezone.localdate()
 
         load_response = self.client.post(
             f"/api/v1/anomalies/{anomaly.pk}/observation/load/",

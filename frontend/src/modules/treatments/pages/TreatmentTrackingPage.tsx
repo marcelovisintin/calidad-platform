@@ -63,10 +63,10 @@ const TREATMENT_AUDIT_ACTION_LABELS: Record<string, string> = {
   "treatment.participant_added": "Convocado agregado",
   "treatment.participant_updated": "Convocado actualizado",
   "treatment.root_cause_added": "Causa raiz registrada",
-  "treatment.task_added": "Tarea generada",
-  "treatment.task_updated": "Tarea actualizada",
+  "treatment.task_added": "Acción generada",
+  "treatment.task_updated": "Acción actualizada",
   "treatment.evidence_added": "Evidencia del tratamiento agregada",
-  "treatment.task_evidence_added": "Evidencia de tarea agregada",
+  "treatment.task_evidence_added": "Evidencia de acción agregada",
   "treatment.learned_lesson.saved": "Leccion aprendida guardada",
 };
 
@@ -174,7 +174,7 @@ export function TreatmentTrackingPage() {
     <section className="page-shell">
       <PageHeader
         title="Seguimiento de tratamientos"
-        description="Consulta y auditoria solo lectura de tratamientos, procedimientos, tareas y validaciones."
+        description="Consulta y auditoria solo lectura de tratamientos, procedimientos, acciones y validaciones."
       />
 
       <TabbedFilters
@@ -281,7 +281,7 @@ export function TreatmentTrackingPage() {
                   </div>
 
                   <div className="panel info compact-inline-panel">
-                    <p>Vista de auditoria. Esta pantalla es solo lectura y no modifica tratamientos, tareas ni historial.</p>
+                    <p>Vista de auditoria. Esta pantalla es solo lectura y no modifica tratamientos, acciones ni historial.</p>
                   </div>
 
                   <section className="form-section">
@@ -400,14 +400,14 @@ export function TreatmentTrackingPage() {
                   </section>
 
                   <section className="form-section">
-                    <div className="section-head compact"><h3>Tareas generadas</h3></div>
+                    <div className="section-head compact"><h3>Acciones generadas</h3></div>
                     <div className="stack-list compact">
                       {detail.tasks.length ? detail.tasks.map((task) => (
                         <div className="list-card compact" key={task.id}>
                           <div>
                             <strong>{task.code || task.title}</strong>
                             <p>{task.title}</p>
-                            <small>Responsable: {task.responsible?.full_name || task.responsible?.username || "-"} | Ejecucion: {formatDate(task.execution_date)}</small>
+                            <small>Responsable: {task.responsible?.full_name || task.responsible?.username || "-"} | Fecha límite de ejecución: {formatDate(task.execution_date)}</small>
                             <small>
                               Causas: {task.root_causes?.length ? task.root_causes.map((cause) => `Causa ${cause.sequence}`).join(", ") : "Sin causas"}
                             </small>
@@ -424,14 +424,14 @@ export function TreatmentTrackingPage() {
                           </div>
                           <StatusBadge compact value={task.status} overdue={task.is_overdue} />
                         </div>
-                      )) : <p className="muted-copy">Sin tareas registradas.</p>}
+                      )) : <p className="muted-copy">Sin acciones registradas.</p>}
                     </div>
                   </section>
 
                   <section className="form-section">
                     <div className="section-head compact"><h3>Evaluacion y validacion</h3><StatusBadge compact value={detail.effectiveness_validated_at ? "completed" : detail.status === "cancelled" ? "cancelled" : "pending"} overdue={detail.effectiveness_is_overdue} /></div>
                     <dl className="key-grid compact">
-                      <div><dt>Fecha evaluacion</dt><dd>{formatDate(detail.effectiveness_evaluation_date)}</dd></div>
+                      <div><dt>Fecha de validacion</dt><dd>{formatDate(detail.effectiveness_evaluation_date)}</dd></div>
                       <div><dt>Responsable evaluacion</dt><dd>{detail.effectiveness_responsible?.full_name || detail.effectiveness_responsible?.username || "-"}</dd></div>
                       <div><dt>Resultado</dt><dd>{detail.effectiveness_validation_result ? humanizeToken(detail.effectiveness_validation_result) : "-"}</dd></div>
                       <div><dt>Validado por</dt><dd>{detail.effectiveness_validated_by?.full_name || detail.effectiveness_validated_by?.username || "-"}</dd></div>

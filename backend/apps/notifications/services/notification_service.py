@@ -293,9 +293,9 @@ def resolve_notification_task(
 ) -> NotificationRecipient:
     locked = NotificationRecipient.objects.select_for_update().select_related("notification").get(pk=recipient.pk)
     if locked.user_id != user.pk and not user.is_superuser:
-        raise PermissionDenied("Solo puede gestionar sus propias tareas internas.")
+        raise PermissionDenied("Solo puede gestionar sus propias acciones internas.")
     if not locked.notification.is_task:
-        raise ValidationError({"task_status": "La notificacion seleccionada no representa una tarea."})
+        raise ValidationError({"task_status": "La notificacion seleccionada no representa una accion."})
     if locked.notification.task_type not in MANUALLY_RESOLVABLE_TASK_TYPES:
         raise ValidationError(
             {
@@ -311,7 +311,7 @@ def resolve_notification_task(
         RecipientTaskStatus.COMPLETED,
         RecipientTaskStatus.DISMISSED,
     }:
-        raise ValidationError({"task_status": "El estado de tarea solicitado no es valido."})
+        raise ValidationError({"task_status": "El estado de accion solicitado no es valido."})
 
     locked.task_status = task_status
     locked.resolved_at = timezone.now() if task_status in {RecipientTaskStatus.COMPLETED, RecipientTaskStatus.DISMISSED} else None
@@ -497,7 +497,7 @@ def sync_treatment_task_assignment_status(*, treatment_task, actor=None, request
             and recipient.delivery_status == DeliveryStatus.PENDING
         ):
             recipient.delivery_status = DeliveryStatus.SKIPPED
-            recipient.delivery_error = "La tarea finalizó antes del envío de la asignación."
+            recipient.delivery_error = "La acción finalizó antes del envío de la asignación."
         recipient.updated_by = actor
         recipient.row_version = (recipient.row_version or 0) + 1
         recipient.updated_at = now
@@ -1000,15 +1000,15 @@ def notify_treatment_task_assigned(*, treatment_task, actor=None, reassigned: bo
     anomaly_label = ", ".join(anomaly_codes) or treatment.primary_anomaly.code
     return create_internal_notification(
         recipients=[treatment_task.responsible],
-        title=f"Tarea {treatment_task.code or treatment_task.title} {verb}",
+        title=f"Acción {treatment_task.code or treatment_task.title} {verb}",
         body=(
             f"Hola {treatment_task.responsible.full_name},\n\n"
-            f"Se te asignó la tarea {treatment_task.code or treatment_task.title} del tratamiento {treatment.code}.\n"
+            f"Se te asignó la acción {treatment_task.code or treatment_task.title} del tratamiento {treatment.code}.\n"
             f"Título: {treatment_task.title}\n"
             f"Descripción: {treatment_task.description}\n"
             f"Anomalía(s): {anomaly_label}\n"
             f"Fecha de ejecución: {execution_label}.\n\n"
-            "Ingresá al Sistema de Gestión de Calidad con tu propio usuario para consultar y gestionar la tarea."
+            "Ingresá al Sistema de Gestión de Calidad con tu propio usuario para consultar y gestionar la acción."
         ),
         source_type="actions.treatmenttask",
         source_id=treatment_task.pk,

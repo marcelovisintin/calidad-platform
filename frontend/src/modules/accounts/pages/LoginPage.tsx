@@ -48,7 +48,7 @@ export function LoginPage() {
         <div className="login-copy">
           <CompanyLogo />
           <h1>Plataforma de calidad</h1>
-          <p>Gestion de anomalias, acciones y tareas.</p>
+          <p>Gestión de anomalías y acciones.</p>
         </div>
 
         <form className="form-stack" onSubmit={handleSubmit}>

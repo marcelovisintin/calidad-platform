@@ -207,8 +207,8 @@ class TreatmentTask(AuditBaseModel):
 
     class Meta:
         ordering = ("created_at",)
-        verbose_name = "Tarea de tratamiento"
-        verbose_name_plural = "Tareas de tratamiento"
+        verbose_name = "Accion de tratamiento"
+        verbose_name_plural = "Acciones de tratamiento"
         constraints = [
             models.UniqueConstraint(fields=["code"], condition=~models.Q(code=""), name="trt_task_code_uq"),
         ]
@@ -228,8 +228,8 @@ class TreatmentTaskAnomaly(AuditBaseModel):
     anomaly = models.ForeignKey("anomalies.Anomaly", on_delete=models.PROTECT, related_name="treatment_task_links")
 
     class Meta:
-        verbose_name = "Anomalia vinculada a tarea"
-        verbose_name_plural = "Anomalias vinculadas a tareas"
+        verbose_name = "Anomalia vinculada a accion"
+        verbose_name_plural = "Anomalias vinculadas a acciones"
         constraints = [
             models.UniqueConstraint(fields=["task", "anomaly"], name="trt_task_anom_uq"),
         ]
@@ -267,8 +267,8 @@ class TreatmentTaskEvidence(AuditBaseModel):
 
     class Meta:
         ordering = ("-created_at",)
-        verbose_name = "Evidencia de tarea de tratamiento"
-        verbose_name_plural = "Evidencias de tareas de tratamiento"
+        verbose_name = "Evidencia de accion de tratamiento"
+        verbose_name_plural = "Evidencias de acciones de tratamiento"
 
 
 class TreatmentLearnedLesson(AuditBaseModel):

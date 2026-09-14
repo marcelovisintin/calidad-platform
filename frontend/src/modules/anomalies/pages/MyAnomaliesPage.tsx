@@ -27,7 +27,6 @@ type PendingClassification = {
   isNonconformity: boolean;
   isObservation: boolean;
   observationDueDate: string;
-  observationComment: string;
   treatmentDeadline: string;
   treatmentComment: string;
 };
@@ -165,7 +164,6 @@ export function MyAnomaliesPage() {
       isNonconformity,
       isObservation,
       observationDueDate: "",
-      observationComment: "",
       treatmentDeadline: "",
       treatmentComment: "",
     });
@@ -260,11 +258,6 @@ export function MyAnomaliesPage() {
       setClassificationError("Debe indicar la fecha de realización de la Observación.");
       return;
     }
-    if (pendingClassification.isObservation && !pendingClassification.observationComment.trim()) {
-      setClassificationError("Debe registrar la causa asignada.");
-      return;
-    }
-
     if (
       pendingClassification.isNonconformity
       && !window.confirm(
@@ -285,9 +278,6 @@ export function MyAnomaliesPage() {
         classification_reason: pendingClassification.closesAsInvalid ? pendingClassification.reason.trim() : undefined,
         observation_due_date: pendingClassification.isObservation
           ? pendingClassification.observationDueDate
-          : undefined,
-        observation_comment: pendingClassification.isObservation
-          ? pendingClassification.observationComment.trim()
           : undefined,
         treatment_deadline: pendingClassification.isNonconformity
           ? pendingClassification.treatmentDeadline
@@ -368,6 +358,10 @@ export function MyAnomaliesPage() {
             const canUnlockClassification = item.can_unlock_classification ?? false;
             const pendingForItem = pendingClassification?.anomalyId === item.id ? pendingClassification : null;
             const associationForItem = pendingAssociation?.anomalyId === item.id ? pendingAssociation : null;
+            const displayedCriterion = criteria.find(
+              (criterion) => criterion.id === (pendingForItem?.severityId || item.severity?.id),
+            );
+            const associationDisabledForObservation = Boolean(displayedCriterion && criterionIsObservation(displayedCriterion));
             const disableClassificationSelect =
               updatingAnomalyId === item.id || criteria.length === 0 || !canModifyClassification;
 
@@ -458,19 +452,6 @@ export function MyAnomaliesPage() {
                                       value={pendingForItem.observationDueDate}
                                     />
                                   </label>
-                                  <label className="field">
-                                    <span>Causa asignada</span>
-                                    <textarea
-                                      onChange={(event) =>
-                                        setPendingClassification((current) => current && current.anomalyId === item.id
-                                          ? { ...current, observationComment: event.target.value }
-                                          : current)
-                                      }
-                                      required
-                                      rows={3}
-                                      value={pendingForItem.observationComment}
-                                    />
-                                  </label>
                                 </section>
                               ) : null}
 
@@ -520,7 +501,7 @@ export function MyAnomaliesPage() {
                       {canModifyClassification ? (
                         <button
                           className="button button-secondary associate-anomalies-button"
-                          disabled={updatingAnomalyId === item.id}
+                          disabled={updatingAnomalyId === item.id || associationDisabledForObservation}
                           onClick={() => void handleOpenAssociation(item.id, item.code, canModifyClassification)}
                           type="button"
                         >

@@ -53,9 +53,6 @@ const EVIDENCE_ACCEPT = "image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.csv
 
 const TASK_STATUS_OPTIONS = [
   { value: "pending", label: "Pendiente" },
-  { value: "in_progress", label: "En curso" },
-  { value: "completed", label: "Completada" },
-  { value: "cancelled", label: "Cancelada" },
 ] as const;
 
 const EMPTY_TASK_DRAFT: TaskDraft = {
@@ -505,6 +502,10 @@ export function TreatmentsPage() {
       setFormError("Debe indicar la fecha y hora programada.");
       return;
     }
+    if (!treatmentLocation.trim()) {
+      setFormError("Debe indicar el lugar de tratamiento.");
+      return;
+    }
     const confirmed = window.confirm(
       "¿Está seguro? ¿Convocó a los usuarios necesarios? Una vez confirmada la agenda no podrá convocar más usuarios.",
     );
@@ -572,7 +573,7 @@ export function TreatmentsPage() {
       return;
     }
     if (!effectivenessEvaluationDate) {
-      setFormError("Debes indicar la fecha de evaluacion de eficacia.");
+      setFormError("Debes indicar la fecha de validacion.");
       return;
     }
     if (!effectivenessResponsibleId) {
@@ -670,7 +671,7 @@ export function TreatmentsPage() {
       return;
     }
     if (!taskDraft.execution_date) {
-      setFormError("Debes indicar la fecha de ejecucion.");
+      setFormError("Debes indicar la fecha límite de ejecución.");
       return;
     }
     await runMutation(async () => {
@@ -1006,53 +1007,6 @@ return (
                         </div>
                       </section>
 
-                      <form className="form-section" onSubmit={handleSaveAgenda}>
-                        <div className="section-head compact">
-                          <h3>Fecha de tratamiento</h3>
-                          <button className="button button-primary" disabled={busy || agendaFieldsDisabled} type="submit">
-                            {convocationConfirmed ? "Agenda confirmada" : "Confirmar agenda"}
-                          </button>
-                        </div>
-                        <label className="field">
-                          <span>Fecha y hora programada</span>
-                          <input
-                            name="scheduled_for"
-                            disabled={agendaFieldsDisabled}
-                            onChange={(event) => setScheduledFor(event.target.value)}
-                            type="datetime-local"
-                            required
-                            value={scheduledFor}
-                          />
-                        </label>
-                        <label className="field">
-                          <span>Lugar de tratamiento</span>
-                          <input
-                            name="treatment_location"
-                            disabled={agendaFieldsDisabled}
-                            maxLength={200}
-                            onChange={(event) => setTreatmentLocation(event.target.value)}
-                            placeholder="Ej: Sala de reuniones, linea 1, sector pintura"
-                            type="text"
-                            value={treatmentLocation}
-                          />
-                        </label>
-                        {!convocationConfirmed && !hasConvokedUsers ? (
-                          <div className="panel info compact-inline-panel">
-                            <p>Primero debe cargar al menos un usuario convocado. Luego se habilitarán la fecha, el lugar y la confirmación de la agenda.</p>
-                          </div>
-                        ) : null}
-                        {convocationConfirmed ? (
-                          <div className="panel info compact-inline-panel">
-                            <p>
-                              Convocatoria confirmada el {formatDateTime(selectedTreatment.convocation_confirmed_at)}
-                              {selectedTreatment.convocation_confirmed_by
-                                ? ` por ${selectedTreatment.convocation_confirmed_by.full_name || selectedTreatment.convocation_confirmed_by.username}`
-                                : ""}. La fecha, el lugar y los usuarios convocados quedan en solo lectura.
-                            </p>
-                          </div>
-                        ) : null}
-                      </form>
-
                       <form className="form-section" onSubmit={handleAddParticipant}>
                         <div className="section-head compact">
                           <h3>Usuarios convocados</h3>
@@ -1125,6 +1079,54 @@ return (
                           ))}
                           {!selectedTreatment.participants.length ? <p className="muted-copy">Todavia no hay convocados.</p> : null}
                         </div>
+                      </form>
+
+                      <form className="form-section" onSubmit={handleSaveAgenda}>
+                        <div className="section-head compact">
+                          <h3>Fecha de tratamiento</h3>
+                          <button className="button button-primary" disabled={busy || agendaFieldsDisabled} type="submit">
+                            {convocationConfirmed ? "Agenda confirmada" : "Confirmar agenda"}
+                          </button>
+                        </div>
+                        <label className="field">
+                          <span>Fecha y hora programada</span>
+                          <input
+                            name="scheduled_for"
+                            disabled={agendaFieldsDisabled}
+                            onChange={(event) => setScheduledFor(event.target.value)}
+                            type="datetime-local"
+                            required
+                            value={scheduledFor}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Lugar de tratamiento</span>
+                          <input
+                            name="treatment_location"
+                            disabled={agendaFieldsDisabled}
+                            maxLength={200}
+                            onChange={(event) => setTreatmentLocation(event.target.value)}
+                            placeholder="Ej: Sala de reuniones, linea 1, sector pintura"
+                            required
+                            type="text"
+                            value={treatmentLocation}
+                          />
+                        </label>
+                        {!convocationConfirmed && !hasConvokedUsers ? (
+                          <div className="panel info compact-inline-panel">
+                            <p>Primero debe cargar al menos un usuario convocado. Luego se habilitarán la fecha, el lugar y la confirmación de la agenda.</p>
+                          </div>
+                        ) : null}
+                        {convocationConfirmed ? (
+                          <div className="panel info compact-inline-panel">
+                            <p>
+                              Convocatoria confirmada el {formatDateTime(selectedTreatment.convocation_confirmed_at)}
+                              {selectedTreatment.convocation_confirmed_by
+                                ? ` por ${selectedTreatment.convocation_confirmed_by.full_name || selectedTreatment.convocation_confirmed_by.username}`
+                                : ""}. La fecha, el lugar y los usuarios convocados quedan en solo lectura.
+                            </p>
+                          </div>
+                        ) : null}
                       </form>
 
                       <section className="form-section">
@@ -1287,7 +1289,7 @@ return (
                           <label className="field">
                             <span>Estado</span>
                             <select
-                              disabled={treatmentLocked}
+                              disabled
                               onChange={(event) => handleTaskDraftChange("status", event.target.value)}
                               value={taskDraft.status}
                             >
@@ -1318,7 +1320,7 @@ return (
                           </label>
 
                           <label className="field">
-                            <span>Fecha de ejecucion</span>
+                            <span>Fecha límite de ejecución</span>
                             <input
                               disabled={treatmentLocked}
                               onChange={(event) => handleTaskDraftChange("execution_date", event.target.value)}
@@ -1372,7 +1374,7 @@ return (
                                 <strong>{task.title}</strong>
                                 <p>{task.description || "Sin descripcion"}</p>
                                 <small>
-                                  Responsable: {task.responsible?.full_name || "Sin asignar"} | Ejecucion: {task.execution_date ? formatDate(task.execution_date) : "Sin fecha"}
+                                  Responsable: {task.responsible?.full_name || "Sin asignar"} | Fecha límite de ejecución: {task.execution_date ? formatDate(task.execution_date) : "Sin fecha"}
                                 </small>
                                 <small>
                                   Causas:{" "}
@@ -1425,7 +1427,7 @@ return (
                             </p>
                           ) : (
                             <p>
-                              Completa la fecha y responsable de evaluacion. Si metodo y observaciones estan cargados, tambien se guardaran.
+                              Completa la fecha de validacion y el responsable de evaluacion. Si metodo y observaciones estan cargados, tambien se guardaran.
                             </p>
                           )}
                         </div>
@@ -1436,7 +1438,7 @@ return (
                         ) : (
                           <div className="form-grid">
                             <label className="field">
-                              <span>Fecha de evaluacion de eficacia</span>
+                              <span>Fecha de validacion</span>
                               <input
                                 onChange={(event) => setEffectivenessEvaluationDate(event.target.value)}
                                 disabled={treatmentLocked}

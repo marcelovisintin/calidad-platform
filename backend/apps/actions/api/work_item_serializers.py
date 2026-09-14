@@ -29,6 +29,15 @@ class WorkItemTreatmentSerializer(serializers.Serializer):
     status = serializers.CharField(read_only=True)
 
 
+class WorkItemStatusEvidenceSerializer(serializers.Serializer):
+    id = serializers.UUIDField(read_only=True)
+    from_status = serializers.CharField(read_only=True)
+    to_status = serializers.CharField(read_only=True)
+    note = serializers.CharField(read_only=True)
+    changed_by = WorkItemUserSerializer(read_only=True, allow_null=True)
+    changed_at = serializers.DateTimeField(read_only=True)
+
+
 class ActionWorkItemSerializer(serializers.Serializer):
     id = serializers.UUIDField(read_only=True)
     source = serializers.ChoiceField(choices=("treatment", "observation"), read_only=True)
@@ -46,6 +55,8 @@ class ActionWorkItemSerializer(serializers.Serializer):
     anomalies = WorkItemAnomalySerializer(many=True, read_only=True)
     root_causes = TreatmentTaskHistoryRootCauseSerializer(many=True, read_only=True)
     evidences = TreatmentTaskEvidenceSerializer(many=True, read_only=True)
+    status_evidences = WorkItemStatusEvidenceSerializer(many=True, read_only=True)
+    can_cancel = serializers.BooleanField(read_only=True)
     can_manage = serializers.BooleanField(read_only=True)
     can_update_status = serializers.BooleanField(read_only=True)
     can_add_evidence = serializers.BooleanField(read_only=True)

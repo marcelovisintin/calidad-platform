@@ -217,7 +217,7 @@ USER_SCOPE_OPTIONS = [
     {
         "key": "pending_tasks",
         "label": "Pendientes",
-        "description": "Ver pendientes y tareas operativas.",
+        "description": "Ver pendientes y acciones operativas.",
         "permission_keys": [PERMISSION_VIEW_ACTION_ITEM, PERMISSION_EXECUTE_ACTION],
     },
     {

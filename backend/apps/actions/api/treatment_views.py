@@ -116,6 +116,7 @@ def _validation_ready_treatments_queryset(queryset, user):
             scheduled_for__lt=timezone.now(),
             root_causes__isnull=False,
             effectiveness_evaluation_date__isnull=False,
+            effectiveness_evaluation_date__lte=timezone.localdate(),
             effectiveness_responsible__isnull=False,
         )
         .exclude(effectiveness_validation_result=TreatmentEffectivenessValidationResult.EFFECTIVE)
@@ -751,9 +752,9 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         treatment = self.get_object()
         task = TreatmentTask.objects.filter(treatment=treatment, pk=task_id).first()
         if not task:
-            raise ValidationError({"task": "La tarea no pertenece al tratamiento indicado."})
+            raise ValidationError({"task": "La accion no pertenece al tratamiento indicado."})
         if not can_update_treatment_task(request.user, task):
-            raise PermissionDenied("Solo puede modificar tareas asignadas a su usuario.")
+            raise PermissionDenied("Solo puede modificar acciones asignadas a su usuario.")
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -822,9 +823,9 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         treatment = self.get_object()
         task = TreatmentTask.objects.filter(treatment=treatment, pk=task_id).first()
         if not task:
-            raise ValidationError({"task": "La tarea no pertenece al tratamiento indicado."})
+            raise ValidationError({"task": "La accion no pertenece al tratamiento indicado."})
         if not can_update_treatment_task(request.user, task):
-            raise PermissionDenied("Solo puede cargar evidencias en tareas asignadas a su usuario.")
+            raise PermissionDenied("Solo puede cargar evidencias en acciones asignadas a su usuario.")
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)

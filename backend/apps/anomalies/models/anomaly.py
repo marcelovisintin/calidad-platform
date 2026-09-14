@@ -5,7 +5,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 
 from apps.core.models import AuditBaseModel
-from common.storage import anomaly_attachment_upload_to
+from common.storage import anomaly_attachment_upload_to, anomaly_learned_lesson_evidence_upload_to
 
 
 class AnomalyStatus(models.TextChoices):
@@ -505,15 +505,36 @@ class AnomalyLearning(AuditBaseModel):
         related_name="anomaly_learning_records",
     )
     recorded_at = models.DateTimeField()
-    standardization_actions = models.TextField(blank=True)
-    lessons_learned = models.TextField(blank=True)
-    document_changes = models.TextField(blank=True)
-    shared_with = models.TextField(blank=True)
-    shared_at = models.DateTimeField(null=True, blank=True)
+    has_learning = models.BooleanField(null=True, blank=True)
+    learned_text = models.TextField(blank=True)
+    no_learning_reason = models.TextField(blank=True)
+    procedure_modified = models.BooleanField(null=True, blank=True)
+    procedure_modification_notes = models.TextField(blank=True)
 
     class Meta:
         verbose_name = "Estandarizacion y aprendizaje"
         verbose_name_plural = "Estandarizacion y aprendizaje"
+
+
+class AnomalyLearningEvidence(AuditBaseModel):
+    learned_lesson = models.ForeignKey(
+        "anomalies.AnomalyLearning",
+        on_delete=models.CASCADE,
+        related_name="evidences",
+    )
+    file = models.FileField(upload_to=anomaly_learned_lesson_evidence_upload_to)
+    original_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100, blank=True)
+    uploaded_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="anomaly_learned_lesson_evidences",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = "Evidencia de leccion aprendida de Observacion"
+        verbose_name_plural = "Evidencias de lecciones aprendidas de Observaciones"
 
 
 

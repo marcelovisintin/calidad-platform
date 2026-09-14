@@ -416,7 +416,7 @@ export function HelpCenterPage() {
         <div className="help-search-copy">
           <p className="eyebrow">¿Qué necesitas hacer?</p>
           <h2>Encuentra una respuesta rápida</h2>
-          <p>Busca por pantalla, tarea o concepto: por ejemplo, anomalía, convocatoria, acción o eficacia.</p>
+          <p>Busca por pantalla, acción o concepto: por ejemplo, anomalía, convocatoria o eficacia.</p>
         </div>
         <div className="help-search-control">
           <label htmlFor="help-search">Buscar en la ayuda</label>

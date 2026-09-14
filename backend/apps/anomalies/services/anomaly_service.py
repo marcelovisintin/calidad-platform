@@ -37,6 +37,7 @@ from apps.anomalies.models import (
     AnomalyInitialVerification,
     AnomalyImmediateAction,
     AnomalyLearning,
+    AnomalyLearningEvidence,
     AnomalyParticipant,
     AnomalyProposal,
     AnomalyStage,
@@ -557,7 +558,6 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     classification_responsible = data.pop("classification_responsible", None)
     classification_reason = (data.pop("classification_reason", "") or "").strip()
     observation_due_date = data.pop("observation_due_date", None)
-    observation_comment = (data.pop("observation_comment", "") or "").strip()
     treatment_target = data.pop("treatment_target", None)
     treatment_deadline = data.pop("treatment_deadline", None)
     treatment_comment = (data.pop("treatment_comment", "") or "").strip()
@@ -646,10 +646,8 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
         if is_observation:
             if not observation_due_date:
                 raise ValidationError({"observation_due_date": "Debe indicar la fecha de realizacion."})
-            if not observation_comment:
-                raise ValidationError({"observation_comment": "Debe registrar la causa asignada."})
             _ensure_observation_code(locked)
-            locked.containment_summary = observation_comment
+            locked.observation_resolution_path = ObservationResolutionPath.OBSERVATION
         if closes_as_invalid:
             transition_from_status = locked.current_status
             transition_from_stage = locked.current_stage
@@ -766,7 +764,6 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
             evidence_lines.append(f"Responsable asignado: {_user_label(classification_responsible)}")
         if is_observation:
             evidence_lines.append(f"Fecha de realizacion: {observation_due_date.isoformat()}")
-            evidence_lines.append(f"Causa asignada: {observation_comment}")
         evidence_lines.extend(
             [
                 f"Estado anterior: {transition_from_status}",
@@ -823,17 +820,17 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
                 creation_comment=treatment_comment,
             )
     elif is_observation_classification:
-        save_observation_load(
-            anomaly=locked,
-            user=user,
-            data={
-                "responsible": classification_responsible,
-                "action_date": observation_due_date,
-                "observation": observation_comment,
-                "requires_treatment": False,
-            },
-            request_id=request_id,
-        )
+        immediate_action = _get_related_or_none(locked, "immediate_action")
+        if immediate_action is None:
+            immediate_action = AnomalyImmediateAction(
+                anomaly=locked,
+                observation="",
+                created_by=user,
+            )
+        immediate_action.responsible = classification_responsible
+        immediate_action.action_date = observation_due_date
+        immediate_action.updated_by = user
+        immediate_action.save()
 
     if should_sync_classification and treatment_target is None:
         notify_finding_management_assigned(
@@ -1165,19 +1162,56 @@ def record_effectiveness_check(*, anomaly: Anomaly, user, data: dict, request_id
 
 
 @transaction.atomic
-def save_learning(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyLearning:
-    _ensure_anomaly_is_editable(anomaly)
-    _require_anomaly_manager(anomaly, user)
-    learning = _get_related_or_none(anomaly, "learning") or AnomalyLearning(anomaly=anomaly)
-    learning, created = _upsert_single_related(
-        learning,
-        data=data,
-        actor_field="recorded_by",
-        timestamp_field="recorded_at",
-        user=user,
-    )
+def save_learning(*, anomaly: Anomaly, user, data: dict, files=None, request_id: str = "") -> AnomalyLearning:
+    locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
+    _ensure_anomaly_is_editable(locked)
+    immediate_action = _get_related_or_none(locked, "immediate_action")
+    if (
+        locked.observation_resolution_path != ObservationResolutionPath.OBSERVATION
+        or locked.current_status != AnomalyStatus.CLOSED
+        or immediate_action is None
+        or immediate_action.effectiveness_is_effective is not True
+    ):
+        raise ValidationError(
+            {"anomaly": "Solo se pueden registrar lecciones aprendidas en Observaciones verificadas como eficaces."}
+        )
+    _require_observation_manager(locked, user, immediate_action)
+
+    learning = AnomalyLearning.objects.select_for_update().filter(anomaly=locked).first()
+    created = learning is None
+    if learning and not data.get("confirm_modification", False):
+        raise ValidationError(
+            {"confirm_modification": "Debe confirmar la modificacion de la leccion aprendida existente."}
+        )
+    if learning is None:
+        learning = AnomalyLearning(anomaly=locked, created_by=user)
+
+    learning.has_learning = data["has_learning"]
+    learning.learned_text = data.get("learned_text", "")
+    learning.no_learning_reason = data.get("no_learning_reason", "")
+    learning.procedure_modified = data["procedure_modified"]
+    learning.procedure_modification_notes = data.get("procedure_modification_notes", "")
+    learning.recorded_by = user
+    learning.recorded_at = timezone.now()
+    learning.updated_by = user
+    _bump_version(learning)
+    learning.full_clean()
+    learning.save()
+
+    for file_obj in files or []:
+        validate_evidence_file(file_obj)
+        AnomalyLearningEvidence.objects.create(
+            learned_lesson=learning,
+            file=file_obj,
+            original_name=getattr(file_obj, "name", "") or "evidencia",
+            content_type=normalized_upload_content_type(file_obj),
+            uploaded_by=user,
+            created_by=user,
+            updated_by=user,
+        )
+
     record_audit_event(
-        entity=anomaly,
+        entity=locked,
         action="anomaly.learning_created" if created else "anomaly.learning_updated",
         actor=user,
         after_data={"learning_id": str(learning.pk), "recorded_at": learning.recorded_at},
@@ -1206,7 +1240,7 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
     _ensure_anomaly_is_editable(anomaly)
 
     required_fields = {
-        "observation": "Debe registrar una observacion.",
+        "observation": "Debe registrar la causa asignada.",
         "responsible": "Debe seleccionar un responsable.",
         "action_date": "Debe indicar la fecha limite de ejecucion.",
     }
@@ -1356,7 +1390,7 @@ def create_observation_action(*, anomaly: Anomaly, user, data: dict, request_id:
     required_fields = {
         "detail": "Debe registrar el detalle de la accion.",
         "estimated_completion_date": "Debe indicar la fecha estimada de realizacion.",
-        "effectiveness_due_date": "Debe indicar la fecha estimada de verificacion de eficacia.",
+        "effectiveness_due_date": "Debe indicar la fecha de validacion.",
     }
     for field_name, message in required_fields.items():
         value = data.get(field_name)
@@ -1417,7 +1451,7 @@ def create_observation_action(*, anomaly: Anomaly, user, data: dict, request_id:
             f"Accion: {action.sequence}",
             f"Detalle: {action.detail}",
             f"Fecha estimada de realizacion: {action.estimated_completion_date.isoformat()}",
-            f"Fecha estimada de verificacion: {action.effectiveness_due_date.isoformat()}",
+            f"Fecha de validacion: {action.effectiveness_due_date.isoformat()}",
         ]
     )
     _write_status_history(
@@ -1550,7 +1584,7 @@ def save_observation_action_taken(*, anomaly: Anomaly, user, data: dict, request
     required_fields = {
         "action_completed_at": "Debe indicar la fecha de realizado.",
         "actions_taken": "Debe registrar el detalle de la accion.",
-        "effectiveness_due_at": "Debe indicar la fecha de verificacion de eficacia.",
+        "effectiveness_due_at": "Debe indicar la fecha de validacion.",
     }
     for field_name, message in required_fields.items():
         value = data.get(field_name)
@@ -1602,7 +1636,7 @@ def save_observation_action_taken(*, anomaly: Anomaly, user, data: dict, request
             [
                 f"Fecha de realizado: {immediate_action.action_completed_at.isoformat()}",
                 f"Detalle de la accion: {immediate_action.actions_taken}",
-                f"Fecha de verificacion de eficacia: {immediate_action.effectiveness_due_at.isoformat()}",
+                f"Fecha de validacion: {immediate_action.effectiveness_due_at.isoformat()}",
             ]
         ),
         actor=user,
@@ -1632,7 +1666,10 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
     if data.get("effectiveness_is_effective") is None:
         raise ValidationError({"effectiveness_is_effective": "Debe indicar si fue eficaz."})
     if not data.get("effectiveness_verified_at"):
-        raise ValidationError({"effectiveness_verified_at": "Debe indicar la fecha de verificacion de eficacia."})
+        raise ValidationError({"effectiveness_verified_at": "Debe indicar la fecha de realizacion de la validacion."})
+    effectiveness_comment = (data.get("effectiveness_comment") or "").strip()
+    if not effectiveness_comment:
+        raise ValidationError({"effectiveness_comment": "Debe completar el fundamento de eficacia."})
 
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
     _ensure_observation_path_available(locked)
@@ -1661,21 +1698,46 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
     if reference_action is not None:
         reference_note = (
             f"Accion de referencia: {reference_action.sequence} - {reference_action.detail}\n"
-            f"Fecha estimada usada: {reference_action.effectiveness_due_date.isoformat()}"
+            f"Fecha de validacion usada: {reference_action.effectiveness_due_date.isoformat()}"
         )
     elif immediate_action.effectiveness_due_at is not None:
-        reference_note = f"Fecha estimada usada: {immediate_action.effectiveness_due_at.isoformat()}"
+        reference_note = f"Fecha de validacion usada: {immediate_action.effectiveness_due_at.isoformat()}"
     else:
-        reference_note = "Fecha estimada usada: sin fecha registrada en la accion heredada."
+        reference_note = "Fecha de validacion usada: sin fecha registrada en la accion heredada."
+
+    effectiveness_due_date = (
+        reference_action.effectiveness_due_date
+        if reference_action is not None
+        else immediate_action.effectiveness_due_at
+    )
+    if not effectiveness_due_date:
+        raise ValidationError({"effectiveness_verified_at": "Debe tener cargada la fecha de validacion."})
+    if effectiveness_due_date and timezone.localdate() < effectiveness_due_date:
+        raise ValidationError(
+            {
+                "effectiveness_verified_at": (
+                    "La validacion no puede realizarse antes de la fecha de validacion "
+                    f"{effectiveness_due_date.isoformat()}."
+                )
+            }
+        )
+    verification_datetime = data["effectiveness_verified_at"]
+    verification_date = (
+        timezone.localtime(verification_datetime).date()
+        if timezone.is_aware(verification_datetime)
+        else verification_datetime.date()
+    )
+    if effectiveness_due_date and verification_date < effectiveness_due_date:
+        raise ValidationError(
+            {"effectiveness_verified_at": "La fecha de realizacion no puede ser anterior a la fecha de validacion."}
+        )
 
     before = snapshot_anomaly(locked)
     previous_status = locked.current_status
     previous_stage = locked.current_stage
     now = timezone.now()
     is_effective = bool(data["effectiveness_is_effective"])
-    check_comment = (data.get("effectiveness_comment") or "").strip() or (
-        "Observacion verificada como eficaz." if is_effective else "No eficaz. Queda abierta para nueva accion tomada."
-    )
+    check_comment = effectiveness_comment
 
     immediate_action.effectiveness_verified_at = data["effectiveness_verified_at"]
     immediate_action.effectiveness_is_effective = is_effective

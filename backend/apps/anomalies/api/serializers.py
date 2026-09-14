@@ -24,6 +24,7 @@ from apps.anomalies.models import (
     AnomalyInitialVerification,
     AnomalyImmediateAction,
     AnomalyLearning,
+    AnomalyLearningEvidence,
     AnomalyParticipant,
     AnomalyProposal,
     AnomalyStage,
@@ -437,8 +438,23 @@ class AnomalyEffectivenessCheckSerializer(serializers.ModelSerializer):
         )
 
 
+class AnomalyLearningEvidenceSerializer(serializers.ModelSerializer):
+    uploaded_by = UserSummarySerializer(read_only=True)
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AnomalyLearningEvidence
+        fields = ("id", "original_name", "content_type", "file_url", "uploaded_by", "created_at")
+
+    def get_file_url(self, obj):
+        request = self.context.get("request")
+        url = reverse("api:anomalies:learned-lesson-evidence-download", kwargs={"evidence_id": obj.pk})
+        return request.build_absolute_uri(url) if request else url
+
+
 class AnomalyLearningSerializer(serializers.ModelSerializer):
     recorded_by = UserSummarySerializer(read_only=True)
+    evidences = AnomalyLearningEvidenceSerializer(many=True, read_only=True)
 
     class Meta:
         model = AnomalyLearning
@@ -446,11 +462,12 @@ class AnomalyLearningSerializer(serializers.ModelSerializer):
             "id",
             "recorded_by",
             "recorded_at",
-            "standardization_actions",
-            "lessons_learned",
-            "document_changes",
-            "shared_with",
-            "shared_at",
+            "has_learning",
+            "learned_text",
+            "no_learning_reason",
+            "procedure_modified",
+            "procedure_modification_notes",
+            "evidences",
         )
 
 
@@ -472,6 +489,29 @@ class AnomalyImmediateActionSerializer(serializers.ModelSerializer):
             "actions_taken",
             "effectiveness_comment",
             "closure_comment",
+        )
+
+
+class ObservationLearnedLessonSerializer(serializers.ModelSerializer):
+    area = AreaSummarySerializer(read_only=True)
+    responsible = UserSummarySerializer(source="immediate_action.responsible", read_only=True)
+    effectiveness_verified_at = serializers.DateTimeField(
+        source="immediate_action.effectiveness_verified_at",
+        read_only=True,
+    )
+    learning = AnomalyLearningSerializer(read_only=True)
+
+    class Meta:
+        model = Anomaly
+        fields = (
+            "id",
+            "code",
+            "title",
+            "area",
+            "closed_at",
+            "responsible",
+            "effectiveness_verified_at",
+            "learning",
         )
 
 
@@ -771,7 +811,6 @@ class AnomalyUpdateSerializer(AffectedOrdersWriteMixin, serializers.ModelSeriali
     )
     classification_reason = serializers.CharField(required=False, allow_blank=True, write_only=True)
     observation_due_date = serializers.DateField(required=False, allow_null=True, write_only=True)
-    observation_comment = serializers.CharField(required=False, allow_blank=True, write_only=True)
     treatment_target = serializers.PrimaryKeyRelatedField(
         queryset=Treatment.objects.all(),
         required=False,
@@ -809,7 +848,6 @@ class AnomalyUpdateSerializer(AffectedOrdersWriteMixin, serializers.ModelSeriali
             "classification_responsible",
             "classification_reason",
             "observation_due_date",
-            "observation_comment",
             "treatment_target",
             "treatment_deadline",
             "treatment_comment",
@@ -934,20 +972,35 @@ class AnomalyEffectivenessCheckWriteSerializer(serializers.ModelSerializer):
         }
 
 
-class AnomalyLearningWriteSerializer(serializers.ModelSerializer):
-    recorded_at = serializers.DateTimeField(required=False, style=DATETIME_INPUT_STYLE)
-    shared_at = serializers.DateTimeField(required=False, allow_null=True, style=DATETIME_INPUT_STYLE)
+class AnomalyLearningWriteSerializer(serializers.Serializer):
+    has_learning = serializers.BooleanField(required=True)
+    learned_text = serializers.CharField(required=False, allow_blank=True)
+    no_learning_reason = serializers.CharField(required=False, allow_blank=True)
+    procedure_modified = serializers.BooleanField(required=True)
+    procedure_modification_notes = serializers.CharField(required=False, allow_blank=True)
+    confirm_modification = serializers.BooleanField(required=False, default=False, write_only=True)
 
-    class Meta:
-        model = AnomalyLearning
-        fields = (
-            "recorded_at",
-            "standardization_actions",
-            "lessons_learned",
-            "document_changes",
-            "shared_with",
-            "shared_at",
-        )
+    def validate(self, attrs):
+        has_learning = attrs.get("has_learning")
+        procedure_modified = attrs.get("procedure_modified")
+        learned_text = (attrs.get("learned_text") or "").strip()
+        no_learning_reason = (attrs.get("no_learning_reason") or "").strip()
+        procedure_notes = (attrs.get("procedure_modification_notes") or "").strip()
+
+        errors = {}
+        if has_learning is True and not learned_text:
+            errors["learned_text"] = "Debe completar que se aprendio."
+        if has_learning is False and not no_learning_reason:
+            errors["no_learning_reason"] = "Debe indicar por que no se aprendio."
+        if procedure_modified is True and not procedure_notes:
+            errors["procedure_modification_notes"] = "Debe completar las observaciones sobre modificacion de procedimiento."
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        attrs["learned_text"] = learned_text if has_learning else ""
+        attrs["no_learning_reason"] = no_learning_reason if not has_learning else ""
+        attrs["procedure_modification_notes"] = procedure_notes if procedure_modified else ""
+        return attrs
 
 
 
@@ -980,7 +1033,14 @@ class AnomalyObservationActionWriteSerializer(serializers.Serializer):
 class AnomalyObservationVerificationWriteSerializer(serializers.Serializer):
     effectiveness_verified_at = serializers.DateTimeField(style=DATETIME_INPUT_STYLE)
     effectiveness_is_effective = serializers.BooleanField()
-    effectiveness_comment = serializers.CharField(required=False, allow_blank=True)
+    effectiveness_comment = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        error_messages={
+            "required": "Debe completar el fundamento de eficacia.",
+            "blank": "Debe completar el fundamento de eficacia.",
+        },
+    )
     closure_comment = serializers.CharField(required=False, allow_blank=True)
 
 
