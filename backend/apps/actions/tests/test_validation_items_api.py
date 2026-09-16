@@ -157,7 +157,7 @@ class ValidationItemsApiTests(APITestCase):
 
         self.manager_treatment.effectiveness_evaluation_date = timezone.localdate()
         self.manager_treatment.save(update_fields=["effectiveness_evaluation_date", "updated_at"])
-        self.manager_anomaly.observation_actions.update(effectiveness_due_date=timezone.localdate())
+        self.manager_anomaly.observation_actions.update(effectiveness_due_date=timezone.localdate(), status="completed", completed_at=timezone.localdate())
 
         due_response = self.client.get(self.endpoint)
         due_items = {

@@ -1450,6 +1450,23 @@ small {
   box-shadow: 0 8px 18px rgba(8, 122, 91, 0.3);
 }
 
+.action-data-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.action-data-fields:disabled {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+.treatment-start-deadline-overdue {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 .classification-new-treatment-fields {
   display: grid;
   gap: 0.75rem;
@@ -2489,8 +2506,30 @@ small {
 }
 
 .learned-lesson-summary {
-  position: sticky;
-  top: 96px;
+  position: static;
+}
+
+.learned-lesson-action-overlay {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(8, 31, 34, 0.72);
+  backdrop-filter: grayscale(1) blur(3px);
+}
+
+.learned-lesson-action-dialog {
+  width: min(560px, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  background: var(--panel);
+  box-shadow: 0 20px 60px rgba(3, 35, 43, 0.35);
+}
+
+.learned-lesson-action-dialog .form-actions {
+  justify-content: space-between;
 }
 
 .learned-lesson-form textarea {

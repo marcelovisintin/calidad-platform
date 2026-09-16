@@ -18,12 +18,8 @@ class TreatmentStatus(models.TextChoices):
 
 
 class TreatmentMethod(models.TextChoices):
-    FIVE_WHYS = "five_whys", "5 Why"
+    FIVE_WHYS = "five_whys", "5 WHY"
     SIX_M = "6m", "6M"
-    ISHIKAWA = "ishikawa", "Ishikawa"
-    A3 = "a3", "A3"
-    EIGHT_D = "8d", "8D"
-    OTHER = "other", "Otro"
 
 
 class TreatmentParticipantRole(models.TextChoices):
@@ -37,6 +33,12 @@ class TreatmentTaskStatus(models.TextChoices):
     IN_PROGRESS = "in_progress", "En curso"
     COMPLETED = "completed", "Completada"
     CANCELLED = "cancelled", "Cancelada"
+
+
+class TreatmentLearnedLessonStatus(models.TextChoices):
+    DRAFT = "draft", "Borrador"
+    READY = "ready", "Lista para publicar"
+    PUBLISHED = "published", "Publicada"
 
 
 class TreatmentEffectivenessValidationResult(models.TextChoices):
@@ -111,6 +113,7 @@ class Treatment(AuditBaseModel):
         blank=True,
     )
     effectiveness_validation_comment = models.TextField(blank=True)
+    formally_closed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ("-created_at",)
@@ -179,6 +182,10 @@ class TreatmentRootCause(AuditBaseModel):
 
 class TreatmentTask(AuditBaseModel):
     treatment = models.ForeignKey("actions.Treatment", on_delete=models.CASCADE, related_name="tasks")
+    derived_from_lesson = models.ForeignKey(
+        "actions.TreatmentLearnedLesson", on_delete=models.PROTECT,
+        related_name="derived_actions", null=True, blank=True,
+    )
     root_cause = models.ForeignKey(
         "actions.TreatmentRootCause",
         on_delete=models.SET_NULL,
@@ -219,7 +226,7 @@ class TreatmentTask(AuditBaseModel):
             self.status in {TreatmentTaskStatus.PENDING, TreatmentTaskStatus.IN_PROGRESS}
             and self.execution_date
             and self.execution_date < timezone.localdate()
-            and self.treatment.status not in {TreatmentStatus.COMPLETED, TreatmentStatus.CANCELLED}
+            and (self.derived_from_lesson_id or self.treatment.status not in {TreatmentStatus.COMPLETED, TreatmentStatus.CANCELLED})
         )
 
 
@@ -273,6 +280,15 @@ class TreatmentTaskEvidence(AuditBaseModel):
 
 class TreatmentLearnedLesson(AuditBaseModel):
     treatment = models.OneToOneField("actions.Treatment", on_delete=models.CASCADE, related_name="learned_lesson")
+    status = models.CharField(
+        max_length=20, choices=TreatmentLearnedLessonStatus.choices,
+        default=TreatmentLearnedLessonStatus.DRAFT,
+    )
+    published_at = models.DateTimeField(null=True, blank=True)
+    published_by = models.ForeignKey(
+        "accounts.User", on_delete=models.PROTECT, related_name="published_treatment_lessons",
+        null=True, blank=True,
+    )
     has_learning = models.BooleanField(null=True, blank=True)
     learned_text = models.TextField(blank=True)
     no_learning_reason = models.TextField(blank=True)

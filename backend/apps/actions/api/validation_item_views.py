@@ -148,6 +148,8 @@ def _observation_validation_item(anomaly, user) -> dict:
         else observation.effectiveness_due_at
     )
     blockers = [] if has_action else ["Debe cargar al menos una accion antes de verificar eficacia."]
+    if any(action.status != "completed" for action in actions):
+        blockers.append("Debe completar todas las acciones antes de verificar la eficacia.")
     if not validation_date:
         blockers.append("Debe tener cargada la fecha de validacion.")
     elif timezone.localdate() < validation_date:

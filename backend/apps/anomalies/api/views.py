@@ -90,6 +90,7 @@ from apps.anomalies.services import (
     verify_observation_effectiveness,
 )
 from apps.anomalies.services.classification_rules import immediate_action_q
+from apps.anomalies.services.anomaly_service import add_observation_action_evidence
 from common.pagination import DefaultPageNumberPagination
 
 
@@ -791,6 +792,22 @@ class AnomalyViewSet(viewsets.ModelViewSet):
         )
         output = ObservationActionSerializer(completed, context=self.get_serializer_context())
         return Response(output.data)
+
+    @action(detail=True, methods=["post"],
+            url_path=r"observation/actions/(?P<observation_action_id>[^/.]+)/evidences",
+            parser_classes=[MultiPartParser, FormParser])
+    def add_observation_action_evidence(self, request, pk=None, observation_action_id=None):
+        anomaly = self.get_object()
+        observation_action = get_object_or_404(ObservationAction, pk=observation_action_id, anomaly=anomaly)
+        serializer = AnomalyAttachmentWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        evidence = add_observation_action_evidence(
+            action=observation_action, user=request.user,
+            data={**serializer.validated_data, "note": request.data.get("note", "")},
+            request_id=self._request_id(),
+        )
+        return Response(AnomalyAttachmentSerializer(evidence, context=self.get_serializer_context()).data,
+                        status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="observation/effectiveness")
     def verify_observation_effectiveness(self, request, pk=None):

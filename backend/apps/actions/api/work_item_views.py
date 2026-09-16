@@ -75,6 +75,7 @@ def _treatment_items_queryset(user, params):
     queryset = (
         TreatmentTask.objects.select_related(
             "responsible",
+            "derived_from_lesson",
             "treatment",
             "treatment__primary_anomaly",
         )
@@ -124,7 +125,7 @@ def _treatment_items_queryset(user, params):
         queryset = queryset.filter(
             status__in=[TreatmentTaskStatus.PENDING, TreatmentTaskStatus.IN_PROGRESS],
             execution_date__lt=timezone.localdate(),
-        ).exclude(treatment__status__in=["completed", "cancelled"])
+        ).exclude(treatment__status__in=["completed", "cancelled"], derived_from_lesson__isnull=True)
     elif status_value:
         queryset = queryset.filter(status=status_value)
 
@@ -140,7 +141,7 @@ def _observation_items_queryset(user, params):
         "anomaly",
         "anomaly__immediate_action",
         "anomaly__immediate_action__responsible",
-    )
+    ).prefetch_related("evidences__uploaded_by")
     if not has_global_access(user):
         queryset = queryset.filter(anomaly__immediate_action__responsible=user)
 
@@ -229,6 +230,7 @@ def _treatment_work_item(task, user, status_evidences=None) -> dict:
     return {
         "id": task.pk,
         "source": "treatment",
+        "derived_from_lesson": bool(task.derived_from_lesson_id),
         "code": task.code,
         "title": task.title,
         "description": task.description,
@@ -248,7 +250,9 @@ def _treatment_work_item(task, user, status_evidences=None) -> dict:
         "root_causes": list(task.root_causes.all()),
         "evidences": list(task.evidences.all()),
         "status_evidences": status_evidences or [],
-        "can_cancel": task.status == TreatmentTaskStatus.PENDING and not status_evidences,
+        "can_cancel": task.status == TreatmentTaskStatus.PENDING and not status_evidences and not (
+            task.derived_from_lesson_id and task.derived_from_lesson.status == "published"
+        ),
         "can_manage": can_manage_treatment(user, task.treatment),
         "can_update_status": can_execute_assignment(user, task.responsible_id),
         "can_add_evidence": can_execute_assignment(user, task.responsible_id),
@@ -277,12 +281,12 @@ def _observation_work_item(action, user) -> dict:
         "treatment": None,
         "anomalies": [_anomaly_summary(action.anomaly)],
         "root_causes": [],
-        "evidences": [],
+        "evidences": list(action.evidences.all()),
         "status_evidences": [],
         "can_cancel": False,
         "can_manage": can_manage,
         "can_update_status": can_manage,
-        "can_add_evidence": False,
+        "can_add_evidence": can_manage,
         "created_at": action.created_at,
         "updated_at": action.updated_at,
     }

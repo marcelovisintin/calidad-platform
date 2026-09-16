@@ -14,6 +14,8 @@ from apps.actions.services.treatment_service import (
     confirm_treatment_convocation,
     reconfigure_treatment,
     save_treatment_learned_lesson,
+    send_treatment_lesson_for_publication,
+    publish_treatment_lesson,
     update_treatment,
     update_treatment_task,
 )
@@ -1185,7 +1187,8 @@ class NotificationServiceTests(TestCase):
         treatment.responsible = self.analyst
         treatment.status = "completed"
         treatment.effectiveness_validation_result = "effective"
-        treatment.save(update_fields=["responsible", "status", "effectiveness_validation_result", "updated_at"])
+        treatment.effectiveness_responsible = self.admin
+        treatment.save(update_fields=["responsible", "status", "effectiveness_validation_result", "effectiveness_responsible", "updated_at"])
         payload = {
             "has_learning": True,
             "learned_text": "Verificar el ajuste antes de liberar la orden.",
@@ -1209,15 +1212,29 @@ class NotificationServiceTests(TestCase):
             },
             request_id="req-updated-lesson",
         )
+        self.assertFalse(Notification.objects.filter(
+            source_id=lesson.pk, template_code="treatment_learned_lesson_published",
+        ).exists())
+        Notification.objects.create(
+            source_type="actions.treatmentlearnedlesson",
+            source_id=lesson.pk,
+            template_code="treatment_learned_lesson_published",
+            title="Aviso anterior al nuevo flujo",
+            context_data={"event_key": str(lesson.pk)},
+        )
+        send_treatment_lesson_for_publication(treatment=treatment, user=self.admin)
+        publish_treatment_lesson(treatment=treatment, user=self.admin)
 
         notifications = Notification.objects.filter(
             source_id=lesson.pk,
             template_code="treatment_learned_lesson_published",
         )
-        self.assertEqual(notifications.count(), 1)
+        self.assertEqual(notifications.count(), 2)
+        publication_notification = notifications.exclude(context_data={"event_key": str(lesson.pk)}).get()
+        self.assertNotEqual(publication_notification.context_data["event_key"], str(lesson.pk))
         self.assertEqual(
             NotificationRecipient.objects.filter(
-                notification=notifications.get(),
+                notification=publication_notification,
                 user=self.analyst,
             ).count(),
             2,

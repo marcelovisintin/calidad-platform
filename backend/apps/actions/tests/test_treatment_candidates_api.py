@@ -40,11 +40,21 @@ from apps.anomalies.models import (
     ObservationResolutionPath,
 )
 from apps.catalog.models import AnomalyOrigin, AnomalyType, Area, Priority, Severity, Site
-from apps.notifications.models import NotificationChannel, NotificationRecipient
+from apps.notifications.models import Notification, NotificationChannel, NotificationRecipient
 from apps.notifications.services.email_delivery import dispatch_pending_email_notifications
 
 
 class TreatmentCandidatesApiTests(APITestCase):
+    def test_treatment_method_options_are_limited_to_five_whys_six_m_or_undefined(self):
+        from apps.actions.api.treatment_serializers import TreatmentUpdateSerializer
+
+        for method in ("", "five_whys", "6m"):
+            self.assertTrue(TreatmentUpdateSerializer(data={"method_used": method}).is_valid())
+        for method in ("ishikawa", "a3", "8d", "other"):
+            serializer = TreatmentUpdateSerializer(data={"method_used": method})
+            self.assertFalse(serializer.is_valid())
+            self.assertIn("method_used", serializer.errors)
+
     def setUp(self):
         self.admin = User.objects.create_superuser(
             username="admin_candidates",
@@ -334,6 +344,9 @@ class TreatmentCandidatesApiTests(APITestCase):
         treatment = Treatment.objects.get(primary_anomaly=primary)
         self.assertEqual(treatment.responsible, self.task_user)
         self.assertEqual(treatment.deadline, timezone.localdate() + timedelta(days=15))
+        detail = self.client.get(f"/api/v1/actions/treatments/{treatment.pk}/")
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail.data["deadline"], (timezone.localdate() + timedelta(days=15)).isoformat())
         self.assertEqual(treatment.creation_comment, "Comentario inicial del tratamiento.")
         self.assertEqual(treatment.anomaly_links.count(), 1)
         primary.refresh_from_db()
@@ -1795,7 +1808,7 @@ class TreatmentCandidatesApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(validation_response.status_code, status.HTTP_200_OK)
-        self.client.force_authenticate(user=self.admin)
+        self.client.force_authenticate(user=self.task_user)
 
         first_evidence = SimpleUploadedFile(
             "aprendizaje-inicial.pdf",
@@ -1854,14 +1867,15 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertEqual(revisions[0].learned_text, "Se ajusto el control de inicio.")
         self.assertEqual(revisions[1].learned_text, "Se agrego una verificacion final.")
         self.assertIn("learned_text", revisions[1].changed_fields)
-        self.assertEqual(revisions[1].changed_by, self.admin)
+        self.assertEqual(revisions[1].changed_by, self.task_user)
         self.assertEqual(revisions[1].evidences.count(), 1)
 
     def test_existing_learned_lesson_gets_baseline_before_first_confirmed_change(self):
         treatment = self._prepare_treatment_for_validation()
         treatment.effectiveness_validation_result = "effective"
         treatment.status = "completed"
-        treatment.save(update_fields=["effectiveness_validation_result", "status", "updated_at"])
+        treatment.effectiveness_responsible = self.task_user
+        treatment.save(update_fields=["effectiveness_validation_result", "effectiveness_responsible", "status", "updated_at"])
         lesson = TreatmentLearnedLesson.objects.create(
             treatment=treatment,
             has_learning=True,
@@ -1872,7 +1886,7 @@ class TreatmentCandidatesApiTests(APITestCase):
             created_by=self.task_user,
             updated_by=self.task_user,
         )
-        self.client.force_authenticate(user=self.admin)
+        self.client.force_authenticate(user=self.task_user)
 
         response = self.client.patch(
             f"/api/v1/actions/learned-lessons/{treatment.pk}/",
@@ -1890,6 +1904,110 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertEqual(revisions.count(), 2)
         self.assertEqual(revisions[0].learned_text, "Contenido anterior a la trazabilidad.")
         self.assertEqual(revisions[1].learned_text, "Contenido nuevo y trazable.")
+
+    def _effective_lesson_treatment(self):
+        treatment = self._prepare_treatment_for_validation()
+        treatment.status = "completed"
+        treatment.effectiveness_validation_result = "effective"
+        treatment.save(update_fields=["status", "effectiveness_validation_result", "updated_at"])
+        return treatment
+
+    def _save_lesson(self, treatment, *, modified=False, text="Aprendizaje inicial."):
+        self.client.force_authenticate(user=self.task_user)
+        return self.client.patch(
+            f"/api/v1/actions/learned-lessons/{treatment.pk}/",
+            {"has_learning": "true", "learned_text": text, "procedure_modified": str(modified).lower(),
+             "procedure_modification_notes": "Actualizar el instructivo." if modified else "",
+             "confirm_modification": str(TreatmentLearnedLesson.objects.filter(treatment=treatment).exists()).lower()},
+            format="multipart",
+        )
+
+    def test_lesson_publication_permissions_versions_and_document_snapshot(self):
+        treatment = self._effective_lesson_treatment()
+        url = f"/api/v1/actions/learned-lessons/{treatment.pk}/"
+        self.client.force_authenticate(user=self.reporter_one)
+        self.assertEqual(self.client.patch(url, {"has_learning": "true", "learned_text": "Intruso", "procedure_modified": "false"}, format="multipart").status_code, status.HTTP_403_FORBIDDEN)
+        first = self._save_lesson(treatment)
+        second = self._save_lesson(treatment, text="Aprendizaje corregido.")
+        self.assertEqual(first.status_code, status.HTTP_200_OK)
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        lesson = TreatmentLearnedLesson.objects.get(treatment=treatment)
+        self.assertEqual(list(lesson.revisions.order_by("revision_number").values_list("learned_text", flat=True)), ["Aprendizaje inicial.", "Aprendizaje corregido."])
+        self.assertFalse(Notification.objects.filter(source_id=lesson.pk, template_code="treatment_learned_lesson_published").exists())
+        self.assertEqual(self.client.post(f"{url}send-for-publication/").status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.patch(url, {"has_learning": "true", "learned_text": "Tarde", "procedure_modified": "false"}, format="multipart").status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self.client.post(f"{url}publish/").status_code, status.HTTP_403_FORBIDDEN)
+        self.client.force_authenticate(user=self.admin)
+        published = self.client.post(f"{url}publish/")
+        self.assertEqual(published.status_code, status.HTTP_200_OK)
+        lesson.refresh_from_db()
+        treatment.refresh_from_db()
+        self.assertEqual(lesson.status, "published")
+        self.assertIsNotNone(lesson.published_at)
+        self.assertEqual(lesson.published_by, self.admin)
+        self.assertIsNotNone(treatment.formally_closed_at)
+        history = AnomalyStatusHistory.objects.filter(anomaly=self.anomaly_one, document_snapshot__event="treatment.learned_lesson.published").get()
+        self.assertEqual(history.document_snapshot["lesson"]["learned_text"], "Aprendizaje corregido.")
+        self.assertEqual(len(history.document_snapshot["versions"]), 2)
+        self.assertTrue(Notification.objects.filter(source_id=lesson.pk, template_code="treatment_learned_lesson_published").exists())
+        self.assertEqual(self.client.post(f"{url}publish/").status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_procedure_action_required_but_pending_action_does_not_block_publication(self):
+        treatment = self._effective_lesson_treatment()
+        url = f"/api/v1/actions/learned-lessons/{treatment.pk}/"
+        self.assertEqual(self._save_lesson(treatment, modified=True).status_code, status.HTTP_200_OK)
+        blocked = self.client.post(f"{url}send-for-publication/")
+        self.assertEqual(blocked.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("action", blocked.data)
+        self.client.force_authenticate(user=self.admin)
+        rejected = self.client.post(f"{url}publish/")
+        self.assertEqual(rejected.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("lesson", rejected.data)
+        self.client.force_authenticate(user=self.task_user)
+        incomplete = self.client.post(f"{url}derived-actions/", {"title": "Actualizar instructivo"}, format="json")
+        self.assertEqual(incomplete.status_code, status.HTTP_400_BAD_REQUEST)
+        created = self.client.post(f"{url}derived-actions/", {
+            "title": "Actualizar instructivo", "description": "Publicar la nueva version.",
+            "responsible": str(self.other_task_user.pk), "execution_date": timezone.localdate().isoformat(),
+        }, format="json")
+        self.assertEqual(created.status_code, status.HTTP_200_OK)
+        task = TreatmentTask.objects.get(derived_from_lesson__treatment=treatment)
+        self.assertEqual(task.status, "pending")
+        self.assertEqual(self.client.post(f"{url}send-for-publication/").status_code, status.HTTP_200_OK)
+        self.client.force_authenticate(user=self.admin)
+        self.assertEqual(self.client.post(f"{url}publish/").status_code, status.HTTP_200_OK)
+        task.refresh_from_db()
+        self.assertEqual(task.status, "pending")
+        self.client.force_authenticate(user=self.other_task_user)
+        changed = self.client.patch(f"/api/v1/actions/treatments/{treatment.pk}/tasks/{task.pk}/", {"status": "completed", "evidence_note": "Instructivo actualizado."}, format="json")
+        self.assertEqual(changed.status_code, status.HTTP_200_OK)
+
+    def test_derived_action_without_root_cause_can_change_status_as_manager(self):
+        treatment = self._effective_lesson_treatment()
+        lesson_url = f"/api/v1/actions/learned-lessons/{treatment.pk}/"
+        self.assertEqual(self._save_lesson(treatment, modified=True).status_code, status.HTTP_200_OK)
+        created = self.client.post(f"{lesson_url}derived-actions/", {
+            "title": "Actualizar instructivo", "responsible": str(self.admin.pk),
+            "execution_date": timezone.localdate().isoformat(),
+        }, format="json")
+        self.assertEqual(created.status_code, status.HTTP_200_OK)
+        task = TreatmentTask.objects.get(derived_from_lesson__treatment=treatment)
+        task_url = f"/api/v1/actions/treatments/{treatment.pk}/tasks/{task.pk}/"
+        self.client.force_authenticate(user=self.admin)
+        started = self.client.patch(task_url, {
+            "title": task.title, "responsible": str(self.admin.pk),
+            "execution_date": task.execution_date.isoformat(),
+            "status": "in_progress", "evidence_note": "Comenzo la revision del instructivo.",
+            "root_cause_ids": [],
+        }, format="json")
+        self.assertEqual(started.status_code, status.HTTP_200_OK)
+        task.refresh_from_db()
+        self.assertEqual(task.status, "in_progress")
+        self.assertEqual(task.root_causes.count(), 0)
+        completed = self.client.patch(task_url, {
+            "status": "completed", "evidence_note": "Instructivo actualizado.",
+        }, format="json")
+        self.assertEqual(completed.status_code, status.HTTP_200_OK)
 
     def test_effective_validation_closes_all_linked_anomalies_and_registers_history(self):
         treatment = self._prepare_treatment_for_validation()

@@ -21,6 +21,7 @@ import { formatDate, formatDateTime, toDateTimeLocalValue, toOffsetIso } from ".
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
+import { TreatmentStartDeadline } from "../../../components/TreatmentStartDeadline";
 import { PaginationControls } from "../../../components/PaginationControls";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
@@ -41,12 +42,8 @@ type TaskDraft = {
 
 const METHOD_OPTIONS = [
   { value: "", label: "Sin definir" },
-  { value: "five_whys", label: "5 Why" },
+  { value: "five_whys", label: "5 WHY" },
   { value: "6m", label: "6M" },
-  { value: "ishikawa", label: "Ishikawa" },
-  { value: "a3", label: "A3" },
-  { value: "8d", label: "8D" },
-  { value: "other", label: "Otro" },
 ] as const;
 
 const EVIDENCE_ACCEPT = "image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.odt,.ods,.zip";
@@ -936,7 +933,7 @@ return (
                     <StatusBadge value={selectedTreatment.status} overdue={selectedTreatment.is_overdue} />
                   </div>
                   <dl className="key-grid compact treatment-origin-data">
-                    <div><dt>Fecha límite</dt><dd>{formatDate(selectedTreatment.deadline)}</dd></div>
+                    <div><dt>Fecha límite de inicio del tratamiento</dt><dd><TreatmentStartDeadline date={selectedTreatment.deadline} /></dd></div>
                     <div>
                       <dt>Comentario de creación</dt>
                       <dd>{selectedTreatment.creation_comment?.trim() || "Sin comentario"}</dd>
@@ -954,14 +951,14 @@ return (
 
                   <div className="treatment-tab-row">
                     <button
-                      className={`button button-secondary${selectedTab === "agenda" ? " active" : ""}`}
+                      className={`button button-secondary treatment-tab-agenda${selectedTab === "agenda" ? " active" : ""}`}
                       onClick={() => setSelectedTab("agenda")}
                       type="button"
                     >
                       Vista 1 - Convocatoria
                     </button>
                     <button
-                      className={`button button-secondary${selectedTab === "analysis" ? " active" : ""}`}
+                      className={`button button-secondary treatment-tab-analysis${selectedTab === "analysis" ? " active" : ""}`}
                       onClick={() => setSelectedTab("analysis")}
                       type="button"
                     >
@@ -1182,7 +1179,7 @@ return (
                           </select>
                         </label>
                         <label className="field">
-                          <span>Observaciones de tratamiento</span>
+                          <span>Detalle de análisis</span>
                           <textarea disabled={treatmentLocked} onChange={(event) => setObservations(event.target.value)} rows={4} value={observations} />
                         </label>
                       </div>

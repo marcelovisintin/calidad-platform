@@ -945,6 +945,29 @@ class AnomalyCreateApiTests(APITestCase):
             format="json",
         )
 
+        blocked = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{create_response.data['id']}/complete/",
+            {"completed_at": timezone.localdate().isoformat()}, format="json",
+        )
+        self.assertEqual(blocked.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("evidence", blocked.data)
+        uploaded = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{create_response.data['id']}/evidences/",
+            {"file": SimpleUploadedFile("evidencia.txt", b"Trabajo realizado", content_type="text/plain"), "note": "Evidencia propia"},
+            format="multipart",
+        )
+        self.assertEqual(uploaded.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(str(uploaded.data["observation_action"]), create_response.data["id"])
+        self.assertEqual(uploaded.data["note"], "Evidencia propia")
+        pending_action = ObservationAction.objects.get(pk=create_response.data["id"])
+        self.assertEqual(pending_action.status, "pending")
+        self.assertIsNone(pending_action.completed_at)
+        work_items = self.client.get("/api/v1/actions/work-items/?source=observation")
+        work_item = next(item for item in work_items.data["results"] if item["id"] == create_response.data["id"])
+        self.assertEqual(work_item["evidences"][0]["id"], uploaded.data["id"])
+        self.assertEqual(work_item["status"], "pending")
+        self.assertTrue(work_item["can_update_status"])
+        self.assertIn("attachments/", work_item["evidences"][0]["file_url"])
         complete_response = self.client.post(
             f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{create_response.data['id']}/complete/",
             {"completed_at": timezone.localdate().isoformat()},
@@ -994,30 +1017,31 @@ class AnomalyCreateApiTests(APITestCase):
             },
             format="json",
         )
-        self.assertEqual(pending_effectiveness.status_code, status.HTTP_200_OK)
-        self.assertEqual(pending_effectiveness.data["current_status"], AnomalyStatus.IN_TREATMENT)
-        self.assertEqual(pending_effectiveness.data["current_stage"], AnomalyStage.EXECUTION_AND_FOLLOW_UP)
-        self.assertIsNone(pending_effectiveness.data["closed_at"])
-        self.assertIn("Accion de referencia: 2", pending_effectiveness.data["effectiveness_checks"][0]["evidence_summary"])
-        effectiveness_audit = AuditEvent.objects.filter(
-            entity_id=anomaly.pk,
-            action="anomaly.observation_effectiveness_verified",
-        ).latest("created_at")
-        self.assertEqual(effectiveness_audit.after_data["reference_action_sequence"], 2)
-        self.assertEqual(
-            effectiveness_audit.after_data["effectiveness_due_date"],
-            timezone.localdate().isoformat(),
-        )
-        self.assertFalse(effectiveness_audit.after_data["all_actions_completed"])
-        self.assertEqual(len(effectiveness_audit.after_data["pending_action_ids"]), 2)
+        self.assertEqual(pending_effectiveness.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("actions", pending_effectiveness.data)
 
         for action in created_actions:
+            blocked = self.client.post(
+                f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action['id']}/complete/",
+                {"completed_at": timezone.localdate().isoformat()}, format="json",
+            )
+            self.assertEqual(blocked.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertIn("evidence", blocked.data)
+            uploaded = self.client.post(
+                f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action['id']}/evidences/",
+                {"file": SimpleUploadedFile("evidencia.txt", b"Trabajo realizado", content_type="text/plain")},
+                format="multipart",
+            )
+            self.assertEqual(uploaded.status_code, status.HTTP_201_CREATED)
             complete_response = self.client.post(
                 f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action['id']}/complete/",
                 {"completed_at": timezone.localdate().isoformat()},
                 format="json",
             )
             self.assertEqual(complete_response.status_code, status.HTTP_200_OK)
+            anomaly.refresh_from_db()
+            if action != created_actions[-1]:
+                self.assertEqual(anomaly.current_status, AnomalyStatus.IN_TREATMENT)
 
         anomaly.refresh_from_db()
         self.assertEqual(anomaly.current_status, AnomalyStatus.PENDING_VERIFICATION)
@@ -1059,6 +1083,12 @@ class AnomalyCreateApiTests(APITestCase):
             },
             format="json",
         )
+        uploaded = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action_response.data['id']}/evidences/",
+            {"file": SimpleUploadedFile("evidencia.txt", b"Trabajo realizado", content_type="text/plain")},
+            format="multipart",
+        )
+        self.assertEqual(uploaded.status_code, status.HTTP_201_CREATED)
         self.client.post(
             f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action_response.data['id']}/complete/",
             {"completed_at": timezone.localdate().isoformat()},
@@ -1177,6 +1207,12 @@ class AnomalyCreateApiTests(APITestCase):
             },
             format="json",
         )
+        uploaded = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action_response.data['id']}/evidences/",
+            {"file": SimpleUploadedFile("evidencia.txt", b"Trabajo realizado", content_type="text/plain")},
+            format="multipart",
+        )
+        self.assertEqual(uploaded.status_code, status.HTTP_201_CREATED)
         self.client.post(
             f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action_response.data['id']}/complete/",
             {"completed_at": timezone.localdate().isoformat()},

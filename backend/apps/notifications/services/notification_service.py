@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from datetime import datetime, time
+from uuid import UUID
 
 from django.conf import settings
 from django.db import transaction
@@ -120,6 +121,50 @@ def _treatment_involved_users(treatment) -> list:
         if task.responsible_id
     )
     users.append(getattr(treatment, "effectiveness_responsible", None))
+    return _unique_active_users(users)
+
+
+def _treatment_historical_users(treatment) -> list:
+    users = _treatment_involved_users(treatment)
+    users.extend([getattr(treatment, "created_by", None),
+                  getattr(treatment.primary_anomaly, "reporter", None),
+                  getattr(treatment.primary_anomaly, "owner", None)])
+    from apps.accounts.models import User
+    from apps.audit.models import AuditEvent
+    from apps.anomalies.models import AnomalyStatusHistory
+    anomaly_ids = set(treatment.anomaly_links.values_list("anomaly_id", flat=True))
+    anomaly_ids.add(treatment.primary_anomaly_id)
+    history_ids = set(AnomalyStatusHistory.objects.filter(
+        anomaly_id__in=anomaly_ids
+    ).values_list("changed_by_id", flat=True))
+    history_ids.update(AuditEvent.objects.filter(
+        entity_type="actions.treatment", entity_id=treatment.pk
+    ).exclude(actor_id__isnull=True).values_list("actor_id", flat=True))
+    participation_events = AuditEvent.objects.filter(
+        entity_type="actions.treatment", entity_id=treatment.pk,
+        action__in=["treatment.participant_added", "treatment.participant_updated", "treatment.participant_removed"],
+    ).only("before_data", "after_data")
+    for event in participation_events:
+        for data in (event.before_data or {}, event.after_data or {}):
+            if data.get("user_id"):
+                history_ids.add(data["user_id"])
+    for event in AuditEvent.objects.filter(
+        entity_type="actions.treatment", entity_id=treatment.pk,
+    ).only("before_data", "after_data"):
+        for data in (event.before_data or {}, event.after_data or {}):
+            for key in ("responsible_id", "effectiveness_responsible_id", "user_id"):
+                value = data.get(key)
+                if value:
+                    try:
+                        history_ids.add(UUID(str(value)))
+                    except (ValueError, TypeError):
+                        pass
+    history_ids.update(NotificationRecipient.objects.filter(
+        notification__source_type="actions.treatmenttask",
+        notification__source_id__in=treatment.tasks.values_list("pk", flat=True),
+        notification__template_code="treatment_task_assigned",
+    ).values_list("user_id", flat=True))
+    users.extend(User.objects.filter(pk__in=history_ids))
     return _unique_active_users(users)
 
 
@@ -1497,7 +1542,7 @@ def notify_treatment_closed(
 
 def notify_treatment_learned_lesson_published(*, lesson, actor=None, request_id: str = ""):
     treatment = lesson.treatment
-    event_key = str(lesson.pk)
+    event_key = lesson.published_at.isoformat() if lesson.published_at else str(lesson.pk)
     if _event_notification_exists(
         source_type="actions.treatmentlearnedlesson",
         source_id=lesson.pk,
@@ -1505,7 +1550,7 @@ def notify_treatment_learned_lesson_published(*, lesson, actor=None, request_id:
         event_key=event_key,
     ):
         return None
-    recipients = _treatment_involved_users(treatment)
+    recipients = _treatment_historical_users(treatment)
     if lesson.has_learning:
         learning_summary = (lesson.learned_text or "").strip() or "Se registró una lección aprendida."
     else:
@@ -1544,6 +1589,7 @@ def notify_treatment_learned_lesson_published(*, lesson, actor=None, request_id:
         email_template_code=TREATMENT_LEARNED_LESSON_TEMPLATE,
         email_context={
             "treatment_code": treatment.code,
+            "anomaly_code": treatment.primary_anomaly.code,
             "learning_summary": learning_summary,
             "procedure_summary": procedure_summary,
         },

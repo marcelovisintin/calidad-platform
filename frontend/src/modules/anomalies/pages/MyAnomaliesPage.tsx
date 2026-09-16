@@ -458,7 +458,7 @@ export function MyAnomaliesPage() {
                               {pendingForItem.isNonconformity ? (
                                 <section className="classification-new-treatment-fields">
                                   <label className="field">
-                                    <span>Fecha límite del tratamiento</span>
+                                    <span>Fecha límite de inicio del tratamiento</span>
                                     <input
                                       onChange={(event) =>
                                         setPendingClassification((current) => current && current.anomalyId === item.id

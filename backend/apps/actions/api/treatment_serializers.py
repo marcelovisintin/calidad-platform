@@ -140,11 +140,18 @@ class TreatmentLearnedLessonSerializer(serializers.ModelSerializer):
     saved_by = UserSummarySerializer(read_only=True)
     evidences = TreatmentLearnedLessonEvidenceSerializer(many=True, read_only=True)
     revisions = TreatmentLearnedLessonRevisionSerializer(many=True, read_only=True)
+    derived_actions = serializers.SerializerMethodField()
+
+    def get_derived_actions(self, obj):
+        return TreatmentTaskSerializer(obj.derived_actions.all(), many=True, context=self.context).data
 
     class Meta:
         model = TreatmentLearnedLesson
         fields = (
             "id",
+            "status",
+            "published_at",
+            "published_by",
             "has_learning",
             "learned_text",
             "no_learning_reason",
@@ -154,6 +161,7 @@ class TreatmentLearnedLessonSerializer(serializers.ModelSerializer):
             "saved_at",
             "evidences",
             "revisions",
+            "derived_actions",
             "created_at",
             "updated_at",
         )
@@ -212,6 +220,7 @@ class TreatmentTaskSerializer(serializers.ModelSerializer):
             "code",
             "title",
             "description",
+            "derived_from_lesson",
             "status",
             "execution_date",
             "completed_at",
@@ -318,7 +327,7 @@ class TreatmentAuditEventSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AuditEvent
-        fields = ("id", "action", "actor", "created_at")
+        fields = ("id", "action", "actor", "after_data", "created_at")
 
 
 class TreatmentRootCauseSerializer(serializers.ModelSerializer):
@@ -369,6 +378,7 @@ class TreatmentListSerializer(serializers.ModelSerializer):
             "id",
             "code",
             "status",
+            "formally_closed_at",
             "deadline",
             "creation_comment",
             "scheduled_for",
@@ -453,6 +463,7 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
             "id",
             "code",
             "status",
+            "formally_closed_at",
             "deadline",
             "creation_comment",
             "scheduled_for",
@@ -592,7 +603,7 @@ class TreatmentUpdateTaskSerializer(serializers.Serializer):
     root_cause_ids = serializers.ListField(
         child=serializers.PrimaryKeyRelatedField(queryset=TreatmentRootCause.objects.all()),
         required=False,
-        allow_empty=False,
+        allow_empty=True,
     )
     title = serializers.CharField(required=False)
     description = serializers.CharField(required=False, allow_blank=True)
@@ -643,6 +654,13 @@ class TreatmentLearnedLessonWriteSerializer(serializers.Serializer):
         attrs["no_learning_reason"] = no_learning_reason if not has_learning else ""
         attrs["procedure_modification_notes"] = procedure_notes if procedure_modified else ""
         return attrs
+
+
+class LessonDerivedActionWriteSerializer(serializers.Serializer):
+    title = serializers.CharField(allow_blank=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    responsible = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True))
+    execution_date = serializers.DateField()
 
 
 class TreatmentEvidenceWriteSerializer(serializers.Serializer):

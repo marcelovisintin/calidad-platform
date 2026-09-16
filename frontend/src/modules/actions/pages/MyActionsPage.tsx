@@ -1,10 +1,10 @@
 import { FormEvent, KeyboardEvent, MouseEvent, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { fetchUsers } from "../../../api/accounts";
 import { fetchActionWorkItems } from "../../../api/actions";
-import { completeObservationAction } from "../../../api/anomalies";
+import { addObservationActionEvidence, completeObservationAction, fetchAnomalyDetail } from "../../../api/anomalies";
 import { normalizeProtectedFileUrl, openAuthenticatedFile } from "../../../api/files";
 import { addTreatmentTaskEvidence, updateTreatmentTask } from "../../../api/treatments";
-import type { ActionWorkItem, ActionWorkItemSource } from "../../../api/types";
+import type { ActionWorkItem, ActionWorkItemSource, ObservationAction } from "../../../api/types";
 import { formatDate, formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
@@ -103,6 +103,7 @@ export function MyActionsPage() {
   const [taskStatusEvidenceNote, setTaskStatusEvidenceNote] = useState("");
   const [taskEvidenceInputKey, setTaskEvidenceInputKey] = useState(0);
   const [observationCompletedAt, setObservationCompletedAt] = useState(getTodayInputValue());
+  const [observationProgress, setObservationProgress] = useState<{ anomalyId: string; code: string; actions: ObservationAction[] } | null>(null);
 
   const deferredQuery = useDeferredValue(query);
   const deferredAnomalyFilter = useDeferredValue(anomalyFilter);
@@ -142,6 +143,7 @@ export function MyActionsPage() {
   usePublishHelpWorkContext(selectedWorkItem ? resolveTaskHelpWorkContext(selectedWorkItem) : null);
 
   useEffect(() => {
+    if (!data) return;
     const firstKey = data?.results?.[0] ? getWorkItemKey(data.results[0]) : "";
     if (!data?.results?.length) {
       setSelectedWorkItemKey("");
@@ -201,6 +203,10 @@ export function MyActionsPage() {
   const handleUpdateTask = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedWorkItem || selectedWorkItem.source !== "treatment") return;
+    if (!selectedWorkItem.evidences.length) {
+      setFormError("Debe cargar evidencia antes de editar los datos de la accion.");
+      return;
+    }
     if (!selectedWorkItem.can_update_status) {
       setFormError("No tienes permisos para actualizar esta acción.");
       return;
@@ -232,8 +238,9 @@ export function MyActionsPage() {
               execution_date: taskDraft.execution_date || null,
               status: taskDraft.status,
               evidence_note: statusChanged ? taskStatusEvidenceNote.trim() : undefined,
-              root_cause_ids: selectedWorkItem.root_causes.map((cause) => cause.id),
-              anomaly_ids: taskDraft.anomaly_ids,
+              ...(selectedWorkItem.root_causes.length
+                ? { root_cause_ids: selectedWorkItem.root_causes.map((cause) => cause.id) }
+                : {}),
             }
           : {
               status: taskDraft.status,
@@ -247,6 +254,10 @@ export function MyActionsPage() {
   const handleCompleteObservation = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedWorkItem || selectedWorkItem.source !== "observation") return;
+    if (!selectedWorkItem.evidences.length) {
+      setFormError("Debe cargar evidencia propia de esta accion antes de finalizarla.");
+      return;
+    }
     if (!selectedWorkItem.can_update_status) {
       setFormError("No tienes permisos para finalizar esta accion de Observacion.");
       return;
@@ -257,7 +268,11 @@ export function MyActionsPage() {
       return;
     }
     await runMutation(
-      () => completeObservationAction(anomalyId, selectedWorkItem.id, observationCompletedAt).then(() => undefined),
+      async () => {
+        await completeObservationAction(anomalyId, selectedWorkItem.id, observationCompletedAt);
+        const detail = await fetchAnomalyDetail(anomalyId);
+        setObservationProgress({ anomalyId, code: detail.code, actions: detail.observation_actions });
+      },
       "Accion de Observacion finalizada.",
     );
   };
@@ -272,8 +287,8 @@ export function MyActionsPage() {
   };
 
   const handleAddTaskEvidence = async () => {
-    if (!selectedWorkItem || selectedWorkItem.source !== "treatment") return;
-    if (!selectedWorkItem.can_add_evidence || !selectedWorkItem.treatment?.id) {
+    if (!selectedWorkItem) return;
+    if (!selectedWorkItem.can_add_evidence) {
       setFormError("No tienes permisos para cargar evidencias en esta acción.");
       return;
     }
@@ -282,10 +297,15 @@ export function MyActionsPage() {
       return;
     }
     await runMutation(async () => {
-      await addTreatmentTaskEvidence(selectedWorkItem.treatment!.id, selectedWorkItem.id, {
+      const payload = {
         file: taskEvidenceFile,
         note: taskEvidenceNote,
-      });
+      };
+      if (selectedWorkItem.source === "observation") {
+        await addObservationActionEvidence(selectedWorkItem.anomalies[0].id, selectedWorkItem.id, payload);
+      } else {
+        await addTreatmentTaskEvidence(selectedWorkItem.treatment!.id, selectedWorkItem.id, payload);
+      }
       setTaskEvidenceFile(null);
       setTaskEvidenceNote("");
       setTaskEvidenceInputKey((current) => current + 1);
@@ -385,6 +405,7 @@ export function MyActionsPage() {
       {message ? <div className="panel">{message}</div> : null}
       {formError ? <div className="panel danger">{formError}</div> : null}
 
+      {observationProgress ? <section className="panel form-section" aria-live="polite"><h3>Acciones de la observación {observationProgress.code}</h3><p>Completadas: {observationProgress.actions.filter((action) => action.status === "completed").length} · Pendientes: {observationProgress.actions.filter((action) => action.status !== "completed").length}</p>{observationProgress.actions.map((action) => <div className="list-card compact" key={action.id}><strong>Acción {action.sequence}: {action.detail}</strong><StatusBadge value={action.status} /></div>)}<p>{observationProgress.actions.every((action) => action.status === "completed") ? "Todas las acciones están completadas. Puede continuar en Observaciones con la verificación de eficacia cuando se alcance la fecha de validación." : "Quedan acciones pendientes. Deben completarse todas antes de verificar la eficacia."}</p></section> : null}
       <DataState
         loading={loading || usersLoading}
         error={error}
@@ -406,10 +427,18 @@ export function MyActionsPage() {
               <div><dt>Fecha terminada</dt><dd>{formatDate(selectedWorkItem.completed_on)}</dd></div>
               <div><dt>Finalizada por</dt><dd>{selectedWorkItem.completed_by ? getUserLabel(selectedWorkItem.completed_by) : "-"}</dd></div>
             </dl>
+            <section className="form-section nested-form">
+              <div className="section-head compact"><h3>Evidencia de la acción</h3>{!selectedIsTerminal ? <button className="button button-primary" disabled={busy || !selectedWorkItem.can_add_evidence || !taskEvidenceFile} onClick={() => void handleAddTaskEvidence()} type="button">Cargar evidencia</button> : null}</div>
+              {selectedWorkItem.evidences.map((evidence) => <div className="list-card compact" key={evidence.id}><a href={normalizeProtectedFileUrl(evidence.file_url)} onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)}>{evidence.original_name}</a><p>{evidence.note || "Sin nota"}</p></div>)}
+              {!selectedIsTerminal ? <><label className="field"><span>Archivo</span><input accept={EVIDENCE_ACCEPT} disabled={!selectedWorkItem.can_add_evidence || busy} key={taskEvidenceInputKey} onChange={(event) => setTaskEvidenceFile(event.target.files?.[0] ?? null)} type="file" /></label><label className="field"><span>Nota de evidencia (opcional)</span><textarea disabled={!selectedWorkItem.can_add_evidence || busy} onChange={(event) => setTaskEvidenceNote(event.target.value)} value={taskEvidenceNote} /></label></> : null}
+            </section>
             {!selectedIsTerminal && selectedWorkItem.can_update_status ? (
               <form className="form-section nested-form" onSubmit={handleCompleteObservation}>
+                {!selectedWorkItem.evidences.length ? <p role="status">Cargue evidencia para habilitar los datos y la finalización de esta acción.</p> : null}
+                <fieldset className="action-data-fields" disabled={busy || !selectedWorkItem.evidences.length}>
                 <div className="section-head compact"><h3>Finalizar accion</h3><button className="button button-primary" disabled={busy || !observationCompletedAt} type="submit">Marcar como finalizada</button></div>
                 <label className="field"><span>Fecha real de finalizacion</span><input onChange={(event) => setObservationCompletedAt(event.target.value)} required type="date" value={observationCompletedAt} /></label>
+                </fieldset>
               </form>
             ) : !selectedIsTerminal ? <div className="panel info compact-inline-panel"><p>Esta accion se muestra en modo consulta. Solo el responsable autorizado puede finalizarla.</p></div> : null}
           </section>
@@ -426,19 +455,6 @@ export function MyActionsPage() {
               <div><dt>Responsable actual</dt><dd>{selectedWorkItem.responsible ? getUserLabel(selectedWorkItem.responsible) : "Sin asignar"}</dd></div>
               <div><dt>Fecha terminada</dt><dd>{formatDate(selectedWorkItem.completed_on)}</dd></div>
             </dl>
-            {!selectedIsTerminal ? (
-              <form className="form-section nested-form" onSubmit={handleUpdateTask}>
-                <div className="section-head compact"><h3>Datos de la acción</h3><div className="task-save-controls">{statusEvidenceError ? <span className="inline-form-alert" role="alert">{statusEvidenceError}</span> : null}<button className="button button-primary" disabled={busy || !selectedWorkItem.can_update_status} type="submit">Guardar acción</button></div></div>
-                <div className="form-grid">
-                  <label className="field"><span>Acción</span><input disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("title", event.target.value)} required type="text" value={taskDraft.title} /></label>
-                  <label className="field"><span>Estado</span><select disabled={!selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("status", event.target.value as TaskDraft["status"])} value={taskDraft.status}>{getAvailableTaskStatusOptions(selectedWorkItem).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-                  <label className="field"><span>Responsable</span><select disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("responsible", event.target.value)} value={taskDraft.responsible}><option value="">Sin asignar</option>{(usersData?.results ?? []).map((user) => <option key={user.id} value={user.id}>{getUserLabel(user)}</option>)}</select></label>
-                  <label className="field"><span>Fecha límite de ejecución</span><input disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("execution_date", event.target.value)} type="date" value={taskDraft.execution_date} /></label>
-                </div>
-                <label className="field"><span>Descripcion</span><textarea disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("description", event.target.value)} rows={3} value={taskDraft.description} /></label>
-                {taskDraft.status !== selectedWorkItem.status ? <label className="field"><span>Nota de evidencia del cambio de estado</span><textarea onChange={(event) => setTaskStatusEvidenceNote(event.target.value)} required rows={3} value={taskStatusEvidenceNote} /></label> : null}
-              </form>
-            ) : null}
             <section className="form-section nested-form">
               <div className="section-head compact"><h3>Evidencia de la acción</h3>{!selectedIsTerminal ? <button className="button button-primary" disabled={busy || !selectedWorkItem.can_add_evidence || !taskEvidenceFile} onClick={() => void handleAddTaskEvidence()} type="button">Cargar evidencia</button> : null}</div>
               <div className="stack-list compact">
@@ -451,6 +467,22 @@ export function MyActionsPage() {
                 {selectedWorkItem.evidences.length ? selectedWorkItem.evidences.map((evidence) => <div className="list-card compact" key={evidence.id}><div className="evidence-block"><a href={normalizeProtectedFileUrl(evidence.file_url)} onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)} rel="noopener noreferrer" target="_blank">{evidence.original_name}</a><small>{formatDateTime(evidence.created_at)}</small><p>{evidence.note || "Sin nota"}</p></div></div>) : <p className="muted-copy">Todavía no hay evidencias cargadas en esta acción.</p>}
               </div>
             </section>
+            {!selectedIsTerminal ? (
+              <form className="form-section nested-form" onSubmit={handleUpdateTask}>
+                {!selectedWorkItem.evidences.length ? <p role="status">Cargue evidencia para habilitar los datos de esta acción.</p> : null}
+                <fieldset className="action-data-fields" disabled={busy || !selectedWorkItem.evidences.length}>
+                <div className="section-head compact"><h3>Datos de la acción</h3><div className="task-save-controls">{statusEvidenceError ? <span className="inline-form-alert" role="alert">{statusEvidenceError}</span> : null}<button className="button button-primary" disabled={busy || !selectedWorkItem.can_update_status} type="submit">Guardar acción</button></div></div>
+                <div className="form-grid">
+                  <label className="field"><span>Acción</span><input disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("title", event.target.value)} required type="text" value={taskDraft.title} /></label>
+                  <label className="field"><span>Estado</span><select disabled={!selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("status", event.target.value as TaskDraft["status"])} value={taskDraft.status}>{getAvailableTaskStatusOptions(selectedWorkItem).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+                  <label className="field"><span>Responsable</span><select disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("responsible", event.target.value)} value={taskDraft.responsible}><option value="">Sin asignar</option>{(usersData?.results ?? []).map((user) => <option key={user.id} value={user.id}>{getUserLabel(user)}</option>)}</select></label>
+                  <label className="field"><span>Fecha límite de ejecución</span><input disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("execution_date", event.target.value)} type="date" value={taskDraft.execution_date} /></label>
+                </div>
+                <label className="field"><span>Descripcion</span><textarea disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("description", event.target.value)} rows={3} value={taskDraft.description} /></label>
+                {taskDraft.status !== selectedWorkItem.status ? <label className="field"><span>Nota de evidencia del cambio de estado</span><textarea onChange={(event) => setTaskStatusEvidenceNote(event.target.value)} required rows={3} value={taskStatusEvidenceNote} /></label> : null}
+                </fieldset>
+              </form>
+            ) : null}
           </section>
         ) : null}
 
@@ -463,7 +495,7 @@ export function MyActionsPage() {
             const key = getWorkItemKey(item);
             return (
               <article className={`panel action-card work-list-card${selectedWorkItemKey === key ? " active" : ""}`} key={key} onClick={() => setSelectedWorkItemKey(key)} onKeyDown={(event) => handleCardKeyDown(event, item)} role="button" tabIndex={0}>
-                <div className="section-head compact work-card-header"><div className="work-card-main"><div className="work-card-heading"><SourceBadge source={item.source} /><strong>{item.code || item.title}</strong><span>{item.title}</span></div><small>{item.description || "Sin descripcion."}</small><div className="work-card-meta"><small>Fecha prevista: {formatDate(item.due_date)}</small><small>Responsable: {item.responsible ? getUserLabel(item.responsible) : "Sin asignar"}</small></div></div><StatusBadge value={item.status} overdue={item.is_overdue} /></div>
+                <div className="section-head compact work-card-header"><div className="work-card-main"><div className="work-card-heading"><SourceBadge source={item.source} /><strong>{item.code || item.title}</strong><span>{item.title}</span></div>{item.derived_from_lesson ? <small>Acción derivada de Lección Aprendida</small> : null}<small>{item.description || "Sin descripcion."}</small><div className="work-card-meta"><small>Fecha prevista: {formatDate(item.due_date)}</small><small>Responsable: {item.responsible ? getUserLabel(item.responsible) : "Sin asignar"}</small></div></div><StatusBadge value={item.status} overdue={item.is_overdue} /></div>
               </article>
             );
           })}

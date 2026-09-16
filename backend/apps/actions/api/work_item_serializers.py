@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from apps.anomalies.api.serializers import AnomalyAttachmentSerializer
 
 from apps.actions.api.treatment_serializers import (
     TreatmentTaskEvidenceSerializer,
@@ -41,6 +42,7 @@ class WorkItemStatusEvidenceSerializer(serializers.Serializer):
 class ActionWorkItemSerializer(serializers.Serializer):
     id = serializers.UUIDField(read_only=True)
     source = serializers.ChoiceField(choices=("treatment", "observation"), read_only=True)
+    derived_from_lesson = serializers.BooleanField(read_only=True, default=False)
     code = serializers.CharField(read_only=True, allow_blank=True)
     title = serializers.CharField(read_only=True)
     description = serializers.CharField(read_only=True, allow_blank=True)
@@ -54,7 +56,7 @@ class ActionWorkItemSerializer(serializers.Serializer):
     treatment = WorkItemTreatmentSerializer(read_only=True, allow_null=True)
     anomalies = WorkItemAnomalySerializer(many=True, read_only=True)
     root_causes = TreatmentTaskHistoryRootCauseSerializer(many=True, read_only=True)
-    evidences = TreatmentTaskEvidenceSerializer(many=True, read_only=True)
+    evidences = serializers.SerializerMethodField()
     status_evidences = WorkItemStatusEvidenceSerializer(many=True, read_only=True)
     can_cancel = serializers.BooleanField(read_only=True)
     can_manage = serializers.BooleanField(read_only=True)
@@ -62,3 +64,7 @@ class ActionWorkItemSerializer(serializers.Serializer):
     can_add_evidence = serializers.BooleanField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
+
+    def get_evidences(self, obj):
+        serializer = AnomalyAttachmentSerializer if obj["source"] == "observation" else TreatmentTaskEvidenceSerializer
+        return serializer(obj["evidences"], many=True, context=self.context).data

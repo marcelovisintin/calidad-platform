@@ -6,7 +6,9 @@ import type { TreatmentDetail, TreatmentSummary } from "../../../api/types";
 import { formatDate, formatDateTime, humanizeToken } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
+import { TreatmentStartDeadline } from "../../../components/TreatmentStartDeadline";
 import { PaginationControls } from "../../../components/PaginationControls";
+import { PublishedLessonSnapshot } from "../../../components/PublishedLessonSnapshot";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
@@ -68,6 +70,8 @@ const TREATMENT_AUDIT_ACTION_LABELS: Record<string, string> = {
   "treatment.evidence_added": "Evidencia del tratamiento agregada",
   "treatment.task_evidence_added": "Evidencia de acción agregada",
   "treatment.learned_lesson.saved": "Leccion aprendida guardada",
+  "treatment.learned_lesson.ready": "Leccion aprendida enviada para publicacion",
+  "treatment.learned_lesson.published": "Leccion aprendida publicada y cierre formal",
 };
 
 function treatmentAuditActionLabel(action: string) {
@@ -290,7 +294,7 @@ export function TreatmentTrackingPage() {
                       <div><dt>Codigo</dt><dd>{detail.code}</dd></div>
                       <div><dt>Estado</dt><dd>{humanizeToken(treatmentDisplayStatus(detail))}</dd></div>
                       <div><dt>Area</dt><dd>{detail.primary_anomaly.area?.name || selectedProcess}</dd></div>
-                      <div><dt>Fecha límite</dt><dd>{formatDate(detail.deadline)}</dd></div>
+                      <div><dt>Fecha límite de inicio del tratamiento</dt><dd><TreatmentStartDeadline date={detail.deadline} /></dd></div>
                       <div><dt>Programado</dt><dd>{formatDateTime(detail.scheduled_for)}</dd></div>
                       <div><dt>Creado</dt><dd>{formatDateTime(detail.created_at)}</dd></div>
                       <div><dt>Actualizado</dt><dd>{formatDateTime(detail.updated_at)}</dd></div>
@@ -466,6 +470,7 @@ export function TreatmentTrackingPage() {
                           <div>
                             <strong>{treatmentAuditActionLabel(event.action)}</strong>
                             <small>{formatDateTime(event.created_at)} | {event.actor?.full_name || event.actor?.username || "-"}</small>
+                            <PublishedLessonSnapshot data={event.after_data} />
                           </div>
                         </div>
                       )) : <p className="muted-copy">Sin historial registrado para este tratamiento.</p>}

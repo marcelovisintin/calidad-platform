@@ -404,17 +404,18 @@ EMAIL_TEMPLATE_DEFINITIONS = (
     EmailTemplateDefinition(
         code="treatment_learned_lesson_published",
         case_number="16",
-        name="Primera publicación de lección aprendida",
+        name="Publicación de lección aprendida",
         stage="Estandarización y aprendizaje",
-        recipient="Usuarios involucrados en el tratamiento",
+        recipient="Participantes históricos del tratamiento",
         description="Comunica la conclusión y los cambios de procedimientos.",
-        conditions="Solo se envía en la primera publicación y no incluye enlace.",
+        conditions="Se envía al publicar y cerrar formalmente; sin destinatarios duplicados.",
         subject_template="Lección aprendida publicada: {treatment_code}",
         body_template=(
-            "Se publicó el registro de lecciones aprendidas del tratamiento {treatment_code}.\n"
+            "La lección aprendida de la anomalía {anomaly_code} y tratamiento {treatment_code} fue publicada. "
+            "El tratamiento quedó cerrado formalmente.\n"
             "Conclusión: {learning_summary}\nProcedimientos: {procedure_summary}"
         ),
-        fields=(TREATMENT_CODE,
+        fields=(TREATMENT_CODE, ANOMALY_CODE,
                 _field("learning_summary", "Conclusión", "Se ajustó el control de inicio"),
                 _field("procedure_summary", "Procedimientos", "Se modificó el instructivo")),
     ),

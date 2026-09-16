@@ -1,9 +1,11 @@
-import { ChangeEvent, FormEvent, MouseEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { normalizeProtectedFileUrl, openAuthenticatedFile } from "../../../api/files";
 import { fetchObservationLearnedLessons, saveObservationLearnedLesson } from "../../../api/anomalies";
-import { fetchLearnedLessons, saveTreatmentLearnedLesson } from "../../../api/treatments";
-import type { ObservationLearnedLessonItem, TreatmentSummary } from "../../../api/types";
+import { createLessonDerivedAction, fetchLearnedLessons, fetchTreatmentParticipantOptions, publishTreatmentLesson, saveTreatmentLearnedLesson, sendTreatmentLessonForPublication } from "../../../api/treatments";
+import type { ObservationLearnedLessonItem, TreatmentParticipantOption, TreatmentSummary } from "../../../api/types";
 import { formatDate, formatDateTime } from "../../../app/utils";
+import { useAuth } from "../../../app/providers/AuthProvider";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
@@ -56,20 +58,57 @@ function formFromTreatment(treatment: TreatmentSummary): LessonFormState {
 function LearnedLessonCard({
   treatment,
   onSaved,
+  focusDerived,
 }: {
   treatment: TreatmentSummary;
   onSaved: () => Promise<void>;
+  focusDerived: boolean;
 }) {
   const [form, setForm] = useState<LessonFormState>(() => formFromTreatment(treatment));
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionCreated, setActionCreated] = useState(false);
   const lesson = treatment.learned_lesson;
+  const { user } = useAuth();
+  const canEdit = Boolean(user && treatment.effectiveness_responsible?.id === user.id && (!lesson || lesson.status === "draft"));
+  const canCreateDerived = Boolean(user && treatment.effectiveness_responsible?.id === user.id && lesson?.status !== "published" && lesson?.procedure_modified && !actionCreated && !lesson?.derived_actions.some((action) => action.status !== "cancelled"));
+  const canPublish = Boolean(user?.access_level === "administrador" && lesson?.status === "ready");
+  const [participantOptions, setParticipantOptions] = useState<TreatmentParticipantOption[]>([]);
+  const [actionForm, setActionForm] = useState({ title: "", description: "", responsible: "", execution_date: "" });
+  const derivedActionRequired = focusDerived && canCreateDerived;
+
+  useEffect(() => {
+    if (derivedActionRequired) {
+      void fetchTreatmentParticipantOptions(treatment.id).then(setParticipantOptions).catch(() => setParticipantOptions([]));
+    }
+  }, [derivedActionRequired, treatment.id]);
+
+  useEffect(() => {
+    if (!derivedActionRequired) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [derivedActionRequired]);
+
+  const keepDialogFocus = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("input, textarea, select, button:not([disabled])"));
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   useEffect(() => {
     setForm(formFromTreatment(treatment));
-    setMessage(null);
-    setError(null);
+    setActionCreated(Boolean(treatment.learned_lesson?.derived_actions.some((action) => action.status !== "cancelled")));
   }, [treatment]);
 
   const updateForm = (patch: Partial<LessonFormState>) => {
@@ -121,8 +160,8 @@ function LearnedLessonCard({
         evidences: form.evidences,
         confirm_modification: Boolean(lesson),
       });
-      setMessage("Leccion aprendida guardada.");
       await onSaved();
+      setMessage("Leccion aprendida guardada.");
       setForm((current) => ({ ...current, evidences: [] }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar la leccion aprendida.");
@@ -133,6 +172,33 @@ function LearnedLessonCard({
 
   const handleFiles = (event: ChangeEvent<HTMLInputElement>) => {
     updateForm({ evidences: Array.from(event.target.files ?? []) });
+  };
+
+  const runLessonAction = async (kind: "send" | "publish" | "derived") => {
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      if (kind === "derived") {
+        if (!actionForm.title.trim() || !actionForm.responsible || !actionForm.execution_date) {
+          throw new Error("La accion, el responsable y la fecha limite son obligatorios.");
+        }
+        await createLessonDerivedAction(treatment.id, actionForm);
+        setActionCreated(true);
+      } else if (kind === "send") {
+        await sendTreatmentLessonForPublication(treatment.id);
+      } else {
+        if (!window.confirm("¿Publicar la leccion y cerrar formalmente el tratamiento?")) return;
+        await publishTreatmentLesson(treatment.id);
+      }
+      await onSaved();
+      setMessage(kind === "derived" ? "Accion derivada creada." : kind === "send" ? "Leccion enviada para publicacion." : "Leccion publicada y tratamiento cerrado formalmente.");
+      if (kind === "derived") setActionForm({ title: "", description: "", responsible: "", execution_date: "" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo completar la operacion.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleOpenEvidence = async (event: MouseEvent<HTMLAnchorElement>, fileUrl: string, fallbackName: string) => {
@@ -168,12 +234,14 @@ function LearnedLessonCard({
         ) : (
           <p className="muted-copy">Sin leccion aprendida registrada.</p>
         )}
+        <p className="muted-copy">Estado de la leccion: {lesson?.status === "published" ? "Publicada" : lesson?.status === "ready" ? "Lista para publicar" : "Borrador"}. {treatment.formally_closed_at ? `Cierre formal: ${formatDateTime(treatment.formally_closed_at)}` : "Pendiente de cierre formal."}</p>
       </div>
 
       <form className="learned-lesson-form" onSubmit={handleSubmit}>
         {message ? <div className="panel info compact-inline-panel">{message}</div> : null}
         {error ? <div className="panel danger compact-inline-panel">{error}</div> : null}
 
+        <fieldset disabled={!canEdit || saving}>
         <label className="field">
           <span>Hubo un aprendizaje?</span>
           <select value={form.hasLearning} onChange={(event) => updateForm({ hasLearning: event.target.value as LessonFormState["hasLearning"] })}>
@@ -241,11 +309,33 @@ function LearnedLessonCard({
         ) : null}
 
         <div className="form-actions">
-          <button className="button button-primary" disabled={saving} type="submit">
+          <button className="button button-primary" type="submit">
             Guardar cambios
           </button>
         </div>
+        </fieldset>
       </form>
+
+      {derivedActionRequired ? createPortal(
+        <div className="learned-lesson-action-overlay">
+        <div aria-describedby="derived-action-instructions" aria-labelledby="derived-action-title" aria-modal="true" className="panel form-section learned-lesson-derived-action learned-lesson-action-dialog" onKeyDown={keepDialogFocus} role="dialog">
+          <strong id="derived-action-title">Accion derivada de Leccion Aprendida · {treatment.code}</strong>
+          <p className="muted-copy" id="derived-action-instructions">Se modifico un procedimiento. Cree la accion derivada para continuar. Mientras tanto, el resto de la pantalla esta bloqueado; puede consultar la ayuda.</p>
+          {error ? <div className="panel danger compact-inline-panel">{error}</div> : null}
+          <label className="field"><span>Accion</span><input autoFocus value={actionForm.title} onChange={(event) => setActionForm((current) => ({ ...current, title: event.target.value }))} /></label>
+          <label className="field"><span>Descripcion</span><textarea value={actionForm.description} onChange={(event) => setActionForm((current) => ({ ...current, description: event.target.value }))} /></label>
+          <label className="field"><span>Responsable</span><select value={actionForm.responsible} onChange={(event) => setActionForm((current) => ({ ...current, responsible: event.target.value }))}><option value="">Seleccionar...</option>{participantOptions.map((option) => <option value={option.id} key={option.id}>{option.full_name || option.username}</option>)}</select></label>
+          <label className="field"><span>Fecha limite de realizacion</span><input type="date" value={actionForm.execution_date} onChange={(event) => setActionForm((current) => ({ ...current, execution_date: event.target.value }))} /></label>
+          <div className="form-actions">
+            <button className="button button-secondary" onClick={() => window.dispatchEvent(new Event("calidad:open-context-help"))} type="button">Ayuda</button>
+            <button className="button button-primary" disabled={saving} onClick={() => void runLessonAction("derived")} type="button">Crear accion derivada</button>
+          </div>
+        </div>
+        </div>, document.body,
+      ) : null}
+      {lesson?.derived_actions?.length ? <div className="form-section"><strong>Acciones derivadas</strong>{lesson.derived_actions.map((action) => <div className="list-card compact" key={action.id}>{action.code} · {action.title} · {action.responsible?.full_name || "-"} · fecha limite {formatDate(action.execution_date)} · {action.status}</div>)}</div> : null}
+      {canEdit && lesson ? <button className="button button-secondary" disabled={saving} onClick={() => void runLessonAction("send")} type="button">Enviar para publicacion</button> : null}
+      {canPublish ? <button className="button button-primary" disabled={saving} onClick={() => void runLessonAction("publish")} type="button">PUBLICAR</button> : null}
 
       {lesson?.revisions?.length ? (
         <details className="learned-lesson-history">
@@ -517,6 +607,7 @@ function ObservationLearnedLessonCard({
 
 export function LearnedLessonsPage() {
   usePageTitle("Lecciones aprendidas");
+  const { user } = useAuth();
   const [source, setSource] = useState<"treatments" | "observations">("treatments");
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -525,6 +616,12 @@ export function LearnedLessonsPage() {
   const observationTask = useAsyncTask(() => fetchObservationLearnedLessons(page, search), [page, search]);
   const treatments = treatmentTask.data?.results ?? [];
   const observations = observationTask.data?.results ?? [];
+  const focusDerivedTreatmentId = treatments.find((treatment) =>
+    user?.id === treatment.effectiveness_responsible?.id &&
+    treatment.learned_lesson?.procedure_modified &&
+    treatment.learned_lesson.status !== "published" &&
+    !treatment.learned_lesson.derived_actions.some((action) => action.status !== "cancelled")
+  )?.id;
 
   const changeSource = (nextSource: "treatments" | "observations") => {
     setSource(nextSource);
@@ -579,7 +676,7 @@ export function LearnedLessonsPage() {
         >
           <div className="stack-list">
             {treatments.map((treatment) => (
-              <LearnedLessonCard key={treatment.id} treatment={treatment} onSaved={treatmentTask.reload} />
+              <LearnedLessonCard focusDerived={treatment.id === focusDerivedTreatmentId} key={treatment.id} treatment={treatment} onSaved={treatmentTask.reload} />
             ))}
           </div>
           <PaginationControls page={page} totalCount={treatmentTask.data?.count ?? 0} onPageChange={setPage} disabled={treatmentTask.loading} />

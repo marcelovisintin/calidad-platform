@@ -77,10 +77,14 @@ const TOURS: Record<string, GuidedTourDefinition> = {
       { selector: ".tabbed-filters", title: "Buscar tratamiento", content: "Utiliza los filtros para localizar por código, anomalía u otros datos disponibles." },
       { selector: ".treatment-layout > article:first-child", title: "Seleccionar tratamiento", content: "Elige una tarjeta para cargar su información en el panel de trabajo." },
       { selector: ".treatment-layout > article:last-child", title: "Panel de gestión", content: "Aquí se encuentran las vistas Convocatoria y Análisis del tratamiento seleccionado." },
-      { selector: ".treatment-origin-data", title: "Datos de creación", content: "Consulta la fecha límite del tratamiento y el comentario registrado al confirmar la No Conformidad." },
+      { selector: ".treatment-origin-data", title: "Datos de creación", content: "Consulta la fecha límite de inicio del tratamiento y el comentario registrado al confirmar la No Conformidad. La fecha límite indica hasta cuándo debe iniciarse el tratamiento. Si aparece en rojo con Vencido, el plazo ya pasó: aun así, debe iniciarse a la brevedad." },
       { selector: ".treatment-tab-row", title: "Cambiar de vista", content: "Convocatoria organiza agenda y participantes. Análisis reúne método, evidencias, causas, acciones y eficacia." },
       { selector: ".treatment-linked-anomalies", title: "Alcance del tratamiento", content: "Consulta la anomalía de origen y las asociadas. Esta composición es informativa; las nuevas asociaciones se realizan desde Seguimiento de anomalías por Administrador o Desarrollador." },
-      { selector: ".treatment-tab-content", title: "Contenido de la vista", content: "Completa el contenido visible en orden. El sistema conserva el avance y aplica los bloqueos correspondientes." },
+      { selector: ".treatment-tab-agenda", title: "Vista 1 — Convocatoria", content: "En esta vista consulta las anomalías incluidas, convoca los usuarios que deben participar y registra la nota si corresponde. Con al menos un convocado, completa fecha y hora programada y lugar del tratamiento; luego confirma la agenda, que queda en solo lectura." },
+      { selector: ".treatment-tab-analysis", title: "Vista 2 — Análisis", content: "Selecciona esta vista para completar el método utilizado y el detalle de análisis. Luego incorpora evidencias, causas raíz, acciones surgidas y la evaluación de eficacia." },
+      { selector: ".treatment-tab-analysis", title: "Métodos de análisis", content: "5 Porqués consiste en preguntar repetidamente “¿por qué?” hasta llegar a la causa raíz y no quedarse en el síntoma. El método 6M organiza las posibles causas en Mano de obra, Máquina, Método, Materiales, Medición y Medio ambiente, para ordenar la investigación de la anomalía. Si todavía no se definió el enfoque, utiliza Sin definir." },
+      { selector: ".treatment-tab-analysis", title: "Acciones surgidas del tratamiento", content: "Después de registrar las causas raíz, crea las acciones necesarias. Cada una requiere acción, detalle, al menos una causa raíz asociada, responsable y fecha límite de ejecución. El responsable registra el avance y sus evidencias desde Acciones." },
+      { selector: ".treatment-tab-analysis", title: "Evaluación de eficacia", content: "Cuando las acciones estén completadas, indica la fecha de validación y el responsable de medir la eficacia. En la fecha prevista, ese responsable registra el fundamento y el resultado en Verificar eficacia." },
     ],
   },
   actions: {
@@ -122,12 +126,18 @@ const TOURS: Record<string, GuidedTourDefinition> = {
   learnedLessons: {
     id: "learned-lessons",
     title: "Registrar lecciones aprendidas",
-    description: "Documenta el aprendizaje obtenido de tratamientos eficaces.",
+    description: "Guarda, envía y publica el aprendizaje de tratamientos eficaces.",
     steps: [
       { selector: ".page-header", title: "Lecciones aprendidas", content: "Esta pantalla reúne tratamientos eficaces disponibles para documentar o consultar su aprendizaje." },
       { selector: ".tabbed-filters", title: "Buscar", content: "Utiliza los filtros para localizar el tratamiento o la anomalía correspondiente." },
       { selector: ".learned-lesson-card", title: "Tratamiento eficaz", content: "Cada tarjeta resume el tratamiento y muestra la información de aprendizaje guardada." },
-      { selector: ".learned-lesson-form", title: "Documentar aprendizaje", content: "Indica si hubo aprendizaje, describe el resultado, informa cambios de procedimiento y adjunta evidencia cuando corresponda." },
+      { selector: ".learned-lesson-form", title: "Responsable de eficacia", content: "Solo el responsable de medición de eficacia completa el aprendizaje, indica si modifica procedimientos y adjunta evidencias." },
+      { selector: ".learned-lesson-form .form-actions", title: "Guardar cambios", content: "Cada guardado conserva una versión completa con fecha y hora en el historial interno. No publica la lección." },
+      { selector: ".learned-lesson-history", title: "Historial de versiones", content: "Consulta todas las fotografías del contenido; las anteriores no se reemplazan." },
+      { selector: ".learned-lesson-derived-action", title: "Modifica procedimiento", content: "Si se modifica un procedimiento, crea una acción derivada con descripción, responsable y fecha límite obligatorios. Puede seguir pendiente tras publicar." },
+      { selector: ".learned-lesson-card", title: "Enviar para publicación", content: "Cuando la carga esté lista, el responsable de eficacia la envía para revisión administrativa. Desde entonces no se edita normalmente." },
+      { selector: ".learned-lesson-card", title: "PUBLICAR", content: "Solo el Administrador publica. Si se modifica un procedimiento, debe existir una acción derivada válida." },
+      { selector: ".learned-lesson-card", title: "Cierre formal", content: "La publicación registra una fotografía consolidada en los historiales, cierra formalmente el tratamiento, notifica por correo a participantes históricos y bloquea la edición." },
     ],
   },
   treatmentTracking: {
@@ -191,7 +201,7 @@ export function getGuidedTour(pathname: string, access: { isAdmin: boolean; isMa
   if (pathname === "/treatments" && access.isManagement) return TOURS.treatments;
   if (pathname === "/actions/mine") return TOURS.actions;
   if (pathname === "/validation") return TOURS.validation;
-  if (pathname === "/learned-lessons" && access.isManagement) return TOURS.learnedLessons;
+  if (pathname === "/learned-lessons") return TOURS.learnedLessons;
   if (pathname === "/treatments/tracking") return TOURS.treatmentTracking;
   if (pathname === "/notifications/inbox") return TOURS.inbox;
   if ((pathname === "/indicators" || pathname.startsWith("/indicators/")) && access.isAdmin) return TOURS.indicators;

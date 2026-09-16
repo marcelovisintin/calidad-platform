@@ -298,6 +298,7 @@ class AnomalyStatusHistorySerializer(serializers.ModelSerializer):
             "to_stage",
             "comment",
             "evidence_note",
+            "document_snapshot",
             "changed_at",
             "changed_by",
         )
@@ -329,6 +330,8 @@ class AnomalyAttachmentSerializer(serializers.ModelSerializer):
             "id",
             "original_name",
             "content_type",
+            "note",
+            "observation_action",
             "file_url",
             "uploaded_by",
             "created_at",

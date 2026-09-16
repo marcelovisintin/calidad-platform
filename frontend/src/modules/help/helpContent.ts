@@ -392,7 +392,8 @@ export const HELP_TOPICS: HelpTopic[] = [
           "Desde Pendiente avanza a En curso o directamente a Completada; desde En curso solo avanza a Completada.",
           "Cancela únicamente antes del primer cambio de estado. No se permiten retrocesos.",
           "Registra una nota de evidencia propia para cada cambio de estado.",
-          "Carga evidencia cuando corresponda y confirma.",
+          "Primero adjunta un archivo en Evidencia de la acción y presiona Cargar evidencia. Solo una carga guardada habilita Datos de la acción; seleccionar el archivo no alcanza.",
+          "En Observaciones, cada acción tiene evidencia propia. Al finalizarla se muestran las completadas y pendientes; deben completarse todas antes de verificar eficacia, respetando la fecha de validación.",
         ],
       },
       {
@@ -446,7 +447,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     category: "Tratamientos y mejora",
     title: "Registrar una lección aprendida",
     summary: "Documenta el aprendizaje obtenido después de un tratamiento eficaz.",
-    audience: "management",
+    audience: "all",
     keywords: ["leccion", "aprendida", "procedimiento", "estandarizacion", "evidencia"],
     route: "/learned-lessons",
     routeLabel: "Ir a Lecciones aprendidas",
@@ -454,7 +455,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         title: "Cuándo se registra",
         paragraphs: [
-          "La lección se habilita para tratamientos completados con resultado eficaz. El responsable del tratamiento o un perfil global puede guardar la información.",
+          "La lección se habilita para tratamientos con validación eficaz. Solo el responsable de medición de eficacia guarda la información.",
         ],
       },
       {
@@ -470,7 +471,17 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         title: "Resultado",
         paragraphs: [
-          "El aprendizaje queda relacionado con el tratamiento y disponible para consulta y seguimiento. La primera publicación genera las notificaciones configuradas.",
+          "El aprendizaje guardado queda en borrador con versiones. Solo PUBLICAR genera notificaciones y cierra formalmente el tratamiento.",
+        ],
+      },
+      {
+        title: "Guardar, enviar y publicar",
+        steps: [
+          "Solo el responsable de medición de eficacia completa la lección del tratamiento eficaz.",
+          "Guardar cambios conserva una nueva versión completa con fecha y hora; las anteriores permanecen en el historial interno.",
+          "Cuando la carga esté terminada, Enviar para publicación la deja lista para revisión y bloquea la edición normal.",
+          "Si Modifica procedimiento es Sí, crea una acción derivada con descripción, responsable y fecha límite obligatorios. Puede seguir pendiente después de publicar.",
+          "Solo el Administrador utiliza PUBLICAR. La publicación cierra formalmente el tratamiento, registra un documento consolidado en los historiales, envía correo a participantes históricos y bloquea la edición.",
         ],
       },
     ],

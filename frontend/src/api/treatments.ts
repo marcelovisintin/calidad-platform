@@ -78,6 +78,22 @@ export function saveTreatmentLearnedLesson(treatmentId: string, payload: Treatme
   });
 }
 
+export function sendTreatmentLessonForPublication(treatmentId: string) {
+  return apiRequest<TreatmentSummary>(`/actions/learned-lessons/${treatmentId}/send-for-publication/`, { method: "POST" });
+}
+
+export function publishTreatmentLesson(treatmentId: string) {
+  return apiRequest<TreatmentSummary>(`/actions/learned-lessons/${treatmentId}/publish/`, { method: "POST" });
+}
+
+export function createLessonDerivedAction(treatmentId: string, payload: {
+  title: string; description: string; responsible: string; execution_date: string;
+}) {
+  return apiRequest<TreatmentSummary>(`/actions/learned-lessons/${treatmentId}/derived-actions/`, {
+    method: "POST", body: payload,
+  });
+}
+
 export function fetchTreatmentTasksHistory(filters: {
   page?: number;
   q?: string;

@@ -319,6 +319,7 @@ class AnomalyStatusHistory(AuditBaseModel):
     to_stage = models.CharField(max_length=40, choices=AnomalyStage.choices)
     comment = models.TextField()
     evidence_note = models.TextField(blank=True)
+    document_snapshot = models.JSONField(default=dict, blank=True)
     changed_by = models.ForeignKey(
         "accounts.User",
         on_delete=models.PROTECT,
@@ -346,6 +347,11 @@ class AnomalyComment(AuditBaseModel):
 
 class AnomalyAttachment(AuditBaseModel):
     anomaly = models.ForeignKey("anomalies.Anomaly", on_delete=models.CASCADE, related_name="attachments")
+    observation_action = models.ForeignKey(
+        "anomalies.ObservationAction", on_delete=models.CASCADE,
+        related_name="evidences", null=True, blank=True,
+    )
+    note = models.TextField(blank=True)
     file = models.FileField(upload_to=anomaly_attachment_upload_to)
     original_name = models.CharField(max_length=255)
     content_type = models.CharField(max_length=100, blank=True)

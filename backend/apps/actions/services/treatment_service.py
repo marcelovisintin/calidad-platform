@@ -20,6 +20,7 @@ from apps.actions.models import (
     TreatmentLearnedLesson,
     TreatmentLearnedLessonEvidence,
     TreatmentLearnedLessonRevision,
+    TreatmentLearnedLessonStatus,
     TreatmentParticipant,
     TreatmentParticipantRole,
     TreatmentRootCause,
@@ -475,18 +476,23 @@ def snapshot_learned_lesson(lesson: TreatmentLearnedLesson) -> dict:
         "procedure_modification_notes": lesson.procedure_modification_notes,
         "saved_by_id": str(lesson.saved_by_id or ""),
         "saved_at": lesson.saved_at.isoformat() if lesson.saved_at else "",
+        "status": lesson.status,
+        "published_at": lesson.published_at.isoformat() if lesson.published_at else "",
     }
 
 
 @transaction.atomic
 def save_treatment_learned_lesson(*, treatment: Treatment, user, data: dict, files=None, request_id: str = "") -> TreatmentLearnedLesson:
-    _require_treatment_management(user, "No tiene permisos para registrar lecciones aprendidas.", treatment)
     locked = Treatment.objects.select_for_update().get(pk=treatment.pk)
+    if locked.effectiveness_responsible_id != getattr(user, "pk", None):
+        raise PermissionDenied("Solo el responsable de medicion de eficacia puede guardar la leccion aprendida.")
     if locked.effectiveness_validation_result != TreatmentEffectivenessValidationResult.EFFECTIVE:
         raise ValidationError({"treatment": "Solo se pueden registrar lecciones aprendidas en tratamientos validados como eficaces."})
 
     lesson = TreatmentLearnedLesson.objects.select_for_update().filter(treatment=locked).first()
-    is_first_publication = lesson is None
+    is_first_save = lesson is None
+    if lesson and lesson.status != TreatmentLearnedLessonStatus.DRAFT:
+        raise ValidationError({"lesson": "La leccion enviada o publicada no admite modificaciones."})
     if lesson and not data.get("confirm_modification", False):
         raise ValidationError(
             {"confirm_modification": "Debe confirmar la modificacion de la leccion aprendida existente."}
@@ -546,7 +552,7 @@ def save_treatment_learned_lesson(*, treatment: Treatment, user, data: dict, fil
     changed_fields = [
         field
         for field in tracked_fields
-        if is_first_publication or before.get(field) != after.get(field)
+        if is_first_save or before.get(field) != after.get(field)
     ]
     latest_revision = lesson.revisions.aggregate(maximum=models.Max("revision_number"))["maximum"] or 0
     revision = TreatmentLearnedLessonRevision.objects.create(
@@ -573,20 +579,131 @@ def save_treatment_learned_lesson(*, treatment: Treatment, user, data: dict, fil
         after_data={**after, "revision_number": revision.revision_number},
         request_id=_request_id(request_id),
     )
-    _register_history_for_treatment(
-        treatment=locked,
-        user=user,
-        comment=(
-            f"Tratamiento {locked.code}: se registra la revision {revision.revision_number} "
-            "de la leccion aprendida."
-        ),
+    return lesson
+
+
+def _lesson_is_complete(lesson: TreatmentLearnedLesson) -> bool:
+    return bool(
+        lesson.has_learning is not None
+        and lesson.procedure_modified is not None
+        and (lesson.learned_text.strip() if lesson.has_learning else lesson.no_learning_reason.strip())
+        and (not lesson.procedure_modified or lesson.procedure_modification_notes.strip())
     )
-    if is_first_publication:
-        notify_treatment_learned_lesson_published(
-            lesson=lesson,
-            actor=user,
-            request_id=request_id,
+
+
+@transaction.atomic
+def send_treatment_lesson_for_publication(*, treatment: Treatment, user, request_id: str = "") -> TreatmentLearnedLesson:
+    locked = Treatment.objects.select_for_update().get(pk=treatment.pk)
+    if locked.effectiveness_responsible_id != getattr(user, "pk", None):
+        raise PermissionDenied("Solo el responsable de medicion de eficacia puede enviar la leccion.")
+    lesson = TreatmentLearnedLesson.objects.select_for_update().filter(treatment=locked).first()
+    if not lesson or lesson.status != TreatmentLearnedLessonStatus.DRAFT:
+        raise ValidationError({"lesson": "Debe guardar una leccion en borrador antes de enviarla."})
+    if not _lesson_is_complete(lesson):
+        raise ValidationError({"lesson": "Complete la informacion obligatoria de la leccion."})
+    if lesson.procedure_modified and not lesson.derived_actions.exclude(status=TreatmentTaskStatus.CANCELLED).exists():
+        raise ValidationError({"action": "Debe crear la accion derivada antes de enviar la leccion para publicacion."})
+    lesson.status = TreatmentLearnedLessonStatus.READY
+    lesson.updated_by = user
+    lesson.save(update_fields=["status", "updated_by", "updated_at"])
+    record_audit_event(entity=locked, action="treatment.learned_lesson.ready", actor=user,
+                       after_data=snapshot_learned_lesson(lesson), request_id=_request_id(request_id))
+    return lesson
+
+
+@transaction.atomic
+def add_lesson_derived_action(*, treatment: Treatment, user, data: dict, request_id: str = "") -> TreatmentTask:
+    locked = Treatment.objects.select_for_update().get(pk=treatment.pk)
+    lesson = TreatmentLearnedLesson.objects.select_for_update().filter(treatment=locked).first()
+    if not lesson or lesson.status == TreatmentLearnedLessonStatus.PUBLISHED or not lesson.procedure_modified:
+        raise ValidationError({"lesson": "La leccion debe indicar una modificacion de procedimiento sin publicar."})
+    if lesson.derived_actions.exclude(status=TreatmentTaskStatus.CANCELLED).exists():
+        raise ValidationError({"action": "Ya existe una accion derivada activa para esta leccion."})
+    if locked.effectiveness_responsible_id != getattr(user, "pk", None):
+        raise PermissionDenied("Solo el responsable de medicion de eficacia puede crear esta accion.")
+    title = (data.get("title") or "").strip()
+    responsible = data.get("responsible")
+    execution_date = data.get("execution_date")
+    if not title or not responsible or not execution_date:
+        raise ValidationError({"action": "La accion, responsable y fecha limite son obligatorios."})
+    _validate_treatment_task_responsible(treatment=locked, responsible=responsible)
+    task = TreatmentTask(
+        treatment=locked, derived_from_lesson=lesson, code=_next_task_code(locked),
+        title=title, description=(data.get("description") or "").strip(),
+        responsible=responsible, execution_date=execution_date,
+        created_by=user, updated_by=user,
+    )
+    task.full_clean()
+    task.save()
+    record_audit_event(entity=locked, action="treatment.lesson_derived_action_added", actor=user,
+                       after_data={"lesson_id": str(lesson.pk), "task_id": str(task.pk), "code": task.code},
+                       request_id=_request_id(request_id))
+    _register_history_for_treatment(
+        treatment=locked, user=user,
+        comment=f"Tratamiento {locked.code}: accion {task.code} derivada de Leccion Aprendida.",
+    )
+    notify_treatment_task_assigned(treatment_task=task, actor=user, request_id=request_id)
+    sync_treatment_task_assignment_status(treatment_task=task, actor=user, request_id=request_id)
+    return task
+
+
+@transaction.atomic
+def publish_treatment_lesson(*, treatment: Treatment, user, request_id: str = "") -> TreatmentLearnedLesson:
+    if not (getattr(user, "is_superuser", False) or
+            getattr(user, "access_level", "") == User.AccessLevel.ADMINISTRADOR):
+        raise PermissionDenied("Solo un Administrador puede publicar la leccion aprendida.")
+    locked = Treatment.objects.select_for_update().get(pk=treatment.pk)
+    lesson = TreatmentLearnedLesson.objects.select_for_update().filter(treatment=locked).first()
+    if not lesson or lesson.status != TreatmentLearnedLessonStatus.READY or not _lesson_is_complete(lesson):
+        raise ValidationError({"lesson": "La leccion debe estar completa y lista para publicar."})
+    actions = list(lesson.derived_actions.select_related("responsible"))
+    if lesson.procedure_modified and not any(
+        action.status != TreatmentTaskStatus.CANCELLED and action.responsible_id and action.execution_date for action in actions
+    ):
+        raise ValidationError({"action": "Debe crear una accion derivada con responsable y fecha limite."})
+    now = timezone.now()
+    lesson.status = TreatmentLearnedLessonStatus.PUBLISHED
+    lesson.published_at = now
+    lesson.published_by = user
+    lesson.updated_by = user
+    lesson.save(update_fields=["status", "published_at", "published_by", "updated_by", "updated_at"])
+    locked.formally_closed_at = now
+    locked.updated_by = user
+    locked.save(update_fields=["formally_closed_at", "updated_by", "updated_at"])
+    revisions = list(lesson.revisions.prefetch_related("evidences").order_by("revision_number"))
+    snapshot = {
+        "event": "treatment.learned_lesson.published", "treatment_code": locked.code,
+        "treatment_id": str(locked.pk), "published_at": now.isoformat(),
+        "lesson": snapshot_learned_lesson(lesson),
+        "versions": [
+            {"number": revision.revision_number, "changed_at": revision.changed_at.isoformat(),
+             "has_learning": revision.has_learning, "learned_text": revision.learned_text,
+             "no_learning_reason": revision.no_learning_reason,
+             "procedure_modified": revision.procedure_modified,
+             "procedure_modification_notes": revision.procedure_modification_notes,
+             "evidences": [evidence.original_name for evidence in revision.evidences.all()]}
+            for revision in revisions
+        ],
+        "derived_actions": [{"code": action.code, "title": action.title,
+                             "responsible_id": str(action.responsible_id),
+                             "execution_date": action.execution_date.isoformat() if action.execution_date else ""}
+                            for action in actions],
+        "formally_closed_at": now.isoformat(),
+    }
+    record_audit_event(entity=locked, action="treatment.learned_lesson.published", actor=user,
+                       after_data=snapshot, request_id=_request_id(request_id))
+    links = list(TreatmentAnomaly.objects.filter(treatment=locked).select_related("anomaly"))
+    anomalies = {link.anomaly_id: link.anomaly for link in links}
+    anomalies.setdefault(locked.primary_anomaly_id, locked.primary_anomaly)
+    for anomaly in anomalies.values():
+        AnomalyStatusHistory.objects.create(
+            anomaly=anomaly, from_status=anomaly.current_status, to_status=anomaly.current_status,
+            from_stage=anomaly.current_stage, to_stage=anomaly.current_stage,
+            comment=f"Leccion aprendida publicada. Tratamiento {locked.code} cerrado formalmente.",
+            document_snapshot=snapshot, changed_by=user, changed_at=now,
+            created_by=user, updated_by=user,
         )
+    notify_treatment_learned_lesson_published(lesson=lesson, actor=user, request_id=request_id)
     return lesson
 
 
@@ -1981,7 +2098,8 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
             raise PermissionDenied(
                 "El responsable asignado solo puede actualizar el estado de su accion y registrar la nota de evidencia."
             )
-    ensure_treatment_is_editable(treatment_task.treatment)
+    if not treatment_task.derived_from_lesson_id:
+        ensure_treatment_is_editable(treatment_task.treatment)
     locked = TreatmentTask.objects.select_for_update().get(pk=treatment_task.pk)
     previous_status = locked.status
     previous_responsible_id = locked.responsible_id
@@ -1994,6 +2112,9 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
 
     if status_changed:
         _validate_treatment_task_status_transition(locked, next_status)
+        if (locked.derived_from_lesson_id and next_status == TreatmentTaskStatus.CANCELLED
+                and locked.derived_from_lesson.status == TreatmentLearnedLessonStatus.PUBLISHED):
+            raise ValidationError({"status": "La accion derivada de una leccion publicada no puede cancelarse."})
 
     if status_changed and not evidence_note:
         raise ValidationError({"evidence_note": "Debe cargar una nota de evidencia para cambiar el estado de la accion."})
@@ -2120,7 +2241,8 @@ def add_treatment_task_evidence(*, treatment_task: TreatmentTask, user, data: di
     treatment = treatment_task.treatment
     if not can_execute_assignment(user, treatment_task.responsible_id):
         raise PermissionDenied("Solo el responsable asignado puede agregar evidencias a esta accion.")
-    ensure_treatment_is_editable(treatment)
+    if not treatment_task.derived_from_lesson_id:
+        ensure_treatment_is_editable(treatment)
 
     file_obj = data.get("file")
     if not file_obj:

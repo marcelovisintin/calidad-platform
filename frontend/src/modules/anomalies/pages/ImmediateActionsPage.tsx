@@ -336,7 +336,7 @@ export function ImmediateActionsPage() {
     }
 
     if (!canVerifyEffectiveness) {
-      setFormError(`La verificacion de eficacia se habilitara el ${effectivenessDueDate}.`);
+      setFormError(hasPendingObservationActions ? "Debe completar todas las acciones antes de verificar eficacia." : `La verificacion de eficacia se habilitara el ${effectivenessDueDate}.`);
       return;
     }
 
@@ -398,7 +398,7 @@ export function ImmediateActionsPage() {
   );
   const hasPendingObservationActions = observationActions.some((action) => action.status !== "completed");
   const effectivenessDueDate = effectivenessReferenceAction?.effectiveness_due_date || selectedAnomaly?.immediate_action?.effectiveness_due_at || "";
-  const canVerifyEffectiveness = Boolean(effectivenessDueDate && nowAsDate() >= effectivenessDueDate);
+  const canVerifyEffectiveness = Boolean(!hasPendingObservationActions && effectivenessDueDate && nowAsDate() >= effectivenessDueDate);
   const notEffective = selectedAnomaly?.immediate_action?.effectiveness_is_effective === false || effectivenessResult === "not_effective";
   const assignedResponsible = selectedAnomaly?.immediate_action?.responsible || selectedAnomaly?.owner || selectedAnomaly?.current_responsible || null;
   usePublishHelpWorkContext(selectedAnomaly ? resolveAnomalyHelpWorkContext(selectedAnomaly, isAdminUser(user)) : null);
@@ -661,7 +661,7 @@ export function ImmediateActionsPage() {
 
                       {hasPendingObservationActions ? (
                         <div className="panel warning">
-                          La verificacion puede registrarse, pero la observacion no se cerrara mientras existan acciones pendientes.
+                          Debe completar todas las acciones antes de registrar la verificación de eficacia.
                         </div>
                       ) : null}
                       {notEffective ? <div className="panel warning">La ultima verificacion no fue eficaz; puede cargar nuevas acciones.</div> : null}
@@ -682,11 +682,13 @@ export function ImmediateActionsPage() {
                         </label>
 
                         <div className="field">
-                          <span>Accion tomada como referencia</span>
+                          <span>Acción/s tomadas</span>
                           <div className="readonly-block">
-                            {effectivenessReferenceAction
-                              ? `Accion ${effectivenessReferenceAction.sequence}: ${effectivenessReferenceAction.detail}`
-                              : selectedAnomaly.immediate_action?.actions_taken || "Sin accion de referencia"}
+                            {observationActions.length
+                              ? observationActions.map((action) => (
+                                  <p key={action.id}>Acción {action.sequence}: {action.detail}</p>
+                                ))
+                              : selectedAnomaly.immediate_action?.actions_taken || "Sin acciones tomadas"}
                           </div>
                         </div>
 

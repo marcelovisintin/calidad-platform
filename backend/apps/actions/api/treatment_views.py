@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -26,6 +26,7 @@ from apps.actions.api.treatment_serializers import (
     TreatmentEvidenceSerializer,
     TreatmentEvidenceWriteSerializer,
     TreatmentLearnedLessonWriteSerializer,
+    LessonDerivedActionWriteSerializer,
     TreatmentListSerializer,
     TreatmentParticipantSerializer,
     TreatmentParticipantOptionSerializer,
@@ -65,6 +66,9 @@ from apps.actions.services import (
     is_mergeable_pending_treatment,
     remove_treatment_participant,
     save_treatment_learned_lesson,
+    send_treatment_lesson_for_publication,
+    add_lesson_derived_action,
+    publish_treatment_lesson,
     update_treatment,
     update_treatment_task,
     validate_treatment_effectiveness,
@@ -759,6 +763,8 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
+        if task.derived_from_lesson_id and data.get("root_cause_ids") == []:
+            data.pop("root_cause_ids")
 
         root_causes = list(data.get("root_cause_ids") or [])
         if data.get("root_cause"):
@@ -973,8 +979,8 @@ class TreatmentTrackingViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class TreatmentLearnedLessonViewSet(viewsets.ReadOnlyModelViewSet):
-    http_method_names = ["get", "patch", "head", "options"]
-    parser_classes = [MultiPartParser, FormParser]
+    http_method_names = ["get", "patch", "post", "head", "options"]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     serializer_class = TreatmentListSerializer
 
     def _request_id(self) -> str:
@@ -1015,6 +1021,7 @@ class TreatmentLearnedLessonViewSet(viewsets.ReadOnlyModelViewSet):
                         )
                     ),
                 ),
+                "learned_lesson__derived_actions__responsible",
             )
         )
 
@@ -1042,3 +1049,28 @@ class TreatmentLearnedLessonViewSet(viewsets.ReadOnlyModelViewSet):
         )
         output = TreatmentListSerializer(self.get_queryset().get(pk=treatment.pk), context=self.get_serializer_context())
         return Response(output.data)
+
+    def _lesson_response(self, treatment):
+        output = TreatmentListSerializer(self.get_queryset().get(pk=treatment.pk), context=self.get_serializer_context())
+        return Response(output.data)
+
+    @action(detail=True, methods=["post"], url_path="send-for-publication")
+    def send_for_publication(self, request, pk=None):
+        treatment = self.get_object()
+        send_treatment_lesson_for_publication(treatment=treatment, user=request.user, request_id=self._request_id())
+        return self._lesson_response(treatment)
+
+    @action(detail=True, methods=["post"], url_path="derived-actions")
+    def derived_actions(self, request, pk=None):
+        treatment = self.get_object()
+        serializer = LessonDerivedActionWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        add_lesson_derived_action(treatment=treatment, user=request.user,
+                                  data=serializer.validated_data, request_id=self._request_id())
+        return self._lesson_response(treatment)
+
+    @action(detail=True, methods=["post"], url_path="publish")
+    def publish(self, request, pk=None):
+        treatment = self.get_object()
+        publish_treatment_lesson(treatment=treatment, user=request.user, request_id=self._request_id())
+        return self._lesson_response(treatment)

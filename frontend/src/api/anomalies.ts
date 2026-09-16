@@ -197,6 +197,13 @@ export function completeObservationAction(anomalyId: string, actionId: string, c
   });
 }
 
+export function addObservationActionEvidence(anomalyId: string, actionId: string, payload: { file: File; note?: string }) {
+  const body = new FormData();
+  body.append("file", payload.file);
+  body.append("note", payload.note ?? "");
+  return apiRequest(`/anomalies/${anomalyId}/observation/actions/${actionId}/evidences/`, { method: "POST", body });
+}
+
 export function verifyObservationEffectiveness(anomalyId: string, payload: ObservationVerificationPayload) {
   return apiRequest<AnomalyDetail>(`/anomalies/${anomalyId}/observation/effectiveness/`, {
     method: "POST",

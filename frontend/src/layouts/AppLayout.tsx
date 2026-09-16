@@ -78,6 +78,12 @@ export function AppLayout() {
     setDynamicHelpContext(null);
   }, [location.pathname]);
 
+  useEffect(() => {
+    const openContextHelp = () => setHelpOpen(true);
+    window.addEventListener("calidad:open-context-help", openContextHelp);
+    return () => window.removeEventListener("calidad:open-context-help", openContextHelp);
+  }, []);
+
   useEffect(
     () => subscribeHelpWorkContext((detail) => {
       setDynamicHelpContext(detail?.pathname === window.location.pathname ? detail.context : null);

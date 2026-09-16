@@ -509,6 +509,10 @@ export interface TreatmentLearnedLessonRevision {
 
 export interface TreatmentLearnedLesson {
   id: UUID;
+  status: "draft" | "ready" | "published";
+  published_at?: string | null;
+  published_by?: UUID | null;
+  derived_actions: TreatmentTask[];
   has_learning: boolean | null;
   learned_text: string;
   no_learning_reason: string;
@@ -544,6 +548,7 @@ export interface TreatmentTaskEvidence {
 
 export interface TreatmentTask {
   id: UUID;
+  derived_from_lesson?: UUID | null;
   code: string;
   title: string;
   description: string;
@@ -627,6 +632,7 @@ export interface ActionStatusEvidence {
 export interface ActionWorkItem {
   id: UUID;
   source: ActionWorkItemSource;
+  derived_from_lesson?: boolean;
   code: string;
   title: string;
   description: string;
@@ -684,6 +690,7 @@ export interface TreatmentSummary {
   id: UUID;
   code: string;
   status: string;
+  formally_closed_at?: string | null;
   deadline?: string | null;
   creation_comment?: string;
   scheduled_for?: string | null;
@@ -717,6 +724,7 @@ export interface TreatmentSummary {
 export interface TreatmentAuditEvent {
   id: UUID;
   action: string;
+  after_data?: Record<string, unknown>;
   actor?: UserSummary | null;
   created_at: string;
 }
@@ -744,7 +752,7 @@ export interface TreatmentWritePayload {
   scheduled_for?: string | null;
   treatment_location?: string;
   status?: "pending" | "scheduled" | "in_progress" | "completed" | "cancelled";
-  method_used?: "" | "five_whys" | "6m" | "ishikawa" | "a3" | "8d" | "other";
+  method_used?: "" | "five_whys" | "6m";
   observations?: string;
 }
 
@@ -754,7 +762,7 @@ export interface TreatmentUpdatePayload {
   scheduled_for?: string | null;
   treatment_location?: string;
   status?: "pending" | "scheduled" | "in_progress" | "completed" | "cancelled";
-  method_used?: "" | "five_whys" | "6m" | "ishikawa" | "a3" | "8d" | "other";
+  method_used?: "" | "five_whys" | "6m";
   observations?: string;
   effectiveness_evaluation_date?: string | null;
   effectiveness_responsible?: UUID | null;
@@ -917,6 +925,7 @@ export interface AnomalyRepetitionStudyResponse {
 
 export interface AnomalyStatusHistory {
   id: UUID;
+  document_snapshot?: Record<string, unknown>;
   from_status: string;
   to_status: string;
   from_stage: string;

@@ -631,7 +631,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
             classification_responsible = treatment_target.responsible
 
         if is_nonconformity_anomaly(locked) and treatment_target is None and not treatment_deadline:
-            raise ValidationError({"treatment_deadline": "Debe indicar la fecha limite del tratamiento."})
+            raise ValidationError({"treatment_deadline": "Debe indicar la fecha limite de inicio del tratamiento."})
 
         if closes_as_invalid:
             if not classification_reason:
@@ -1482,6 +1482,25 @@ def create_observation_action(*, anomaly: Anomaly, user, data: dict, request_id:
 
 
 @transaction.atomic
+def add_observation_action_evidence(*, action: ObservationAction, user, data: dict, request_id: str = "") -> AnomalyAttachment:
+    anomaly = Anomaly.objects.select_for_update().get(pk=action.anomaly_id)
+    _ensure_anomaly_is_editable(anomaly)
+    _ensure_observation_path_available(anomaly)
+    _require_observation_manager(anomaly, user, _get_related_or_none(anomaly, "immediate_action"))
+    locked_action = ObservationAction.objects.select_for_update().get(pk=action.pk)
+    if locked_action.status == ObservationActionStatus.COMPLETED:
+        raise ValidationError({"action": "La accion finalizada no admite nuevas evidencias."})
+    attachment = add_attachment(anomaly=anomaly, user=user, data=data, request_id=request_id)
+    attachment.observation_action = locked_action
+    attachment.note = (data.get("note") or "").strip()
+    attachment.save(update_fields=["observation_action", "note", "updated_at"])
+    record_audit_event(entity=anomaly, action="observation.action_evidence_added", actor=user,
+                       after_data={"action_id": str(action.pk), "attachment_id": str(attachment.pk)},
+                       request_id=_request_id(request_id))
+    return attachment
+
+
+@transaction.atomic
 def complete_observation_action(*, action: ObservationAction, user, completed_at, request_id: str = "") -> ObservationAction:
     locked_anomaly = Anomaly.objects.select_for_update().get(pk=action.anomaly_id)
     _ensure_anomaly_is_editable(locked_anomaly)
@@ -1494,6 +1513,8 @@ def complete_observation_action(*, action: ObservationAction, user, completed_at
         raise ValidationError({"action": "La accion ya fue finalizada."})
     if not completed_at:
         raise ValidationError({"completed_at": "Debe indicar la fecha real de finalizacion."})
+    if not locked_action.evidences.exists():
+        raise ValidationError({"evidence": "Debe cargar evidencia propia de esta accion antes de finalizarla."})
 
     previous_status = locked_anomaly.current_status
     previous_stage = locked_anomaly.current_stage
@@ -1689,6 +1710,8 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
         default=None,
     )
     pending_actions = [item for item in observation_actions if item.status != ObservationActionStatus.COMPLETED]
+    if pending_actions:
+        raise ValidationError({"actions": "Debe completar todas las acciones antes de verificar la eficacia."})
     all_actions_completed = not pending_actions
     evidence_summary = (
         "\n".join(f"Accion {item.sequence}: {item.detail}" for item in observation_actions)

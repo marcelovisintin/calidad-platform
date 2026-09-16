@@ -3,6 +3,7 @@ import type { AnomalyStatusHistory } from "../api/types";
 import { formatDateTime } from "../app/utils";
 import { PaginationControls } from "./PaginationControls";
 import { StatusBadge } from "./StatusBadge";
+import { PublishedLessonSnapshot } from "./PublishedLessonSnapshot";
 
 type TimelineProps = {
   items: AnomalyStatusHistory[];
@@ -62,6 +63,7 @@ export function Timeline({ items }: TimelineProps) {
                   <StatusBadge value={item.to_stage} compact />
                 </div>
                 <p className="timeline-comment">{displayHistoryComment(item.comment)}</p>
+                <PublishedLessonSnapshot data={item.document_snapshot} />
                 {evidenceText ? (
                   <p className="timeline-evidence" style={{ whiteSpace: "pre-line" }}>
                     <strong>Evidencia:</strong> {evidenceText}
