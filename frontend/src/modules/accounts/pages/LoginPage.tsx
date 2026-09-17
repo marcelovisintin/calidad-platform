@@ -12,6 +12,7 @@ export function LoginPage() {
   const { login, status, user } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -59,7 +60,12 @@ export function LoginPage() {
 
           <label className="field">
             <span>Contrasena</span>
-            <input autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} placeholder="********" required type="password" value={password} />
+            <input autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} placeholder="********" required type={showPassword ? "text" : "password"} value={password} />
+          </label>
+
+          <label className="checkbox-inline">
+            <input checked={showPassword} onChange={(event) => setShowPassword(event.target.checked)} type="checkbox" />
+            <span>Ver contraseña</span>
           </label>
 
           {error ? <div className="panel danger">{error}</div> : null}
