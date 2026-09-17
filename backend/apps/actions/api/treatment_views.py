@@ -784,7 +784,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         output = TreatmentTaskSerializer(updated, context=self.get_serializer_context())
         return Response(output.data)
 
-    @action(detail=True, methods=["post"], url_path="validation")
+    @action(detail=True, methods=["post"], url_path="validation", parser_classes=[MultiPartParser, FormParser, JSONParser])
     def validate_effectiveness(self, request, pk=None):
         treatment = self.get_object()
         serializer = self.get_serializer(data=request.data)
@@ -795,6 +795,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
             user=request.user,
             result=serializer.validated_data["result"],
             comment=serializer.validated_data.get("comment", ""),
+            files=request.FILES.getlist("evidences"),
             request_id=self._request_id(),
         )
         return self._detail_response(validated.pk)

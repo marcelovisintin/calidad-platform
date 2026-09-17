@@ -51,7 +51,7 @@ function itemKey(item: Pick<ValidationWorkItem, "id" | "source">) {
 function SourceBadge({ source }: { source: ActionWorkItemSource }) {
   return (
     <span className={`action-source-badge ${source}`}>
-      {source === "treatment" ? "Tratamiento" : "Observacion"}
+      {source === "treatment" ? "TRT" : "OBS"}
     </span>
   );
 }
@@ -65,6 +65,7 @@ export function TreatmentValidationPage() {
   const [selectedKey, setSelectedKey] = useState("");
   const [validationResult, setValidationResult] = useState<ValidationResult>("");
   const [validationComment, setValidationComment] = useState("");
+  const [validationEvidences, setValidationEvidences] = useState<File[]>([]);
   const [verifiedAt, setVerifiedAt] = useState(nowAsLocalDateTime());
   const [message, setMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -110,6 +111,7 @@ export function TreatmentValidationPage() {
   useEffect(() => {
     setValidationResult("");
     setValidationComment("");
+    setValidationEvidences([]);
     setVerifiedAt(nowAsLocalDateTime());
     setFormError(null);
     setMessage(null);
@@ -152,17 +154,20 @@ export function TreatmentValidationPage() {
         await validateTreatmentEffectiveness(selectedItem.id, {
           result: validationResult,
           comment: validationComment.trim(),
+          evidences: validationEvidences,
         });
       } else {
         await verifyObservationEffectiveness(selectedItem.id, {
           effectiveness_verified_at: toOffsetIso(verifiedAt),
           effectiveness_is_effective: validationResult === "effective",
           effectiveness_comment: validationComment.trim(),
+          evidences: validationEvidences,
         });
       }
       setMessage("Validacion registrada correctamente.");
       setValidationResult("");
       setValidationComment("");
+      setValidationEvidences([]);
       await Promise.all([reload(), reloadDetail()]);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "No se pudo registrar la validacion.");
@@ -302,6 +307,10 @@ export function TreatmentValidationPage() {
                             rows={3}
                             value={validationComment}
                           />
+                        </label>
+                        <label className="field field-span-2">
+                          <span>Evidencia objetiva de eficacia</span>
+                          <input accept=".jpg,.jpeg,.png,.pdf,.txt" disabled={!selectedItem.can_validate || busy} multiple onChange={(event) => setValidationEvidences(Array.from(event.target.files ?? []))} type="file" />
                         </label>
                       </div>
                       <div className="form-actions">

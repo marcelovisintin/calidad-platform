@@ -130,7 +130,9 @@ const TOURS: Record<string, GuidedTourDefinition> = {
     steps: [
       { selector: ".page-header", title: "Lecciones aprendidas", content: "Esta pantalla reúne tratamientos eficaces disponibles para documentar o consultar su aprendizaje." },
       { selector: ".tabbed-filters", title: "Buscar", content: "Utiliza los filtros para localizar el tratamiento o la anomalía correspondiente." },
-      { selector: ".learned-lesson-card", title: "Tratamiento eficaz", content: "Cada tarjeta resume el tratamiento y muestra la información de aprendizaje guardada." },
+      { selector: ".lessons-directory", title: "Listado de lecciones", content: "A la izquierda se listan los tratamientos u observaciones eficaces. Elegí una tarjeta para abrir una sola lección a la vez." },
+      { selector: ".lesson-directory-card", title: "Estado de la lección", content: "Cada registro muestra código, responsable y estado de carga o publicación." },
+      { selector: ".lessons-detail", title: "Detalle de la lección", content: "A la derecha se consultan y gestionan los datos completos de la lección seleccionada." },
       { selector: ".learned-lesson-form", title: "Responsable de eficacia", content: "Solo el responsable de medición de eficacia completa el aprendizaje, indica si modifica procedimientos y adjunta evidencias." },
       { selector: ".learned-lesson-form .form-actions", title: "Guardar cambios", content: "Cada guardado conserva una versión completa con fecha y hora en el historial interno. No publica la lección." },
       { selector: ".learned-lesson-history", title: "Historial de versiones", content: "Consulta todas las fotografías del contenido; las anteriores no se reemplazan." },

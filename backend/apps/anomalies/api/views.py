@@ -12,7 +12,7 @@ from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -809,7 +809,7 @@ class AnomalyViewSet(viewsets.ModelViewSet):
         return Response(AnomalyAttachmentSerializer(evidence, context=self.get_serializer_context()).data,
                         status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["post"], url_path="observation/effectiveness")
+    @action(detail=True, methods=["post"], url_path="observation/effectiveness", parser_classes=[MultiPartParser, FormParser, JSONParser])
     def verify_observation_effectiveness(self, request, pk=None):
         anomaly = self.get_object()
         serializer = self.get_serializer(data=request.data)
@@ -818,6 +818,7 @@ class AnomalyViewSet(viewsets.ModelViewSet):
             anomaly=anomaly,
             user=request.user,
             data=dict(serializer.validated_data),
+            files=request.FILES.getlist("evidences"),
             request_id=self._request_id(),
         )
         return self._detail_response(anomaly.pk)

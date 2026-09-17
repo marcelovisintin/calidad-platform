@@ -2498,6 +2498,53 @@ small {
   align-items: flex-start;
 }
 
+.lessons-workspace {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.72fr) minmax(0, 1.45fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.lessons-directory {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+.lessons-directory-list { gap: 0.5rem; }
+
+.lesson-directory-card {
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  border-width: 1px;
+}
+
+.lesson-directory-card > div {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.lesson-directory-card span:not(.lesson-status),
+.lesson-directory-card small {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lesson-status { flex: 0 0 auto; font-size: 0.72rem; white-space: nowrap; }
+.lesson-status.ready { background: rgba(216, 140, 58, 0.17); color: #754b0c; }
+.lesson-status.published { background: rgba(21, 132, 111, 0.17); color: #075b4c; }
+.lesson-status.pending { background: rgba(86, 114, 123, 0.13); color: var(--muted); }
+
+.lessons-detail { min-width: 0; }
+.lessons-detail .learned-lesson-card { grid-template-columns: 1fr; }
+.lessons-detail .learned-lesson-history { grid-column: auto; }
+
 .learned-lesson-summary,
 .learned-lesson-form {
   display: flex;
@@ -2805,6 +2852,9 @@ small {
   .learned-lesson-card {
     grid-template-columns: 1fr;
   }
+
+  .lessons-workspace { grid-template-columns: 1fr; }
+  .lessons-directory { position: static; max-height: none; overflow: visible; }
 
   .learned-lesson-snapshot {
     grid-template-columns: 1fr;

@@ -170,9 +170,13 @@ export function fetchTreatmentParticipantOptions(treatmentId: string) {
 }
 
 export function validateTreatmentEffectiveness(treatmentId: string, payload: TreatmentValidationPayload) {
+  const body = new FormData();
+  body.append("result", payload.result);
+  body.append("comment", payload.comment);
+  (payload.evidences ?? []).forEach((file) => body.append("evidences", file));
   return apiRequest<TreatmentDetail>(`/actions/treatments/${treatmentId}/validation/`, {
     method: "POST",
-    body: payload,
+    body,
   });
 }
 

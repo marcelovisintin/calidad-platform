@@ -732,6 +732,7 @@ export interface TreatmentAuditEvent {
 export interface TreatmentValidationPayload {
   result: "effective" | "not_effective";
   comment: string;
+  evidences?: File[];
 }
 
 export interface TreatmentDetail extends TreatmentSummary {
@@ -1181,6 +1182,7 @@ export interface ObservationVerificationPayload {
   effectiveness_is_effective: boolean;
   effectiveness_comment: string;
   closure_comment?: string;
+  evidences?: File[];
 }
 
 

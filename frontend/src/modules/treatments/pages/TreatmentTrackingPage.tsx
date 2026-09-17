@@ -14,6 +14,7 @@ import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 import { resolveTreatmentHelpWorkContext, usePublishHelpWorkContext } from "../../help/workContext";
+import { SHOW_TREATMENT_EVIDENCE } from "../visibility";
 
 function treatmentDisplayStatus(treatment?: TreatmentSummary | TreatmentDetail | null) {
   if (!treatment) {
@@ -447,7 +448,7 @@ export function TreatmentTrackingPage() {
                     </div>
                   </section>
 
-                  <section className="form-section">
+                  {SHOW_TREATMENT_EVIDENCE && <section className="form-section">
                     <div className="section-head compact"><h3>Evidencias del tratamiento</h3></div>
                     <div className="stack-list compact">
                       {detail.evidences.length ? detail.evidences.map((evidence) => (
@@ -460,7 +461,7 @@ export function TreatmentTrackingPage() {
                         </div>
                       )) : <p className="muted-copy">Sin evidencias del tratamiento.</p>}
                     </div>
-                  </section>
+                  </section>}
 
                   <section className="form-section">
                     <div className="section-head compact"><h3>Historial de tratamiento</h3></div>

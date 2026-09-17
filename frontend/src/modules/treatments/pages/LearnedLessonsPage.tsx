@@ -611,11 +611,15 @@ export function LearnedLessonsPage() {
   const [source, setSource] = useState<"treatments" | "observations">("treatments");
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [selectedTreatmentId, setSelectedTreatmentId] = useState("");
+  const [selectedObservationId, setSelectedObservationId] = useState("");
 
   const treatmentTask = useAsyncTask(() => fetchLearnedLessons(page, search), [page, search]);
   const observationTask = useAsyncTask(() => fetchObservationLearnedLessons(page, search), [page, search]);
   const treatments = treatmentTask.data?.results ?? [];
   const observations = observationTask.data?.results ?? [];
+  const selectedTreatment = treatments.find((item) => item.id === selectedTreatmentId) ?? treatments[0] ?? null;
+  const selectedObservation = observations.find((item) => item.id === selectedObservationId) ?? observations[0] ?? null;
   const focusDerivedTreatmentId = treatments.find((treatment) =>
     user?.id === treatment.effectiveness_responsible?.id &&
     treatment.learned_lesson?.procedure_modified &&
@@ -627,6 +631,18 @@ export function LearnedLessonsPage() {
     setSource(nextSource);
     setPage(1);
   };
+
+  useEffect(() => {
+    if (treatments.length && !treatments.some((item) => item.id === selectedTreatmentId)) {
+      setSelectedTreatmentId(treatments[0].id);
+    }
+  }, [treatments, selectedTreatmentId]);
+
+  useEffect(() => {
+    if (observations.length && !observations.some((item) => item.id === selectedObservationId)) {
+      setSelectedObservationId(observations[0].id);
+    }
+  }, [observations, selectedObservationId]);
 
   const handleSearch = (event: ChangeEvent<HTMLInputElement>) => {
     setSearch(event.target.value);
@@ -674,10 +690,20 @@ export function LearnedLessonsPage() {
           emptyTitle="No hay tratamientos eficaces para mostrar"
           emptyDescription="Cuando un tratamiento sea validado como eficaz aparecera automaticamente en esta seccion."
         >
-          <div className="stack-list">
-            {treatments.map((treatment) => (
-              <LearnedLessonCard focusDerived={treatment.id === focusDerivedTreatmentId} key={treatment.id} treatment={treatment} onSaved={treatmentTask.reload} />
-            ))}
+          <div className="lessons-workspace">
+            <section className="panel lessons-directory">
+              <div className="section-head compact"><div><p className="eyebrow">Tratamientos</p><h2>Lecciones</h2></div></div>
+              <div className="stack-list lessons-directory-list">
+                {treatments.map((treatment) => {
+                  const lesson = treatment.learned_lesson;
+                  const status = lesson?.status === "published" ? "Publicada" : lesson?.status === "ready" ? "Lista para publicar" : lesson ? "Borrador" : "Pendiente de carga";
+                  return <button className={`list-card selectable-card lesson-directory-card${selectedTreatment?.id === treatment.id ? " active" : ""}`} key={treatment.id} onClick={() => setSelectedTreatmentId(treatment.id)} type="button"><div><strong>{treatment.code}</strong><span>{treatment.primary_anomaly.code} · {treatment.primary_anomaly.title}</span><small>{treatment.effectiveness_responsible?.full_name || treatment.effectiveness_responsible?.username || "Sin responsable"}</small></div><span className={`status-pill lesson-status ${lesson?.status || "pending"}`}>{status}</span></button>;
+                })}
+              </div>
+            </section>
+            <section className="lessons-detail">
+              {selectedTreatment ? <LearnedLessonCard focusDerived={selectedTreatment.id === focusDerivedTreatmentId} treatment={selectedTreatment} onSaved={treatmentTask.reload} /> : <div className="panel muted">Selecciona una lección para revisar su detalle.</div>}
+            </section>
           </div>
           <PaginationControls page={page} totalCount={treatmentTask.data?.count ?? 0} onPageChange={setPage} disabled={treatmentTask.loading} />
         </DataState>
@@ -690,10 +716,16 @@ export function LearnedLessonsPage() {
           emptyTitle="No hay Observaciones eficaces para mostrar"
           emptyDescription="Cuando una Observacion sea verificada como eficaz aparecera automaticamente en esta seccion."
         >
-          <div className="stack-list">
-            {observations.map((item) => (
-              <ObservationLearnedLessonCard item={item} key={item.id} onSaved={observationTask.reload} />
-            ))}
+          <div className="lessons-workspace">
+            <section className="panel lessons-directory">
+              <div className="section-head compact"><div><p className="eyebrow">Observaciones</p><h2>Lecciones</h2></div></div>
+              <div className="stack-list lessons-directory-list">
+                {observations.map((item) => <button className={`list-card selectable-card lesson-directory-card${selectedObservation?.id === item.id ? " active" : ""}`} key={item.id} onClick={() => setSelectedObservationId(item.id)} type="button"><div><strong>{item.code}</strong><span>{item.title}</span><small>{item.responsible?.full_name || item.responsible?.username || "Sin responsable"}</small></div><span className={`status-pill lesson-status ${item.learning ? "draft" : "pending"}`}>{item.learning ? "Registrada" : "Pendiente de carga"}</span></button>)}
+              </div>
+            </section>
+            <section className="lessons-detail">
+              {selectedObservation ? <ObservationLearnedLessonCard item={selectedObservation} onSaved={observationTask.reload} /> : <div className="panel muted">Selecciona una lección para revisar su detalle.</div>}
+            </section>
           </div>
           <PaginationControls page={page} totalCount={observationTask.data?.count ?? 0} onPageChange={setPage} disabled={observationTask.loading} />
         </DataState>

@@ -1,6 +1,7 @@
 ﻿from .notification_service import (
     complete_observation_effectiveness_assignment,
     complete_treatment_effectiveness_assignment,
+    complete_treatment_learned_lesson_assignment,
     create_internal_notification,
     dismiss_action_assignment_tasks,
     dismiss_treatment_task_assignment_tasks,
@@ -15,6 +16,7 @@
     notify_treatment_anomaly_associated,
     notify_treatment_closed,
     notify_treatment_effectiveness_assigned,
+    notify_treatment_learned_lesson_assigned,
     notify_treatment_learned_lesson_published,
     notify_treatment_not_effective,
     notify_treatment_participant_invited,
@@ -27,6 +29,7 @@
 __all__ = [
     "complete_observation_effectiveness_assignment",
     "complete_treatment_effectiveness_assignment",
+    "complete_treatment_learned_lesson_assignment",
     "create_internal_notification",
     "dismiss_action_assignment_tasks",
     "dismiss_treatment_task_assignment_tasks",
@@ -41,6 +44,7 @@ __all__ = [
     "notify_treatment_anomaly_associated",
     "notify_treatment_closed",
     "notify_treatment_effectiveness_assigned",
+    "notify_treatment_learned_lesson_assigned",
     "notify_treatment_learned_lesson_published",
     "notify_treatment_not_effective",
     "notify_treatment_participant_invited",

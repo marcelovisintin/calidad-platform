@@ -28,6 +28,7 @@ import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 import { resolveTreatmentHelpWorkContext, usePublishHelpWorkContext } from "../../help/workContext";
+import { SHOW_TREATMENT_EVIDENCE } from "../visibility";
 
 type TreatmentTab = "agenda" | "analysis";
 
@@ -1184,7 +1185,7 @@ return (
                         </label>
                       </div>
 
-                      <form className="form-section" onSubmit={handleAddTreatmentEvidence}>
+                      {SHOW_TREATMENT_EVIDENCE && <form className="form-section" onSubmit={handleAddTreatmentEvidence}>
                         <div className="section-head compact">
                           <h3>Evidencias del tratamiento</h3>
                           <button className="button button-primary" disabled={busy || treatmentLocked || !treatmentEvidenceFile} type="submit">
@@ -1229,7 +1230,7 @@ return (
                             <p className="muted-copy">Todavia no hay evidencias cargadas en este tratamiento.</p>
                           )}
                         </div>
-                      </form>
+                      </form>}
 
                       <form className="form-section" onSubmit={handleAddRootCause}>
                         <div className="section-head compact">

@@ -1681,7 +1681,7 @@ def save_observation_action_taken(*, anomaly: Anomaly, user, data: dict, request
 
 
 @transaction.atomic
-def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyImmediateAction:
+def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, files=None, request_id: str = "") -> AnomalyImmediateAction:
     _ensure_anomaly_is_editable(anomaly)
 
     if data.get("effectiveness_is_effective") is None:
@@ -1789,6 +1789,13 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, requ
     )
     check.full_clean()
     check.save()
+    for file_obj in files or []:
+        validate_evidence_file(file_obj)
+        AnomalyAttachment.objects.create(
+            anomaly=locked, file=file_obj, original_name=getattr(file_obj, "name", "") or "evidencia-eficacia",
+            content_type=normalized_upload_content_type(file_obj), note="Evidencia objetiva de eficacia.",
+            uploaded_by=user, created_by=user, updated_by=user,
+        )
 
     locked.result_summary = check_comment
     locked.effectiveness_summary = check_comment

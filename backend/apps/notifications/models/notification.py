@@ -39,6 +39,7 @@ class NotificationTaskType(models.TextChoices):
     FINDING_MANAGEMENT = "finding_management", "Gestion de hallazgo"
     TREATMENT_PARTICIPATION = "treatment_participation", "Participacion en tratamiento"
     VERIFICATION_PARTICIPATION = "verification_participation", "Participacion en verificacion"
+    LEARNED_LESSON = "learned_lesson", "Leccion aprendida"
 
 
 class RecipientTaskStatus(models.TextChoices):

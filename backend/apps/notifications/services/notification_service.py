@@ -1,6 +1,6 @@
 ﻿from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import date, datetime, time, timedelta
 from uuid import UUID
 
 from django.conf import settings
@@ -60,6 +60,7 @@ TREATMENT_REPORTER_CLOSURE_TEMPLATE = "anomalies_closed_by_treatment"
 TREATMENT_LEARNED_LESSON_TEMPLATE = "treatment_learned_lesson_published"
 TREATMENT_NOT_EFFECTIVE_TEMPLATE = "treatment_not_effective"
 OBSERVATION_NOT_EFFECTIVE_TEMPLATE = "observation_not_effective"
+TREATMENT_LEARNED_LESSON_ASSIGNMENT_TEMPLATE = "treatment_learned_lesson_assigned"
 
 
 def _request_id(value: str | None) -> str:
@@ -188,6 +189,23 @@ def _date_due_at(due_date):
         return None
     due_datetime = datetime.combine(due_date, time(23, 59, 59))
     return timezone.make_aware(due_datetime, timezone.get_current_timezone())
+
+
+def _add_business_days(start_date: date, days: int) -> date:
+    value = start_date
+    remaining = days
+    while remaining:
+        value += timedelta(days=1)
+        if value.weekday() < 5:
+            remaining -= 1
+    return value
+
+
+def _treatment_learned_lesson_due_date(treatment) -> date | None:
+    if not treatment.effectiveness_validated_at:
+        return None
+    validated_date = timezone.localtime(treatment.effectiveness_validated_at).date()
+    return _add_business_days(validated_date, 5)
 
 
 
@@ -1538,6 +1556,86 @@ def notify_treatment_closed(
             )
         )
     return [notification for notification in notifications if notification is not None]
+
+
+@transaction.atomic
+def notify_treatment_learned_lesson_assigned(*, treatment, actor=None, request_id: str = ""):
+    responsible = treatment.effectiveness_responsible
+    due_date = _treatment_learned_lesson_due_date(treatment)
+    if not responsible or not due_date:
+        return None
+
+    existing = NotificationRecipient.objects.select_for_update().filter(
+        user=responsible,
+        channel=NotificationChannel.IN_APP,
+        notification__source_type="actions.treatment",
+        notification__source_id=treatment.pk,
+        notification__template_code=TREATMENT_LEARNED_LESSON_ASSIGNMENT_TEMPLATE,
+        notification__task_type=NotificationTaskType.LEARNED_LESSON,
+        task_status__in=[RecipientTaskStatus.PENDING, RecipientTaskStatus.IN_PROGRESS],
+    ).exists()
+    if existing:
+        return None
+
+    due_label = due_date.strftime("%d/%m/%Y")
+    return create_internal_notification(
+        recipients=[responsible],
+        title=f"Lección aprendida pendiente: {treatment.code}",
+        body=(
+            f"Hola {responsible.full_name},\n\n"
+            f"Debes completar y enviar para publicación la lección aprendida del tratamiento {treatment.code}.\n"
+            f"Fecha límite: {due_label}.\n\n"
+            "Ingresá al Sistema de Gestión de Calidad con tu propio usuario para completar la lección."
+        ),
+        source_type="actions.treatment",
+        source_id=treatment.pk,
+        actor=actor,
+        category=NotificationCategory.ACTION,
+        template_code=TREATMENT_LEARNED_LESSON_ASSIGNMENT_TEMPLATE,
+        is_task=True,
+        task_type=NotificationTaskType.LEARNED_LESSON,
+        action_url="/learned-lessons",
+        due_at=_date_due_at(due_date),
+        context_data={
+            "treatment_id": str(treatment.pk),
+            "treatment_code": treatment.code,
+            "responsible_id": str(responsible.pk),
+            "due_date": due_date.isoformat(),
+            "include_action_url_in_email": False,
+        },
+        request_id=request_id,
+        email_enabled=True,
+    )
+
+
+@transaction.atomic
+def complete_treatment_learned_lesson_assignment(*, treatment, actor=None, request_id: str = "") -> None:
+    recipients = list(
+        NotificationRecipient.objects.select_for_update().select_related("notification").filter(
+            notification__source_type="actions.treatment",
+            notification__source_id=treatment.pk,
+            notification__template_code=TREATMENT_LEARNED_LESSON_ASSIGNMENT_TEMPLATE,
+            notification__task_type=NotificationTaskType.LEARNED_LESSON,
+            task_status__in=[RecipientTaskStatus.PENDING, RecipientTaskStatus.IN_PROGRESS],
+        )
+    )
+    now = timezone.now()
+    for recipient in recipients:
+        recipient.task_status = RecipientTaskStatus.COMPLETED
+        recipient.resolved_at = now
+        if recipient.channel == NotificationChannel.EMAIL and recipient.delivery_status == DeliveryStatus.PENDING:
+            recipient.delivery_status = DeliveryStatus.SKIPPED
+            recipient.delivery_error = "La lección fue enviada para publicación antes del envío."
+        recipient.updated_by = actor
+        recipient.row_version = (recipient.row_version or 0) + 1
+        recipient.updated_at = now
+    if recipients:
+        NotificationRecipient.objects.bulk_update(
+            recipients, ["task_status", "resolved_at", "delivery_status", "delivery_error", "updated_by", "row_version", "updated_at"]
+        )
+        Notification.objects.filter(pk__in={recipient.notification_id for recipient in recipients}).update(
+            status=NotificationStatus.SENT, row_version=F("row_version") + 1, updated_at=now
+        )
 
 
 def notify_treatment_learned_lesson_published(*, lesson, actor=None, request_id: str = ""):

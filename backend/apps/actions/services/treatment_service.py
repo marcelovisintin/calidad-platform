@@ -43,10 +43,12 @@ from apps.anomalies.models import (
 from apps.anomalies.services.classification_rules import is_immediate_action_anomaly
 from apps.notifications.services import (
     complete_treatment_effectiveness_assignment,
+    complete_treatment_learned_lesson_assignment,
     dismiss_treatment_task_assignment_tasks,
     notify_treatment_anomaly_associated,
     notify_treatment_closed,
     notify_treatment_effectiveness_assigned,
+    notify_treatment_learned_lesson_assigned,
     notify_treatment_learned_lesson_published,
     notify_treatment_not_effective,
     notify_treatment_participant_invited,
@@ -606,6 +608,11 @@ def send_treatment_lesson_for_publication(*, treatment: Treatment, user, request
     lesson.status = TreatmentLearnedLessonStatus.READY
     lesson.updated_by = user
     lesson.save(update_fields=["status", "updated_by", "updated_at"])
+    complete_treatment_learned_lesson_assignment(
+        treatment=locked,
+        actor=user,
+        request_id=request_id,
+    )
     record_audit_event(entity=locked, action="treatment.learned_lesson.ready", actor=user,
                        after_data=snapshot_learned_lesson(lesson), request_id=_request_id(request_id))
     return lesson
@@ -1374,7 +1381,7 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
 
 
 @transaction.atomic
-def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str, comment: str = "", request_id: str = "") -> Treatment:
+def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str, comment: str = "", files=None, request_id: str = "") -> Treatment:
     locked = (
         Treatment.objects.select_for_update(of=("self",))
         .select_related("effectiveness_responsible")
@@ -1413,6 +1420,13 @@ def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str,
     _bump_version(locked)
     locked.full_clean()
     locked.save()
+    for file_obj in files or []:
+        validate_evidence_file(file_obj)
+        TreatmentEvidence.objects.create(
+            treatment=locked, file=file_obj, original_name=getattr(file_obj, "name", "") or "evidencia-eficacia",
+            content_type=normalized_upload_content_type(file_obj), note="Evidencia objetiva de eficacia.",
+            uploaded_by=user, created_by=user, updated_by=user,
+        )
 
     record_audit_event(
         entity=locked,
@@ -1442,6 +1456,11 @@ def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str,
             treatment=locked,
             user=user,
             changed_at=timezone.now(),
+            request_id=request_id,
+        )
+        notify_treatment_learned_lesson_assigned(
+            treatment=locked,
+            actor=user,
             request_id=request_id,
         )
     else:

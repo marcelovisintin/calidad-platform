@@ -205,9 +205,15 @@ export function addObservationActionEvidence(anomalyId: string, actionId: string
 }
 
 export function verifyObservationEffectiveness(anomalyId: string, payload: ObservationVerificationPayload) {
+  const body = new FormData();
+  body.append("effectiveness_verified_at", payload.effectiveness_verified_at);
+  body.append("effectiveness_is_effective", String(payload.effectiveness_is_effective));
+  body.append("effectiveness_comment", payload.effectiveness_comment);
+  if (payload.closure_comment !== undefined) body.append("closure_comment", payload.closure_comment);
+  (payload.evidences ?? []).forEach((file) => body.append("evidences", file));
   return apiRequest<AnomalyDetail>(`/anomalies/${anomalyId}/observation/effectiveness/`, {
     method: "POST",
-    body: payload,
+    body,
   });
 }
 

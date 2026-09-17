@@ -353,7 +353,6 @@ export const HELP_TOPICS: HelpTopic[] = [
           "Selecciona el método de análisis utilizado.",
           "Documenta las observaciones del análisis.",
           "Registra una o más causas raíz.",
-          "Adjunta evidencias del tratamiento cuando corresponda.",
           "Crea las acciones surgidas del tratamiento y vincúlalas con sus causas.",
           "Asigna fecha y responsable para la evaluación de eficacia.",
         ],
