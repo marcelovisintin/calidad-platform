@@ -20,7 +20,7 @@ export function IndicatorsCatalog() {
       {data ? (
         <div className="management-grid indicator-catalog-grid">
           {data.indicators.map((indicator) => (
-            <Link className="management-card indicator-catalog-card" key={indicator.key} to={indicator.dashboard_url}>
+            <Link className="management-card indicator-catalog-card" data-tour={`indicator-catalog-${indicator.key}`} key={indicator.key} to={indicator.dashboard_url}>
               <span className="section-sequence-badge">{indicator.sequence}</span>
               <p className="eyebrow">Indicador</p>
               <h3>{indicator.title}</h3>

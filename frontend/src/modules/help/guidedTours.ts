@@ -20,9 +20,16 @@ const TOURS: Record<string, GuidedTourDefinition> = {
     steps: [
       { selector: ".contextual-toolbar", title: "Resumen rápido", content: "Esta vista concentra el estado general del sistema para Administrador y Desarrollador. Los datos se obtienen del resumen histórico vigente." },
       { selector: ".contextual-current", title: "Vista activa", content: "El encabezado confirma que estás consultando Resumen rápido. Desde el Menú contextual puedes abrir otros bloques o el Centro de Ayuda." },
-      { selector: ".dashboard-summary-grid", title: "Tarjetas de resumen", content: "Cada tarjeta muestra el total de un proceso y su distribución por estados. Los registros históricos y terminales forman parte de los cálculos definidos." },
-      { selector: ".dashboard-summary-card", title: "Leer una tarjeta", content: "Revisa el total principal y el desglose compacto. Usa Ver detalle por usuario para identificar la distribución individual y el total general." },
-      { selector: ".dashboard-detail-toggle", title: "Detalle por usuario y seguimiento", content: "Al finalizar el recorrido, selecciona Ver detalle por usuario para comparar totales y estados de cada persona. Si necesitas investigar una anomalía concreta, abre Seguimiento de anomalías desde el panel lateral y consulta allí su detalle, responsable e historial." },
+      ...[
+        { key: "anomalies", title: "Seguimiento de anomalías", content: "El total histórico incluye los casos y su distribución por estados, también los terminales. El desglose compacto puede omitir estados: consulta el detalle para verlos todos." },
+        { key: "actions", title: "Acciones", content: "Este total reúne acciones de observaciones y de tratamientos, con su distribución por estados. Es un resumen histórico, no solo una lista de pendientes." },
+        { key: "treatments", title: "Tratamientos", content: "Consulta el total histórico y sus estados. Acciones completas, eficacia verificada y cierre formal son hitos distintos: revisa el estado informado, no únicamente la cantidad de acciones." },
+        { key: "validations", title: "Verificaciones de eficacia", content: "Esta tarjeta resume las verificaciones de tratamientos por responsable. No debe confundirse con el listado de Validaciones, que permite consultar también observaciones." },
+      ].flatMap((card) => [
+        { selector: `[data-tour="summary-${card.key}"]`, title: card.title, content: `${card.content} El recorrido señala esta tarjeta y bloquea el resto de la pantalla.` },
+        { selector: `[data-tour="summary-detail-${card.key}"]`, activateSelector: `[data-tour="summary-${card.key}"] .dashboard-detail-toggle[aria-expanded="false"]`, title: `${card.title}: detalle por usuario`, content: "El recorrido abre este detalle automáticamente, sin modificar registros. Revisa el total y los estados de cada usuario activo y la fila Total general. Un caso puede estar vinculado a varias personas; no interpretes la suma de filas como un total de casos únicos. Si no hay datos, se muestra el aviso correspondiente." },
+      ]),
+      { selector: ".contextual-current", title: "Continuar la gestión", content: "Resumen rápido es una consulta, no cambia estados ni habilita permisos de edición. Al terminar, abre la sección correspondiente desde el menú para investigar casos concretos, evidencias e historiales." },
     ],
   },
   newAnomaly: {
@@ -197,15 +204,68 @@ const TOURS: Record<string, GuidedTourDefinition> = {
   indicators: {
     id: "indicators",
     title: "Consultar indicadores",
-    description: "Selecciona un indicador y utiliza sus filtros, gráficos, datos e informes.",
+    description: "Conoce el catálogo y elige el análisis que necesitas consultar.",
     steps: [
       { selector: ".page-header", title: "Indicadores", content: "El catálogo reúne los dashboards disponibles para Administrador y Desarrollador." },
-      { selector: ".indicator-catalog-grid", title: "Seleccionar indicador", content: "Cada tarjeta abre un análisis específico del Sistema de Gestión de Calidad." },
-      { selector: ".inline-filter-fields", title: "Período y proceso", content: "En el dashboard, aplica fechas y proceso para recalcular métricas, gráficos y detalle." },
+      ...[
+        { key: "anomalies-treated", title: "Anomalías tratadas", content: "Consulta la gestión de los casos y sus estados." },
+        { key: "treatments", title: "Tratamientos", content: "Analiza el avance de los tratamientos." },
+        { key: "anomalies-by-process", title: "Anomalías por proceso", content: "Compara la distribución de anomalías entre procesos." },
+        { key: "finding-classification", title: "Clasificación de hallazgos", content: "Analiza cómo se clasificaron los hallazgos." },
+        { key: "repetition-pareto", title: "Repeticiones y Pareto", content: "Identifica los grupos con mayor recurrencia y su peso acumulado." },
+        { key: "actions", title: "Acciones", content: "Consulta el cumplimiento de acciones de ambos circuitos." },
+        { key: "effectiveness", title: "Eficacia", content: "Analiza verificaciones y resultados de eficacia." },
+        { key: "affected-orders", title: "Órdenes afectadas", content: "Revisa órdenes y cantidades afectadas por anomalías." },
+        { key: "learned-lessons", title: "Lecciones aprendidas", content: "Consulta aprendizajes registrados y modificaciones de procedimiento." },
+      ].map((indicator) => ({ selector: `[data-tour="indicator-catalog-${indicator.key}"]`, title: indicator.title, content: `${indicator.content} La tarjeta informa la fecha que utiliza este análisis. Al terminar el recorrido, ábrela para consultar su tablero y su recorrido específico; aquí no se navega ni se cambian registros.` })),
+    ],
+  },
+  indicatorDashboard: {
+    id: "indicator-dashboard",
+    title: "Consultar el tablero del indicador",
+    description: "Recorre filtros, resultados, gráficos, criterios de cálculo y opciones de informe del indicador abierto.",
+    steps: [
+      { selector: ".page-header", title: "Indicador seleccionado", content: "El recorrido permanece en este indicador, enfoca cada subsección y grisa y bloquea el resto. La consulta está disponible para Administrador y Desarrollador; no cambia registros." },
+      { selector: ".tabbed-filters-tabs", title: "Filtros del análisis", content: "Los filtros recalculan resultados, gráficos y datos de respaldo. El recorrido abre sus pestañas para explicarlas, sin cambiar los valores ni limpiar los filtros existentes." },
+      { selector: ".tabbed-filter-control", activateSelector: '.tabbed-filter-tab[data-filter-id="period"]', title: "Período", content: "Selecciona Desde y Hasta para delimitar el análisis. El rango inicial va desde el inicio del año hasta hoy. La fecha usada depende de este indicador; consulta sus criterios de cálculo antes de comparar resultados." },
+      { selector: ".tabbed-filter-control", activateSelector: '.tabbed-filter-tab[data-filter-id="process"]', title: "Proceso", content: "Limita el análisis a un proceso o consulta Todos los procesos. Cambiar un filtro vuelve a la primera página de los datos; el recorrido no cambia esta selección." },
+      { selector: 'select[aria-label="Agrupacion de Pareto"]', activateSelector: '.tabbed-filter-tab[data-filter-id="grouping"]', title: "Agrupación de Pareto", content: "Solo en Repeticiones y Pareto puedes agrupar por proceso y tipo, proceso, tipo, origen, clasificación u orden afectada. Cambia la agrupación del análisis, no los registros originales." },
+      { selector: ".tabbed-filter-clear", title: "Restablecer filtros", content: "Limpiar filtros restaura el período inicial, todos los procesos y la agrupación predeterminada. El recorrido no pulsa este botón para conservar tu consulta." },
       { selector: ".indicator-metrics-grid", title: "Resultados", content: "Las tarjetas resumen cantidades y porcentajes calculados para los filtros vigentes." },
-      { selector: ".indicator-dashboard-grid", title: "Gráficos", content: "Consulta evolución mensual y distribución del indicador." },
-      { selector: ".indicator-data-table", title: "Datos de respaldo", content: "La tabla permite revisar los registros que sostienen el resultado calculado." },
-      { selector: ".page-header .form-actions", title: "Exportar e informar", content: "Exporta el CSV filtrado o envía el informe PDF a usuarios habilitados." },
+      { selector: '[data-tour="indicator-trend"]', title: "Evolución mensual", content: "Revisa cómo cambia el resultado mes a mes dentro del período seleccionado. Las series visibles dependen del indicador; usa la leyenda y los criterios de cálculo para interpretarlas." },
+      { selector: '[data-tour="indicator-breakdown"]', title: "Distribución del período", content: "Este gráfico muestra la composición del resultado. En Pareto ayuda a identificar los grupos principales y su participación acumulada. No confundir distribución con evolución mensual." },
+      { selector: ".indicator-formula-panel", title: "Criterios de cálculo", content: "Aquí se explica qué se cuenta, qué fechas se usan y cómo se calculan los resultados de este indicador. Revisa estas reglas antes de interpretar porcentajes o compararlos con otros tableros." },
+      { selector: ".indicator-data-table", title: "Datos de respaldo", content: "La tabla muestra los registros o grupos que sostienen el cálculo. Fuera del recorrido, los códigos con enlace permiten abrir el contexto del caso. Si no hay resultados para los filtros, se informa sin inventar datos." },
+      { selector: ".pagination-controls", title: "Páginas de datos", content: "Recorre los datos de respaldo de veinte en veinte, manteniendo período, proceso y agrupación. La paginación de la tabla no cambia el alcance de las métricas y gráficos." },
+      { selector: '[data-tour="indicator-export"]', title: "Exportar CSV", content: "Descarga los datos de respaldo del indicador con los filtros vigentes. El recorrido solo señala este botón: no inicia una descarga." },
+      { selector: '[data-tour="indicator-report"]', title: "Enviar informe PDF", content: "Al terminar puedes abrir el envío de informe. Selecciona usuarios activos con correo habilitado y confirma los destinatarios antes de encolar. Se usan los filtros vigentes; el generador recibe copia si tiene correo habilitado. El recorrido no abre ni confirma un envío." },
+    ],
+  },
+  affectedOrders: {
+    id: "affected-orders",
+    title: "Consultar órdenes afectadas",
+    description: "Recorre filtros, totales, cantidades y trazabilidad de las órdenes vinculadas a anomalías.",
+    steps: [
+      { selector: ".page-header", title: "Órdenes afectadas", content: "Consulta consolidada para Administrador y Desarrollador. El recorrido mantiene esta pantalla, enfoca cada subsección y bloquea y grisa el resto. Aquí se consulta y exporta; no se editan órdenes ni anomalías." },
+      { selector: ".tabbed-filters-tabs", title: "Filtros disponibles", content: "Combina filtros para localizar las afectaciones. El recorrido abre cada pestaña sin cambiar valores ni resultados. Cambiar un valor fuera del recorrido vuelve a la primera página." },
+      ...[
+        { key: "search", title: "Buscar", content: "Busca por tipo, número, anomalía o proceso." },
+        { key: "type", title: "Tipo de orden", content: "Selecciona un tipo del catálogo o consulta Todos." },
+        { key: "number", title: "Número de orden", content: "Busca una coincidencia parcial del número de orden." },
+        { key: "anomaly", title: "Anomalía vinculada", content: "Busca por código o título de la anomalía relacionada." },
+        { key: "process", title: "Proceso", content: "Filtra por el proceso relacionado o consulta Todos." },
+        { key: "quantity", title: "Cantidad afectada", content: "Usa mínima y máxima para acotar la cantidad registrada en las afectaciones. Estas cantidades no son el total original de la orden." },
+        { key: "status", title: "Estado de la anomalía", content: "Este filtro corresponde al estado del caso de calidad, no al estado de producción de la orden." },
+        { key: "dates", title: "Fechas de detección", content: "Delimita Desde y Hasta según la fecha de detección de las anomalías, no la fecha de emisión de las órdenes." },
+      ].map((filter) => ({ selector: ".tabbed-filter-control", activateSelector: `.tabbed-filter-tab[data-filter-id="${filter.key}"]`, title: filter.title, content: filter.content })),
+      { selector: ".tabbed-filter-clear", title: "Limpiar filtros", content: "Este botón elimina los filtros aplicados y vuelve a la primera página con el orden predeterminado. El recorrido no lo pulsa, para conservar tu consulta." },
+      { selector: '[data-tour="affected-orders-sort"]', title: "Ordenar resultados", content: "Ordena por fecha de detección, tipo, número, cantidad o proceso. Cambia la presentación del listado, no las cantidades ni los registros originales." },
+      { selector: ".affected-orders-stats", title: "Totales de la consulta", content: "Órdenes diferentes cuenta combinaciones únicas de tipo y número. Registros cuenta afectaciones y Anomalías los casos involucrados; no son la misma medida. Cantidad total suma las cantidades registradas según los filtros, no solo la página visible." },
+      { selector: ".affected-orders-breakdown", title: "Totales por tipo", content: "Consulta la cantidad de registros y piezas afectadas por cada tipo de orden dentro de los filtros vigentes." },
+      { selector: ".affected-orders-table", title: "Listado de afectaciones", content: "Cada fila informa tipo, número, cantidad afectada, anomalía, proceso, fecha de detección y estado del caso. Una orden puede tener varias afectaciones; revisa sus vínculos antes de interpretar la suma como piezas únicas." },
+      { selector: ".affected-orders-table tbody tr:first-child td:nth-child(4)", title: "Abrir la anomalía", content: "Fuera del recorrido, pulsa el código para consultar el caso, sus responsables, evidencias e historial. El recorrido no navega a otro caso ni pierde tus filtros." },
+      { selector: ".pagination-controls", title: "Recorrer resultados", content: "El listado muestra veinte registros por página. Cambia de página sin perder los filtros; los totales corresponden a la consulta completa." },
+      { selector: '[data-tour="affected-orders-export"]', title: "Exportar CSV", content: "Exporta las afectaciones según los filtros vigentes. El recorrido solo explica el botón, sin descargar archivos ni alterar registros." },
     ],
   },
   users: {
@@ -247,7 +307,9 @@ export function getGuidedTour(pathname: string, access: { isAdmin: boolean; isMa
   if (pathname === "/learned-lessons") return TOURS.learnedLessons;
   if (pathname === "/treatments/tracking") return TOURS.treatmentTracking;
   if (pathname === "/notifications/inbox") return TOURS.inbox;
-  if ((pathname === "/indicators" || pathname.startsWith("/indicators/")) && access.isAdmin) return TOURS.indicators;
+  if (pathname === "/indicators" && access.isAdmin) return TOURS.indicators;
+  if (pathname.startsWith("/indicators/") && access.isAdmin) return TOURS.indicatorDashboard;
+  if (pathname === "/affected-orders" && access.isAdmin) return TOURS.affectedOrders;
   if (pathname === "/management/users" && access.isAdmin) return TOURS.users;
   if (pathname === "/management/catalogs" && access.isAdmin) return TOURS.catalogs;
   return null;

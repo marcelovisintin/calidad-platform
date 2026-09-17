@@ -186,7 +186,7 @@ function DashboardSummaryCardView({
   const hiddenCount = Math.max(0, card.statuses.length - compact.length);
 
   return (
-    <article className="stat-card dashboard-summary-card">
+    <article className="stat-card dashboard-summary-card" data-tour={`summary-${card.key}`}>
       <span className="stat-label">{card.title}</span>
       <strong className="stat-value">{card.total}</strong>
       <span className="stat-hint">{card.description}</span>
@@ -197,7 +197,7 @@ function DashboardSummaryCardView({
         {hiddenCount ? <span>{`+ ${hiddenCount} estados mas`}</span> : null}
       </div>
       {adminScope ? (
-        <button className="button button-secondary dashboard-detail-toggle" onClick={onToggle} type="button">
+        <button aria-expanded={expanded} className="button button-secondary dashboard-detail-toggle" onClick={onToggle} type="button">
           {expanded ? "Ocultar detalle por usuario" : "Ver detalle por usuario"}
         </button>
       ) : null}
@@ -209,7 +209,7 @@ function DashboardSummaryDetail({ card }: { card: DashboardSummaryCard }) {
   const rows = card.detail_rows ?? [];
   if (!rows.length) {
     return (
-      <section className="panel muted dashboard-detail-panel">
+      <section className="panel muted dashboard-detail-panel" data-tour={`summary-detail-${card.key}`}>
         <strong>{card.title}</strong>
         <p>No hay datos por usuario para mostrar.</p>
       </section>
@@ -217,7 +217,7 @@ function DashboardSummaryDetail({ card }: { card: DashboardSummaryCard }) {
   }
 
   return (
-    <section className="panel dashboard-detail-panel">
+    <section className="panel dashboard-detail-panel" data-tour={`summary-detail-${card.key}`}>
       <div className="section-head compact">
         <div>
           <p className="eyebrow">Detalle por usuario</p>

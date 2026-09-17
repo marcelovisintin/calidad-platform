@@ -94,6 +94,7 @@ export function AffectedOrdersPage() {
           <div className="form-actions">
             <select
               aria-label="Ordenar listado"
+              data-tour="affected-orders-sort"
               onChange={(event) => setFilter("ordering", event.target.value)}
               value={filters.ordering}
             >
@@ -104,7 +105,7 @@ export function AffectedOrdersPage() {
               <option value="-quantity">Mayor cantidad</option>
               <option value="process">Proceso</option>
             </select>
-            <button className="button button-secondary" disabled={exporting} onClick={() => void handleExport()} type="button">
+            <button className="button button-secondary" data-tour="affected-orders-export" disabled={exporting} onClick={() => void handleExport()} type="button">
               {exporting ? "Exportando..." : "Exportar CSV"}
             </button>
           </div>

@@ -227,8 +227,8 @@ export function IndicatorDashboardPage() {
         onClear={clearFilters}
         actions={(
           <div className="form-actions">
-            <button className="button button-secondary" disabled={exporting || loading} onClick={exportCsv} type="button">{exporting ? "Exportando..." : "Exportar CSV"}</button>
-            <button className="button button-primary" disabled={loading} onClick={() => setReportOpen(true)} type="button">Enviar informe</button>
+            <button className="button button-secondary" data-tour="indicator-export" disabled={exporting || loading} onClick={exportCsv} type="button">{exporting ? "Exportando..." : "Exportar CSV"}</button>
+            <button className="button button-primary" data-tour="indicator-report" disabled={loading} onClick={() => setReportOpen(true)} type="button">Enviar informe</button>
           </div>
         )}
         items={[
@@ -283,11 +283,11 @@ export function IndicatorDashboardPage() {
             </section>
 
             <section className="indicator-dashboard-grid">
-              <article className="panel indicator-chart-panel">
+              <article className="panel indicator-chart-panel" data-tour="indicator-trend">
                 <div className="section-head compact"><div><p className="eyebrow">Evolucion</p><h2>Resultado mensual</h2></div></div>
                 <IndicatorTrendChart series={data.series} visibleKeys={visibleSeriesKeys} />
               </article>
-              <article className="panel indicator-chart-panel">
+              <article className="panel indicator-chart-panel" data-tour="indicator-breakdown">
                 <div className="section-head compact"><div><p className="eyebrow">Distribucion</p><h2>{indicatorKey === "repetition-pareto" ? "Pareto acumulado" : "Composicion del período"}</h2></div></div>
                 <IndicatorBreakdownChart items={data.breakdown} />
               </article>
