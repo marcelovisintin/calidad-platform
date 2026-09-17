@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, MouseEvent, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, MouseEvent, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { fetchUsers } from "../../../api/accounts";
 import { fetchActionWorkItems } from "../../../api/actions";
 import { addObservationActionEvidence, completeObservationAction, fetchAnomalyDetail } from "../../../api/anomalies";
@@ -14,6 +14,7 @@ import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 import { resolveTaskHelpWorkContext, usePublishHelpWorkContext } from "../../help/workContext";
+import { TOUR_PREPARATION_EVENT, type TourPreparationDetail } from "../../help/tourPreparation";
 
 type TaskDraft = {
   title: string;
@@ -90,6 +91,7 @@ export function MyActionsPage() {
   const [completedOn, setCompletedOn] = useState("");
   const [responsibleFilter, setResponsibleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const tourPreparationRef = useRef<{ resolve: (ready: boolean) => void; waitForLoad: boolean } | null>(null);
   const [showTreatmentActions, setShowTreatmentActions] = useState(true);
   const [showObservationActions, setShowObservationActions] = useState(true);
   const [selectedWorkItemKey, setSelectedWorkItemKey] = useState("");
@@ -141,6 +143,70 @@ export function MyActionsPage() {
     [data?.results, selectedWorkItemKey],
   );
   usePublishHelpWorkContext(selectedWorkItem ? resolveTaskHelpWorkContext(selectedWorkItem) : null);
+
+  useEffect(() => {
+    const prepare = (event: Event) => {
+      const detail = (event as CustomEvent<TourPreparationDetail>).detail;
+      if (detail.tourId !== "actions") return;
+      const filtersReady = page === 1 && !query && !anomalyFilter && !treatmentFilter
+        && !completedOn && !responsibleFilter && statusFilter === "pending"
+        && showTreatmentActions && showObservationActions;
+      tourPreparationRef.current?.resolve(false);
+      detail.preparation = new Promise<boolean>((resolve) => {
+        tourPreparationRef.current = { resolve, waitForLoad: !filtersReady };
+      });
+      setQuery("");
+      setAnomalyFilter("");
+      setTreatmentFilter("");
+      setCompletedOn("");
+      setResponsibleFilter("");
+      setStatusFilter("pending");
+      setPage(1);
+      setShowTreatmentActions(true);
+      setShowObservationActions(true);
+      // Provocar un render incluso si los filtros ya estaban preparados.
+      setSelectedWorkItemKey("");
+    };
+    window.addEventListener(TOUR_PREPARATION_EVENT, prepare);
+    return () => window.removeEventListener(TOUR_PREPARATION_EVENT, prepare);
+  }, [page, query, anomalyFilter, treatmentFilter, completedOn, responsibleFilter, statusFilter, showTreatmentActions, showObservationActions]);
+
+  useEffect(() => {
+    const preparation = tourPreparationRef.current;
+    if (!preparation) return;
+    if (loading) preparation.waitForLoad = false;
+    if (loading || usersLoading || preparation.waitForLoad) return;
+    if (error) {
+      preparation.resolve(false);
+      tourPreparationRef.current = null;
+      return;
+    }
+    if (!data || deferredQuery || deferredAnomalyFilter || deferredTreatmentFilter
+      || completedOn || responsibleFilter || statusFilter !== "pending" || page !== 1
+      || !showTreatmentActions || !showObservationActions
+      || data.results.some((item) => item.status !== "pending")) return;
+    const pending = data.results.find((item) => item.source === "treatment" && item.can_update_status)
+      ?? data.results.find((item) => item.can_update_status)
+      ?? data.results.find((item) => item.source === "treatment")
+      ?? data.results[0];
+    if (!pending) {
+      setMessage("No hay acciones pendientes disponibles para realizar este recorrido.");
+      preparation.resolve(false);
+      tourPreparationRef.current = null;
+      return;
+    }
+    if (selectedWorkItemKey !== getWorkItemKey(pending)) {
+      setSelectedWorkItemKey(getWorkItemKey(pending));
+      return;
+    }
+    preparation.resolve(true);
+    tourPreparationRef.current = null;
+  }, [data, loading, usersLoading, error, deferredQuery, deferredAnomalyFilter, deferredTreatmentFilter, completedOn, responsibleFilter, statusFilter, page, showTreatmentActions, showObservationActions, selectedWorkItemKey]);
+
+  useEffect(() => () => {
+    tourPreparationRef.current?.resolve(false);
+    tourPreparationRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (!data) return;
@@ -427,13 +493,13 @@ export function MyActionsPage() {
               <div><dt>Fecha terminada</dt><dd>{formatDate(selectedWorkItem.completed_on)}</dd></div>
               <div><dt>Finalizada por</dt><dd>{selectedWorkItem.completed_by ? getUserLabel(selectedWorkItem.completed_by) : "-"}</dd></div>
             </dl>
-            <section className="form-section nested-form">
+            <section className="form-section nested-form" data-tour="action-evidence">
               <div className="section-head compact"><h3>Evidencia de la acción</h3>{!selectedIsTerminal ? <button className="button button-primary" disabled={busy || !selectedWorkItem.can_add_evidence || !taskEvidenceFile} onClick={() => void handleAddTaskEvidence()} type="button">Cargar evidencia</button> : null}</div>
               {selectedWorkItem.evidences.map((evidence) => <div className="list-card compact" key={evidence.id}><a href={normalizeProtectedFileUrl(evidence.file_url)} onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)}>{evidence.original_name}</a><p>{evidence.note || "Sin nota"}</p></div>)}
               {!selectedIsTerminal ? <><label className="field"><span>Archivo</span><input accept={EVIDENCE_ACCEPT} disabled={!selectedWorkItem.can_add_evidence || busy} key={taskEvidenceInputKey} onChange={(event) => setTaskEvidenceFile(event.target.files?.[0] ?? null)} type="file" /></label><label className="field"><span>Nota de evidencia (opcional)</span><textarea disabled={!selectedWorkItem.can_add_evidence || busy} onChange={(event) => setTaskEvidenceNote(event.target.value)} value={taskEvidenceNote} /></label></> : null}
             </section>
             {!selectedIsTerminal && selectedWorkItem.can_update_status ? (
-              <form className="form-section nested-form" onSubmit={handleCompleteObservation}>
+              <form className="form-section nested-form" data-tour="action-observation-completion" onSubmit={handleCompleteObservation}>
                 {!selectedWorkItem.evidences.length ? <p role="status">Cargue evidencia para habilitar los datos y la finalización de esta acción.</p> : null}
                 <fieldset className="action-data-fields" disabled={busy || !selectedWorkItem.evidences.length}>
                 <div className="section-head compact"><h3>Finalizar accion</h3><button className="button button-primary" disabled={busy || !observationCompletedAt} type="submit">Marcar como finalizada</button></div>
@@ -455,31 +521,31 @@ export function MyActionsPage() {
               <div><dt>Responsable actual</dt><dd>{selectedWorkItem.responsible ? getUserLabel(selectedWorkItem.responsible) : "Sin asignar"}</dd></div>
               <div><dt>Fecha terminada</dt><dd>{formatDate(selectedWorkItem.completed_on)}</dd></div>
             </dl>
-            <section className="form-section nested-form">
+            <section className="form-section nested-form" data-tour="action-evidence">
               <div className="section-head compact"><h3>Evidencia de la acción</h3>{!selectedIsTerminal ? <button className="button button-primary" disabled={busy || !selectedWorkItem.can_add_evidence || !taskEvidenceFile} onClick={() => void handleAddTaskEvidence()} type="button">Cargar evidencia</button> : null}</div>
-              <div className="stack-list compact">
+              <div className="stack-list compact" data-tour="action-status-history">
                 <h4>Notas de cambios de estado</h4>
                 {(selectedWorkItem.status_evidences ?? []).length ? selectedWorkItem.status_evidences.map((evidence) => <div className="list-card compact" key={evidence.id}><div className="evidence-block"><div className="timeline-row"><StatusBadge compact value={evidence.from_status} /><span className="timeline-arrow">a</span><StatusBadge compact value={evidence.to_status} /></div><small>{formatDateTime(evidence.changed_at)}{evidence.changed_by ? ` - ${getUserLabel(evidence.changed_by)}` : ""}</small><p>{evidence.note}</p></div></div>) : <p className="muted-copy">Todavía no hay notas de cambios de estado.</p>}
               </div>
               {!selectedIsTerminal ? <div className="form-grid"><label className="field field-span-2"><span>Archivo</span><input accept={EVIDENCE_ACCEPT} disabled={!selectedWorkItem.can_add_evidence} key={taskEvidenceInputKey} onChange={(event) => setTaskEvidenceFile(event.target.files?.[0] ?? null)} type="file" /></label><label className="field field-span-2"><span>Nota de evidencia (opcional)</span><textarea disabled={!selectedWorkItem.can_add_evidence} onChange={(event) => setTaskEvidenceNote(event.target.value)} rows={3} value={taskEvidenceNote} /></label></div> : null}
-              <div className="stack-list compact">
+              <div className="stack-list compact" data-tour="action-files">
                 <h4>Archivos de evidencia</h4>
                 {selectedWorkItem.evidences.length ? selectedWorkItem.evidences.map((evidence) => <div className="list-card compact" key={evidence.id}><div className="evidence-block"><a href={normalizeProtectedFileUrl(evidence.file_url)} onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)} rel="noopener noreferrer" target="_blank">{evidence.original_name}</a><small>{formatDateTime(evidence.created_at)}</small><p>{evidence.note || "Sin nota"}</p></div></div>) : <p className="muted-copy">Todavía no hay evidencias cargadas en esta acción.</p>}
               </div>
             </section>
             {!selectedIsTerminal ? (
-              <form className="form-section nested-form" onSubmit={handleUpdateTask}>
+              <form className="form-section nested-form" data-tour="action-data" onSubmit={handleUpdateTask}>
                 {!selectedWorkItem.evidences.length ? <p role="status">Cargue evidencia para habilitar los datos de esta acción.</p> : null}
                 <fieldset className="action-data-fields" disabled={busy || !selectedWorkItem.evidences.length}>
                 <div className="section-head compact"><h3>Datos de la acción</h3><div className="task-save-controls">{statusEvidenceError ? <span className="inline-form-alert" role="alert">{statusEvidenceError}</span> : null}<button className="button button-primary" disabled={busy || !selectedWorkItem.can_update_status} type="submit">Guardar acción</button></div></div>
                 <div className="form-grid">
                   <label className="field"><span>Acción</span><input disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("title", event.target.value)} required type="text" value={taskDraft.title} /></label>
-                  <label className="field"><span>Estado</span><select disabled={!selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("status", event.target.value as TaskDraft["status"])} value={taskDraft.status}>{getAvailableTaskStatusOptions(selectedWorkItem).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+                  <label className="field" data-tour="action-state"><span>Estado</span><select disabled={!selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("status", event.target.value as TaskDraft["status"])} value={taskDraft.status}>{getAvailableTaskStatusOptions(selectedWorkItem).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                   <label className="field"><span>Responsable</span><select disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("responsible", event.target.value)} value={taskDraft.responsible}><option value="">Sin asignar</option>{(usersData?.results ?? []).map((user) => <option key={user.id} value={user.id}>{getUserLabel(user)}</option>)}</select></label>
                   <label className="field"><span>Fecha límite de ejecución</span><input disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("execution_date", event.target.value)} type="date" value={taskDraft.execution_date} /></label>
                 </div>
                 <label className="field"><span>Descripcion</span><textarea disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("description", event.target.value)} rows={3} value={taskDraft.description} /></label>
-                {taskDraft.status !== selectedWorkItem.status ? <label className="field"><span>Nota de evidencia del cambio de estado</span><textarea onChange={(event) => setTaskStatusEvidenceNote(event.target.value)} required rows={3} value={taskStatusEvidenceNote} /></label> : null}
+                {taskDraft.status !== selectedWorkItem.status ? <label className="field" data-tour="action-state-note"><span>Nota de evidencia del cambio de estado</span><textarea onChange={(event) => setTaskStatusEvidenceNote(event.target.value)} required rows={3} value={taskStatusEvidenceNote} /></label> : null}
                 </fieldset>
               </form>
             ) : null}

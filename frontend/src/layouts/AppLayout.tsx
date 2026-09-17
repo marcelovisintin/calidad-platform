@@ -9,6 +9,7 @@ import { GuidedTourOverlay } from "../modules/help/components/GuidedTourOverlay"
 import { getContextualHelp } from "../modules/help/contextualHelp";
 import { getGuidedTour } from "../modules/help/guidedTours";
 import { markHelpTourCompleted } from "../modules/help/helpProgress";
+import { prepareGuidedTour } from "../modules/help/tourPreparation";
 import {
   getDefaultHelpWorkContext,
   subscribeHelpWorkContext,
@@ -97,10 +98,11 @@ export function AppLayout() {
     }
     setTourOpen(false);
   }, [guidedTour, user?.id]);
-  const startTour = useCallback(() => {
+  const startTour = useCallback(async () => {
     setHelpOpen(false);
+    if (!guidedTour || !await prepareGuidedTour(guidedTour.id)) return;
     setTourOpen(true);
-  }, []);
+  }, [guidedTour]);
 
   useEffect(() => {
     let objectUrl = "";

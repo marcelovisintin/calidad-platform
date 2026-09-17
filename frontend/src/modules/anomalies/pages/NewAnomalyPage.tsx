@@ -292,7 +292,7 @@ export function NewAnomalyPage() {
               <p className="eyebrow">Paso 1</p>
               <h2>Datos de inicio</h2>
             </div>
-            <span className="status-badge info compact">Carga inicial</span>
+            <span className="status-badge accent compact">Obligatorio</span>
           </div>
 
           <div className="form-grid compact-form-grid">
@@ -429,7 +429,7 @@ export function NewAnomalyPage() {
                 value={form.description}
               />
             </label>
-            <label className="field field-span-2">
+            <label className="field field-span-2" data-tour="anomaly-objective-evidence">
               <span>Evidencia objetiva</span>
               <input accept={EVIDENCE_ACCEPT} multiple onChange={handleEvidenceChange} type="file" />
               <small className="muted-copy">

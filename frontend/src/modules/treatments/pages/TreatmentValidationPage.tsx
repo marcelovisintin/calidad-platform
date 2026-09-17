@@ -239,7 +239,7 @@ export function TreatmentValidationPage() {
             <DataState loading={detailLoading} error={detailError} onRetry={reloadDetail}>
               {selectedItem && selectedDetail ? (
                 <form className="form-section" onSubmit={handleSubmit}>
-                  <div className="section-head compact">
+                  <div className="section-head compact" data-tour="validation-summary">
                     <div>
                       <div className="badge-stack"><SourceBadge source={selectedItem.source} /></div>
                       <p className="eyebrow">{selectedItem.code}</p>
@@ -248,7 +248,7 @@ export function TreatmentValidationPage() {
                     <StatusBadge value={selectedItem.status} overdue={selectedItem.is_overdue} />
                   </div>
 
-                  <dl className="key-grid compact">
+                  <dl className="key-grid compact" data-tour="validation-dates">
                     <div><dt>Fecha de validacion</dt><dd>{selectedItem.due_date ? formatDate(selectedItem.due_date) : "Sin fecha"}</dd></div>
                     <div><dt>Responsable</dt><dd>{selectedItem.responsible?.full_name || selectedItem.responsible?.username || "Sin responsable"}</dd></div>
                     <div><dt>Resultado actual</dt><dd>{resultLabel(selectedItem.result)}</dd></div>
@@ -256,41 +256,41 @@ export function TreatmentValidationPage() {
                   </dl>
 
                   {selectedItem.validation_comment ? (
-                    <div className="readonly-block">
+                    <div className="readonly-block" data-tour="validation-recorded-reason">
                       <strong>Fundamento de eficacia registrado</strong>
                       <p>{selectedItem.validation_comment}</p>
                     </div>
                   ) : null}
 
                   {selectedItem.blockers.length ? (
-                    <div className="panel warning">
+                    <div className="panel warning" data-tour="validation-conditions">
                       <h3>Falta completar</h3>
                       <ul className="help-list">
                         {selectedItem.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
                       </ul>
                     </div>
                   ) : selectedItem.status === "pending" ? (
-                    <div className="panel info">El caso cumple las condiciones para validar.</div>
+                    <div className="panel info" data-tour="validation-conditions">El caso cumple las condiciones para validar.</div>
                   ) : null}
 
                   {!selectedItem.can_validate && selectedItem.status !== "completed" ? (
-                    <div className="panel warning compact-inline-panel">
+                    <div className="panel warning compact-inline-panel" data-tour="validation-permissions">
                       <p>Solo el responsable designado puede registrar esta validacion.</p>
                     </div>
                   ) : null}
 
                   {selectedItem.status === "completed" ? (
-                    <div className="panel muted">Esta validacion ya fue realizada y se muestra en modo consulta.</div>
+                    <div className="panel muted" data-tour="validation-completed">Esta validacion ya fue realizada y se muestra en modo consulta.</div>
                   ) : (
                     <>
                       <div className="form-grid">
                         {selectedItem.source === "observation" ? (
-                          <label className="field">
+                          <label className="field" data-tour="validation-real-date">
                             <span>Fecha de realizacion</span>
                             <input disabled={!selectedItem.can_validate || busy} onChange={(event) => setVerifiedAt(event.target.value)} required type="datetime-local" value={verifiedAt} />
                           </label>
                         ) : null}
-                        <label className="field">
+                        <label className="field" data-tour="validation-result">
                           <span>Resultado</span>
                           <select disabled={!selectedItem.can_validate || busy} onChange={(event) => setValidationResult(event.target.value as ValidationResult)} required value={validationResult}>
                             <option value="">Seleccionar...</option>
@@ -298,7 +298,7 @@ export function TreatmentValidationPage() {
                             <option value="not_effective">No eficaz</option>
                           </select>
                         </label>
-                        <label className="field field-span-2">
+                        <label className="field field-span-2" data-tour="validation-reason">
                           <span>Fundamento de eficacia</span>
                           <textarea
                             disabled={!selectedItem.can_validate || busy}
@@ -308,12 +308,12 @@ export function TreatmentValidationPage() {
                             value={validationComment}
                           />
                         </label>
-                        <label className="field field-span-2">
+                        <label className="field field-span-2" data-tour="validation-evidence">
                           <span>Evidencia objetiva de eficacia</span>
                           <input accept=".jpg,.jpeg,.png,.pdf,.txt" disabled={!selectedItem.can_validate || busy} multiple onChange={(event) => setValidationEvidences(Array.from(event.target.files ?? []))} type="file" />
                         </label>
                       </div>
-                      <div className="form-actions">
+                      <div className="form-actions" data-tour="validation-confirm">
                         <button
                           className="button button-primary"
                           disabled={busy || !validationResult || !selectedItem.can_validate || !validationComment.trim()}

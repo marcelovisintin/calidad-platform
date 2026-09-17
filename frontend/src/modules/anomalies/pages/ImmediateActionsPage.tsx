@@ -483,7 +483,7 @@ export function ImmediateActionsPage() {
             <DataState loading={detailLoading} error={detailError} onRetry={reloadDetail}>
               {selectedAnomaly ? (
                 <>
-                  <div className="section-head compact">
+                  <div className="section-head compact" data-tour="observation-summary">
                     <div>
                       <p className="eyebrow">Detalle de anomalia</p>
                       <h2>{selectedAnomaly.code}</h2>
@@ -507,7 +507,7 @@ export function ImmediateActionsPage() {
                     Ver detalle completo de la anomalia
                   </Link>
 
-                  <form className="form-section" onSubmit={handleLoadAction}>
+                  <form className="form-section" data-tour="observation-general" onSubmit={handleLoadAction}>
                     <div className="section-head compact">
                       <div>
                         <p className="eyebrow">Primera tarjeta</p>
@@ -526,12 +526,12 @@ export function ImmediateActionsPage() {
                         <input disabled={hasAssignedObservation} onChange={(event) => setActionDate(event.target.value)} required type="date" value={actionDate} />
                       </label>
 
-                      <label className="field field-span-2">
+                      <label className="field field-span-2" data-tour="observation-cause">
                         <span>Causa asignada</span>
                         <textarea disabled={hasLoadedAction} onChange={(event) => setObservation(event.target.value)} required rows={3} value={observation} />
                       </label>
 
-                      <label className="checkbox-inline field-span-2">
+                      <label className="checkbox-inline field-span-2" data-tour="observation-treatment-path">
                         <input
                           checked={requiresTreatment}
                           disabled={hasConfirmedActions || selectedAnomaly.current_status === "closed"}
@@ -542,7 +542,7 @@ export function ImmediateActionsPage() {
                       </label>
                     </div>
 
-                    <div className="form-actions">
+                    <div className="form-actions" data-tour="observation-general-confirm">
                       <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed"} type="submit">
                         {submitting ? "Guardando..." : "Siguiente"}
                       </button>
@@ -553,7 +553,7 @@ export function ImmediateActionsPage() {
                   {!hasLoadedAction && message ? <div className="panel success">{message}</div> : null}
 
                   {generalStepConfirmed && hasLoadedAction ? (
-                    <form className="form-section" onSubmit={handleCreateObservationAction}>
+                    <form className="form-section" data-tour="observation-actions" onSubmit={handleCreateObservationAction}>
                       <div className="section-head compact">
                         <div>
                           <p className="eyebrow">Segunda tarjeta</p>
@@ -577,7 +577,7 @@ export function ImmediateActionsPage() {
                           <textarea onChange={(event) => setActionDetail(event.target.value)} required rows={3} value={actionDetail} />
                         </label>
 
-                        <label className="field field-span-2">
+                        <label className="field field-span-2" data-tour="observation-evidence">
                           <span>Evidencias objetivas</span>
                           <input key={objectiveEvidenceInputKey} multiple onChange={handleObjectiveEvidenceChange} type="file" />
                         </label>
@@ -605,7 +605,7 @@ export function ImmediateActionsPage() {
                         </button>
                       </div>
 
-                      <div className="stack-list compact">
+                      <div className="stack-list compact" data-tour="observation-action-list">
                         {observationActions.map((action) => (
                           <article className="list-card compact" key={action.id}>
                             <div>
@@ -643,13 +643,13 @@ export function ImmediateActionsPage() {
                       </div>
                     </form>
                   ) : (
-                    <div className="panel muted">
+                    <div className="panel muted" data-tour="observation-actions">
                       <p>Primero confirma la carga de Observacion para habilitar acciones tomadas.</p>
                     </div>
                   )}
 
                   {hasConfirmedActions ? (
-                    <form className="form-section" onSubmit={handleVerifyEffectiveness}>
+                    <form className="form-section" data-tour="observation-effectiveness" onSubmit={handleVerifyEffectiveness}>
                       <div className="section-head compact">
                         <h3>Verificacion de eficacia</h3>
                         <StatusBadge
@@ -712,7 +712,7 @@ export function ImmediateActionsPage() {
                           </select>
                         </label>
 
-                        <label className="field field-span-2">
+                        <label className="field field-span-2" data-tour="observation-effectiveness-reason">
                           <span>Fundamento de eficacia</span>
                           <textarea disabled={!canVerifyEffectiveness} onChange={(event) => setEffectivenessComment(event.target.value)} required rows={3} value={effectivenessComment} />
                         </label>
@@ -721,14 +721,14 @@ export function ImmediateActionsPage() {
                     {formError ? <div className="panel danger">{formError}</div> : null}
                     {message ? <div className="panel success">{message}</div> : null}
 
-                    <div className="form-actions">
+                    <div className="form-actions" data-tour="observation-effectiveness-confirm">
                       <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed" || !canVerifyEffectiveness || !effectivenessComment.trim()} type="submit">
                         {submitting ? "Guardando..." : "Guardar verificacion"}
                       </button>
                     </div>
                   </form>
                   ) : (
-                    <div className="panel muted">
+                    <div className="panel muted" data-tour="observation-effectiveness">
                       <p>Primero carga al menos una accion para habilitar la verificacion de eficacia.</p>
                     </div>
                   )}

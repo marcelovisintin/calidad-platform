@@ -923,7 +923,7 @@ return (
             <DataState loading={detailLoading} error={detailError} onRetry={reloadDetail}>
               {selectedTreatment ? (
                 <>
-                  <div className="section-head">
+                  <div className="section-head" data-tour="treatment-summary">
                     <div>
                       <p className="eyebrow">Detalle de tratamiento</p>
                       <h2>{selectedTreatment.code}</h2>
@@ -1005,7 +1005,7 @@ return (
                         </div>
                       </section>
 
-                      <form className="form-section" onSubmit={handleAddParticipant}>
+                      <form className="form-section" data-tour="treatment-participants" onSubmit={handleAddParticipant}>
                         <div className="section-head compact">
                           <h3>Usuarios convocados</h3>
                           <button className="button button-primary" disabled={busy || treatmentLocked || convocationConfirmed || !participantUserId} type="submit">
@@ -1079,7 +1079,7 @@ return (
                         </div>
                       </form>
 
-                      <form className="form-section" onSubmit={handleSaveAgenda}>
+                      <form className="form-section" data-tour="treatment-agenda" onSubmit={handleSaveAgenda}>
                         <div className="section-head compact">
                           <h3>Fecha de tratamiento</h3>
                           <button className="button button-primary" disabled={busy || agendaFieldsDisabled} type="submit">
@@ -1127,7 +1127,7 @@ return (
                         ) : null}
                       </form>
 
-                      <section className="form-section">
+                      <section className="form-section" data-tour="treatment-anomaly-evidence">
                         <div className="section-head compact">
                           <h3>Evidencias objetivas de anomalias vinculadas</h3>
                         </div>
@@ -1165,7 +1165,7 @@ return (
 
                   {selectedTab === "analysis" ? (
                     <div className="treatment-tab-content">
-                      <div className="form-section">
+                      <div className="form-section" data-tour="treatment-method">
                         <div className="section-head compact">
                           <h3>Metodo y observaciones</h3>
                         </div>
@@ -1232,7 +1232,7 @@ return (
                         </div>
                       </form>}
 
-                      <form className="form-section" onSubmit={handleAddRootCause}>
+                      <form className="form-section" data-tour="treatment-causes" onSubmit={handleAddRootCause}>
                         <div className="section-head compact">
                           <h3>Causas raiz encontradas</h3>
                           <button className="button button-primary" disabled={busy || treatmentLocked || !rootCauseDescription.trim()} type="submit">
@@ -1262,7 +1262,7 @@ return (
                         </div>
                       </form>
 
-                      <form className="form-section" onSubmit={handleAddTask}>
+                      <form className="form-section" data-tour="treatment-actions" onSubmit={handleAddTask}>
                         <div className="section-head compact">
                           <h3>Acciones surgidas del tratamiento</h3>
                           <button className="button button-primary" disabled={busy || treatmentLocked || !canCreateTask} type="submit">
@@ -1360,7 +1360,7 @@ return (
 
                       </form>
 
-                      <div className="form-section">
+                      <div className="form-section" data-tour="treatment-action-detail">
                         <div className="section-head compact">
                           <h3>Detalle de acciones</h3>
                         </div>
@@ -1394,7 +1394,7 @@ return (
                         </p>
                       </div>
 
-                      <form className="form-section" onSubmit={handleSaveAnalysis}>
+                      <form className="form-section" data-tour="treatment-effectiveness" onSubmit={handleSaveAnalysis}>
                         <div className="section-head compact">
                           <div>
                             <p className="eyebrow">Paso final</p>

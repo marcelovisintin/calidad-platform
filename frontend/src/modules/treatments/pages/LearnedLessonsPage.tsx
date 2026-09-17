@@ -213,7 +213,7 @@ function LearnedLessonCard({
 
   return (
     <article className="panel learned-lesson-card">
-      <div className="learned-lesson-summary">
+      <div className="learned-lesson-summary" data-tour="lesson-treatment-summary">
         <div className="section-head compact">
           <div>
             <strong>{treatment.code}</strong>
@@ -242,7 +242,7 @@ function LearnedLessonCard({
         {error ? <div className="panel danger compact-inline-panel">{error}</div> : null}
 
         <fieldset disabled={!canEdit || saving}>
-        <label className="field">
+        <label className="field" data-tour="lesson-learning-choice">
           <span>Hubo un aprendizaje?</span>
           <select value={form.hasLearning} onChange={(event) => updateForm({ hasLearning: event.target.value as LessonFormState["hasLearning"] })}>
             <option value="">Seleccionar...</option>
@@ -253,11 +253,11 @@ function LearnedLessonCard({
 
         {form.hasLearning === "yes" ? (
           <>
-            <label className="field">
+            <label className="field" data-tour="lesson-learning-text">
               <span>Que se aprendio?</span>
               <textarea value={form.learnedText} onChange={(event) => updateForm({ learnedText: event.target.value })} />
             </label>
-            <label className="field">
+            <label className="field" data-tour="lesson-evidence">
               <span>Evidencia objetiva</span>
               <input multiple type="file" onChange={handleFiles} />
             </label>
@@ -265,13 +265,13 @@ function LearnedLessonCard({
         ) : null}
 
         {form.hasLearning === "no" ? (
-          <label className="field">
+          <label className="field" data-tour="lesson-no-learning">
             <span>Por que no se aprendio?</span>
             <textarea value={form.noLearningReason} onChange={(event) => updateForm({ noLearningReason: event.target.value })} />
           </label>
         ) : null}
 
-        <label className="field">
+        <label className="field" data-tour="lesson-procedure-choice">
           <span>Modifica procedimiento?</span>
           <select value={form.procedureModified} onChange={(event) => updateForm({ procedureModified: event.target.value as LessonFormState["procedureModified"] })}>
             <option value="">Seleccionar...</option>
@@ -281,14 +281,14 @@ function LearnedLessonCard({
         </label>
 
         {form.procedureModified === "yes" ? (
-          <label className="field">
+          <label className="field" data-tour="lesson-procedure-detail">
             <span>Observaciones sobre modificacion de procedimiento</span>
             <textarea value={form.procedureModificationNotes} onChange={(event) => updateForm({ procedureModificationNotes: event.target.value })} />
           </label>
         ) : null}
 
         {lesson?.evidences.length ? (
-          <div className="form-section">
+          <div className="form-section" data-tour="lesson-files">
             <strong>Evidencias cargadas</strong>
             <div className="stack-list compact">
               {lesson.evidences.map((evidence) => (
@@ -308,7 +308,7 @@ function LearnedLessonCard({
           </div>
         ) : null}
 
-        <div className="form-actions">
+        <div className="form-actions" data-tour="lesson-save">
           <button className="button button-primary" type="submit">
             Guardar cambios
           </button>
@@ -333,9 +333,9 @@ function LearnedLessonCard({
         </div>
         </div>, document.body,
       ) : null}
-      {lesson?.derived_actions?.length ? <div className="form-section"><strong>Acciones derivadas</strong>{lesson.derived_actions.map((action) => <div className="list-card compact" key={action.id}>{action.code} · {action.title} · {action.responsible?.full_name || "-"} · fecha limite {formatDate(action.execution_date)} · {action.status}</div>)}</div> : null}
-      {canEdit && lesson ? <button className="button button-secondary" disabled={saving} onClick={() => void runLessonAction("send")} type="button">Enviar para publicacion</button> : null}
-      {canPublish ? <button className="button button-primary" disabled={saving} onClick={() => void runLessonAction("publish")} type="button">PUBLICAR</button> : null}
+      {lesson?.derived_actions?.length ? <div className="form-section" data-tour="lesson-derived-list"><strong>Acciones derivadas</strong>{lesson.derived_actions.map((action) => <div className="list-card compact" key={action.id}>{action.code} · {action.title} · {action.responsible?.full_name || "-"} · fecha limite {formatDate(action.execution_date)} · {action.status}</div>)}</div> : null}
+      {canEdit && lesson ? <button className="button button-secondary" data-tour="lesson-send" disabled={saving} onClick={() => void runLessonAction("send")} type="button">Enviar para publicacion</button> : null}
+      {canPublish ? <button className="button button-primary" data-tour="lesson-publish" disabled={saving} onClick={() => void runLessonAction("publish")} type="button">PUBLICAR</button> : null}
 
       {lesson?.revisions?.length ? (
         <details className="learned-lesson-history">
@@ -503,7 +503,7 @@ function ObservationLearnedLessonCard({
 
   return (
     <article className="panel learned-lesson-card">
-      <div className="learned-lesson-summary">
+      <div className="learned-lesson-summary" data-tour="lesson-observation-summary">
         <div className="section-head compact">
           <div>
             <strong>{item.code}</strong>
@@ -530,7 +530,7 @@ function ObservationLearnedLessonCard({
         {message ? <div className="panel info compact-inline-panel">{message}</div> : null}
         {error ? <div className="panel danger compact-inline-panel">{error}</div> : null}
 
-        <label className="field">
+        <label className="field" data-tour="lesson-learning-choice">
           <span>Hubo un aprendizaje?</span>
           <select value={form.hasLearning} onChange={(event) => updateForm({ hasLearning: event.target.value as LessonFormState["hasLearning"] })}>
             <option value="">Seleccionar...</option>
@@ -541,11 +541,11 @@ function ObservationLearnedLessonCard({
 
         {form.hasLearning === "yes" ? (
           <>
-            <label className="field">
+            <label className="field" data-tour="lesson-learning-text">
               <span>Que se aprendio?</span>
               <textarea value={form.learnedText} onChange={(event) => updateForm({ learnedText: event.target.value })} />
             </label>
-            <label className="field">
+            <label className="field" data-tour="lesson-evidence">
               <span>Evidencia objetiva</span>
               <input multiple type="file" onChange={handleFiles} />
             </label>
@@ -553,13 +553,13 @@ function ObservationLearnedLessonCard({
         ) : null}
 
         {form.hasLearning === "no" ? (
-          <label className="field">
+          <label className="field" data-tour="lesson-no-learning">
             <span>Por que no se aprendio?</span>
             <textarea value={form.noLearningReason} onChange={(event) => updateForm({ noLearningReason: event.target.value })} />
           </label>
         ) : null}
 
-        <label className="field">
+        <label className="field" data-tour="lesson-procedure-choice">
           <span>Modifica procedimiento?</span>
           <select value={form.procedureModified} onChange={(event) => updateForm({ procedureModified: event.target.value as LessonFormState["procedureModified"] })}>
             <option value="">Seleccionar...</option>
@@ -569,14 +569,14 @@ function ObservationLearnedLessonCard({
         </label>
 
         {form.procedureModified === "yes" ? (
-          <label className="field">
+          <label className="field" data-tour="lesson-procedure-detail">
             <span>Observaciones sobre modificacion de procedimiento</span>
             <textarea value={form.procedureModificationNotes} onChange={(event) => updateForm({ procedureModificationNotes: event.target.value })} />
           </label>
         ) : null}
 
         {item.learning?.evidences.length ? (
-          <div className="form-section">
+          <div className="form-section" data-tour="lesson-files">
             <strong>Evidencias cargadas</strong>
             <div className="stack-list compact">
               {item.learning.evidences.map((evidence) => (
@@ -595,7 +595,7 @@ function ObservationLearnedLessonCard({
             </div>
           </div>
         ) : null}
-        <div className="form-actions">
+        <div className="form-actions" data-tour="lesson-observation-save">
           <button className="button button-primary" disabled={saving} type="submit">
             Guardar cambios
           </button>

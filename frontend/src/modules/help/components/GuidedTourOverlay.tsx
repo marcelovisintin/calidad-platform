@@ -21,7 +21,8 @@ const TOOLTIP_WIDTH = 390;
 const TOOLTIP_GAP = 14;
 
 function findAvailableSteps(steps: GuidedTourStep[]) {
-  return steps.filter((step) => document.querySelector(step.selector));
+  return steps.filter((step) => document.querySelector(step.selector)
+    || (step.activateSelector && document.querySelector(step.activateSelector)));
 }
 
 export function GuidedTourOverlay({ open, tour, onFinish }: GuidedTourOverlayProps) {
@@ -54,30 +55,40 @@ export function GuidedTourOverlay({ open, tour, onFinish }: GuidedTourOverlayPro
     }
 
     setTargetRect(null);
-    const target = document.querySelector<HTMLElement>(currentStep.selector);
-    if (!target) {
-      return;
-    }
-
+    let target: HTMLElement | null = null;
     const updateRect = () => {
+      if (!target) return;
       const rect = target.getBoundingClientRect();
       setTargetRect({ top: rect.top, left: rect.left, width: rect.width, height: rect.height, bottom: rect.bottom });
     };
 
-    target.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
-    updateRect();
+    const resizeObserver = new ResizeObserver(updateRect);
+    // Un paso puede abrir una pestaña cuyo contenido se monta en el siguiente render.
+    const revealTarget = () => {
+      target = document.querySelector<HTMLElement>(currentStep.selector);
+      if (!target) return;
+      mutationObserver.disconnect();
+      target.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
+      resizeObserver.observe(target);
+      updateRect();
+      nextButtonRef.current?.focus({ preventScroll: true });
+    };
+    const mutationObserver = new MutationObserver(revealTarget);
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
+    if (currentStep.activateSelector) {
+      document.querySelector<HTMLElement>(currentStep.activateSelector)?.click();
+    }
+    revealTarget();
     const animationFrame = window.requestAnimationFrame(updateRect);
     const settleTimer = window.setTimeout(updateRect, 100);
-    const resizeObserver = new ResizeObserver(updateRect);
-    resizeObserver.observe(target);
     window.addEventListener("resize", updateRect);
     window.addEventListener("scroll", updateRect, true);
-    nextButtonRef.current?.focus();
 
     return () => {
       window.cancelAnimationFrame(animationFrame);
       window.clearTimeout(settleTimer);
       resizeObserver.disconnect();
+      mutationObserver.disconnect();
       window.removeEventListener("resize", updateRect);
       window.removeEventListener("scroll", updateRect, true);
     };
