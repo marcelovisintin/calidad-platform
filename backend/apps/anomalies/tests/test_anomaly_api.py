@@ -1811,6 +1811,26 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(anomalies_by_id[str(first.pk)]["finding_type"]["id"], str(self.severity.pk))
         self.assertEqual(anomalies_by_id[str(second.pk)]["finding_type"]["id"], str(self.severity_alt.pk))
 
+    def test_improvement_opportunity_does_not_classify_anomaly(self):
+        opportunity = Severity.objects.create(code="OPM", name="Oportunidad de mejora")
+        create_response = self.client.post(
+            "/api/v1/anomalies/", self._build_payload("OM-001", include_severity=False), format="json"
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+
+        anomaly_id = create_response.data["id"]
+        patch_response = self.client.patch(
+            f"/api/v1/anomalies/{anomaly_id}/",
+            self._classification_payload(opportunity),
+            format="json",
+        )
+
+        self.assertEqual(patch_response.status_code, status.HTTP_400_BAD_REQUEST)
+        anomaly = Anomaly.objects.get(pk=anomaly_id)
+        self.assertIsNone(anomaly.severity_id)
+        self.assertFalse(AnomalyClassification.objects.filter(anomaly=anomaly).exists())
+        self.assertFalse(AnomalyInitialVerification.objects.filter(anomaly=anomaly).exists())
+
     def test_admin_classification_registers_verification_and_classification_records(self):
         payload = self._build_payload("005", include_severity=False)
         create_response = self.client.post("/api/v1/anomalies/", payload, format="json")

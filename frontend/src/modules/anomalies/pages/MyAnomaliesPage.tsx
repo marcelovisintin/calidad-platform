@@ -67,6 +67,14 @@ function criterionIsObservation(criterion: CatalogSummary) {
   return criterion.code.trim().toUpperCase() === "OBS" || normalized.includes("observacion");
 }
 
+function criterionIsImprovementOpportunity(criterion: CatalogSummary) {
+  const normalized = `${criterion.code} ${criterion.name}`
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return criterion.code.trim().toUpperCase() === "OPM" || normalized.includes("oportunidad de mejora");
+}
+
 export function MyAnomaliesPage() {
   usePageTitle("Seguimiento de anomalias");
   const { user } = useAuth();
@@ -407,8 +415,8 @@ export function MyAnomaliesPage() {
                       >
                         <option value="">Seleccionar...</option>
                         {criteria.map((criterion) => (
-                          <option key={criterion.id} value={criterion.id}>
-                            {criterion.name}
+                          <option disabled={criterionIsImprovementOpportunity(criterion)} key={criterion.id} value={criterion.id}>
+                            {criterion.name}{criterionIsImprovementOpportunity(criterion) ? " (próximamente)" : ""}
                           </option>
                         ))}
                       </select>

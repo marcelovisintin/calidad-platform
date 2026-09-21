@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import unicodedata
 
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError as DjangoValidationError
@@ -588,6 +589,12 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     transition_from_stage = locked.current_stage
     transition_comment = ""
     now = timezone.now()
+
+    if severity_in_payload and locked.severity_id is not None:
+        severity_label = unicodedata.normalize("NFD", f"{locked.severity.code} {locked.severity.name}")
+        severity_label = "".join(character for character in severity_label if not unicodedata.combining(character)).lower()
+        if locked.severity.code.strip().upper() == "OPM" or "oportunidad de mejora" in severity_label:
+            raise ValidationError({"severity": "Oportunidad de mejora aún no está habilitada para Revisión de hallazgos."})
 
     severity_changed = severity_in_payload and previous_severity_id != locked.severity_id
     if severity_changed:

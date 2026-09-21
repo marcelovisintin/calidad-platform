@@ -246,7 +246,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         bullets: [
           "Observación: queda disponible en el módulo Observaciones.",
           "No conformidad: se define responsable y fecha límite, y se crea un tratamiento nuevo.",
-          "Oportunidad de mejora: continúa con el responsable definido para su seguimiento.",
+          "Oportunidad de mejora: su clasificación está temporalmente deshabilitada hasta adecuar este flujo.",
           "Inválida: se cierra con el motivo registrado y se informa al generador.",
         ],
       },
