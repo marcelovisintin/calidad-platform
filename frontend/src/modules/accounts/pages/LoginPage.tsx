@@ -46,6 +46,7 @@ export function LoginPage() {
   return (
     <div className="login-shell">
       <section className="login-card login-card-plant">
+        {__APP_BUILD_INFO__.environment === "pruebas" ? <div className="environment-badge">ENTORNO DE PRUEBAS</div> : null}
         <div className="login-copy">
           <CompanyLogo />
           <h1>Plataforma de calidad</h1>

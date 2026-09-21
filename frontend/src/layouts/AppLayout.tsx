@@ -159,6 +159,7 @@ export function AppLayout() {
         <div className="brand-block">
           <CompanyLogo compact inverted />
           <strong className="brand-title">Plataforma de calidad</strong>
+          {__APP_BUILD_INFO__.environment === "pruebas" ? <span className="environment-badge">ENTORNO DE PRUEBAS</span> : null}
           <p className="brand-copy">Registro, gestion y seguimiento de anomalias en planta.</p>
         </div>
 
@@ -193,6 +194,7 @@ export function AppLayout() {
               Volver
             </button>
             <strong className="topbar-title">{currentSection}</strong>
+            {__APP_BUILD_INFO__.environment === "pruebas" ? <span className="environment-badge">PRUEBAS</span> : null}
           </div>
           <div className="topbar-actions">
             <div className="topbar-user" title={user?.full_name || userTag}>
