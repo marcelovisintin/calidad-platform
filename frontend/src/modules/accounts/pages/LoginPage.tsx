@@ -55,12 +55,12 @@ export function LoginPage() {
         <form className="form-stack" onSubmit={handleSubmit}>
           <label className="field">
             <span>Usuario o email</span>
-            <input autoComplete="username" onChange={(event) => setIdentifier(event.target.value)} placeholder="admin" required type="text" value={identifier} />
+            <input autoComplete="username" onChange={(event) => setIdentifier(event.target.value)} required type="text" value={identifier} />
           </label>
 
           <label className="field">
             <span>Contrasena</span>
-            <input autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} placeholder="********" required type={showPassword ? "text" : "password"} value={password} />
+            <input autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} required type={showPassword ? "text" : "password"} value={password} />
           </label>
 
           <label className="checkbox-inline">
