@@ -11,6 +11,8 @@ La instancia **Pruebas** corre en el mismo servidor que producción, con un proy
 
 La base inicial de Pruebas es una copia de la instancia local `docker` del 21/09/2026: **600 anomalías sintéticas**. La instancia local `calidad-test` contiene solo 21 y no se usa como origen. Se copiaron el respaldo PostgreSQL y los archivos multimedia asociados. Las credenciales de usuarios son las de esa base local.
 
+El respaldo inicial quedó en `/srv/calidad-platform/pruebas/backups/inicial-20260921.dump` junto con `inicial-20260921-media.tar.gz`.
+
 La aplicación muestra **ENTORNO DE PRUEBAS** en el inicio de sesión y en la navegación. El correo está desactivado y configurado con el backend `dummy`. Pruebas utiliza una clave Django y una contraseña PostgreSQL independientes.
 
 ## Comandos operativos
