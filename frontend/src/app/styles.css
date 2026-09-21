@@ -3238,6 +3238,61 @@ small {
   gap: 0.12rem;
 }
 
+.validation-work-list {
+  gap: 0.3rem;
+}
+
+.validation-work-list .work-list-card {
+  min-height: 59px;
+}
+
+.validation-management-grid {
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+}
+
+.validation-work-list .work-card-heading strong {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.validation-work-list .work-card-heading > span:last-child,
+.validation-work-list .work-card-meta small {
+  min-width: 0;
+}
+
+@media (max-width: 1120px) {
+  .validation-management-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.validation-list-panel {
+  gap: 0.55rem;
+}
+
+.validation-list-header {
+  gap: 0.3rem;
+}
+
+.validation-list-header .eyebrow {
+  margin: 0;
+  line-height: 1;
+}
+
+.validation-list-header h2 {
+  font-size: 1.1rem;
+  line-height: 1.15;
+}
+
+.validation-search-field {
+  gap: 0.3rem;
+}
+
+.validation-search-field input {
+  min-height: 36px;
+  padding-block: 0.35rem;
+}
+
 .action-source-selector {
   display: flex;
   align-items: center;

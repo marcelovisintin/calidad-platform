@@ -154,13 +154,13 @@ export const HELP_TOPICS: HelpTopic[] = [
           "Fecha: día en que se detectó el hecho.",
           "Elaborado por: área o proceso donde se origina el registro.",
           "Asignado a: área o proceso relacionado con la anomalía.",
-          "Tipo de anomalía: defecto, desvío o evento correspondiente.",
-          "Título: identificación breve y concreta.",
+          "Tipo de Desvío: falla, defecto o evento detectado.",
         ],
       },
       {
         title: "Paso 2 — Contexto",
         bullets: [
+          "Título: identificación breve y concreta.",
           "Observación: describe qué ocurrió, dónde y cómo se detectó.",
           "Órdenes afectadas: son opcionales. Si agregas una fila, completa tipo, número y cantidad entera mayor que cero.",
           "No repitas la misma combinación de tipo y número de orden.",
@@ -291,13 +291,13 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         title: "Elegir el camino",
         paragraphs: [
-          "En Revisión de hallazgos, Calidad asigna el responsable, la fecha y la causa. El responsable decide en la primera tarjeta de Observaciones si corresponde una resolución directa o una Observación TRT con tratamiento.",
+          "En Revisión de hallazgos, Calidad asigna el responsable y la fecha. El responsable de la Observación analiza la causa y decide si puede resolver el caso directamente o si necesita investigar la causa raíz mediante una Observación TRT con tratamiento. En ambos caminos, la determinación de la causa corresponde al responsable.",
         ],
       },
       {
         title: "Resolución directa",
         steps: [
-          "Revisa los datos generales confirmados y pulsa Siguiente.",
+          "Analiza la causa y registra lo encontrado en los datos generales; luego pulsa Siguiente.",
           "Registra una o más acciones con su fecha estimada de realización y su fecha de validación.",
           "Finaliza cada acción indicando su fecha real.",
           "Adjunta evidencia cuando corresponda.",
@@ -307,7 +307,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         title: "Observación TRT",
         paragraphs: [
-          "El responsable Mando Medio Activo puede marcar Clasificar como Observación TRT en la primera tarjeta, antes de registrar acciones. Al confirmar, el sistema crea inmediatamente el tratamiento con ese responsable y el caso continúa por el circuito de Tratamientos.",
+          "Si la causa requiere investigación de causa raíz, el responsable Mando Medio Activo puede marcar Clasificar como Observación TRT en la primera tarjeta, antes de registrar acciones. Al confirmar, el sistema crea inmediatamente el tratamiento con ese responsable y el caso continúa por el circuito de Tratamientos.",
         ],
       },
       {

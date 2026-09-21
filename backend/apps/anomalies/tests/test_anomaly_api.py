@@ -9,12 +9,13 @@ from rest_framework.test import APITestCase
 from apps.accounts.constants import PERMISSION_CLASSIFY_ANOMALY, PERMISSION_EDIT_ANOMALY
 from apps.accounts.models import User
 from apps.accounts.services.role_setup import ensure_required_permissions
-from apps.actions.models import Treatment, TreatmentAnomaly
+from apps.actions.models import Treatment, TreatmentAnomaly, TreatmentParticipant
 from apps.audit.models import AuditEvent
 from apps.anomalies.models import (
     AffectedOrder,
     Anomaly,
     AnomalyClassification,
+    AnomalyEffectivenessCheck,
     AnomalyCodeReservation,
     AnomalyImmediateAction,
     AnomalyInitialVerification,
@@ -496,6 +497,17 @@ class AnomalyCreateApiTests(APITestCase):
         treatment = Treatment.objects.get(primary_anomaly_id=create_response.data["id"])
         self.assertEqual(treatment.responsible_id, manager.pk)
         self.assertEqual(treatment.created_by_id, manager.pk)
+        self.assertFalse(AnomalyParticipant.objects.filter(
+            anomaly_id=create_response.data["id"], user=manager, role=ParticipantRole.VERIFIER,
+        ).exists())
+        self.assertTrue(AnomalyParticipant.objects.filter(
+            anomaly_id=create_response.data["id"], user=self.user, role=ParticipantRole.VERIFIER,
+        ).exists())
+        detail = self.client.get(f"/api/v1/anomalies/{create_response.data['id']}/")
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail.data["treatments"][0]["id"], str(treatment.pk))
+        self.assertEqual(detail.data["treatments"][0]["participants"][0]["user"]["id"], str(manager.pk))
+        self.assertEqual(detail.data["treatments"][0]["participants"][0]["role"], "owner")
 
     def test_create_anomaly_allows_missing_severity(self):
         payload = self._build_payload("003", include_severity=False)
@@ -638,8 +650,9 @@ class AnomalyCreateApiTests(APITestCase):
                 "effectiveness_verified_at": timezone.now().isoformat(),
                 "effectiveness_is_effective": False,
                 "effectiveness_comment": "No eficaz reveer acciones tomadas",
+                "evidences": SimpleUploadedFile("verificacion-1.txt", b"No eficaz", content_type="text/plain"),
             },
-            format="json",
+            format="multipart",
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -658,8 +671,9 @@ class AnomalyCreateApiTests(APITestCase):
                 "effectiveness_verified_at": timezone.now().isoformat(),
                 "effectiveness_is_effective": False,
                 "effectiveness_comment": "Sigue no eficaz",
+                "evidences": SimpleUploadedFile("verificacion-2.txt", b"Sigue no eficaz", content_type="text/plain"),
             },
-            format="json",
+            format="multipart",
         )
 
         self.assertEqual(second_response.status_code, status.HTTP_200_OK)
@@ -682,9 +696,10 @@ class AnomalyCreateApiTests(APITestCase):
             "effectiveness_verified_at": timezone.now().isoformat(),
             "effectiveness_is_effective": True,
             "effectiveness_comment": "Fue eficaz",
+            "evidences": SimpleUploadedFile("verificacion.txt", b"Fue eficaz", content_type="text/plain"),
         }
 
-        response = self.client.post(f"/api/v1/anomalies/{anomaly.pk}/immediate-action/", payload, format="json")
+        response = self.client.post(f"/api/v1/anomalies/{anomaly.pk}/immediate-action/", payload, format="multipart")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["current_status"], AnomalyStatus.CLOSED)
@@ -706,6 +721,9 @@ class AnomalyCreateApiTests(APITestCase):
 
         self.assertEqual(load_response.status_code, status.HTTP_200_OK)
         self.assertEqual(load_response.data["observation_resolution_path"], ObservationResolutionPath.OBSERVATION)
+        self.assertFalse(AnomalyParticipant.objects.filter(
+            anomaly=anomaly, user=self.user, role=ParticipantRole.VERIFIER,
+        ).exists())
         self.assertTrue(
             any("Carga de Observacion" in item["comment"] for item in load_response.data["status_history"])
         )
@@ -736,19 +754,35 @@ class AnomalyCreateApiTests(APITestCase):
 
         self.assertEqual(upload_response.status_code, status.HTTP_201_CREATED)
 
+        missing_verification_evidence = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/effectiveness/",
+            {
+                "effectiveness_verified_at": timezone.now().isoformat(),
+                "effectiveness_is_effective": False,
+                "effectiveness_comment": "Intento sin evidencia de verificacion",
+            },
+            format="json",
+        )
+        self.assertEqual(missing_verification_evidence.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("evidences", missing_verification_evidence.data)
+
         ineffective_response = self.client.post(
             f"/api/v1/anomalies/{anomaly.pk}/observation/effectiveness/",
             {
                 "effectiveness_verified_at": timezone.now().isoformat(),
                 "effectiveness_is_effective": False,
                 "effectiveness_comment": "No eficaz, requiere nueva accion",
+                "evidences": SimpleUploadedFile("verificacion-1.txt", b"Resultado no eficaz", content_type="text/plain"),
             },
-            format="json",
+            format="multipart",
         )
 
         self.assertEqual(ineffective_response.status_code, status.HTTP_200_OK)
         self.assertEqual(ineffective_response.data["current_status"], AnomalyStatus.IN_TREATMENT)
         self.assertEqual(ineffective_response.data["current_stage"], AnomalyStage.EXECUTION_AND_FOLLOW_UP)
+        self.assertTrue(AnomalyParticipant.objects.filter(
+            anomaly=anomaly, user=self.user, role=ParticipantRole.VERIFIER,
+        ).exists())
         self.assertIsNone(ineffective_response.data["closed_at"])
         self.assertTrue(
             any("Evidencia cargada" in item["comment"] for item in ineffective_response.data["status_history"])
@@ -764,8 +798,9 @@ class AnomalyCreateApiTests(APITestCase):
                 "effectiveness_is_effective": True,
                 "effectiveness_comment": "Eficaz",
                 "closure_comment": "Cierre por verificacion eficaz",
+                "evidences": SimpleUploadedFile("verificacion-2.txt", b"Resultado eficaz", content_type="text/plain"),
             },
-            format="json",
+            format="multipart",
         )
 
         self.assertEqual(effective_response.status_code, status.HTTP_200_OK)
@@ -959,6 +994,9 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(uploaded.status_code, status.HTTP_201_CREATED)
         self.assertEqual(str(uploaded.data["observation_action"]), create_response.data["id"])
         self.assertEqual(uploaded.data["note"], "Evidencia propia")
+        detail = self.client.get(f"/api/v1/anomalies/{anomaly.pk}/")
+        action_evidence = next(item for item in detail.data["attachments"] if item["id"] == uploaded.data["id"])
+        self.assertEqual(str(action_evidence["observation_action"]), create_response.data["id"])
         pending_action = ObservationAction.objects.get(pk=create_response.data["id"])
         self.assertEqual(pending_action.status, "pending")
         self.assertIsNone(pending_action.completed_at)
@@ -1056,8 +1094,9 @@ class AnomalyCreateApiTests(APITestCase):
                 "effectiveness_verified_at": timezone.now().isoformat(),
                 "effectiveness_is_effective": True,
                 "effectiveness_comment": "Todas las acciones fueron eficaces.",
+                "evidences": SimpleUploadedFile("verificacion.txt", b"Resultado eficaz", content_type="text/plain"),
             },
-            format="json",
+            format="multipart",
         )
         self.assertEqual(effective_response.status_code, status.HTTP_200_OK)
         self.assertEqual(effective_response.data["current_status"], AnomalyStatus.CLOSED)
@@ -1101,8 +1140,9 @@ class AnomalyCreateApiTests(APITestCase):
                 "effectiveness_verified_at": timezone.now().isoformat(),
                 "effectiveness_is_effective": False,
                 "effectiveness_comment": "La accion no resolvio el desvio.",
+                "evidences": SimpleUploadedFile("verificacion.txt", b"Resultado no eficaz", content_type="text/plain"),
             },
-            format="json",
+            format="multipart",
         )
         self.assertEqual(ineffective_response.status_code, status.HTTP_200_OK)
         self.assertEqual(ineffective_response.data["current_status"], AnomalyStatus.IN_TREATMENT)
@@ -1386,8 +1426,9 @@ class AnomalyCreateApiTests(APITestCase):
                 "effectiveness_verified_at": timezone.now().isoformat(),
                 "effectiveness_is_effective": False,
                 "effectiveness_comment": "Debe repetirse la acción",
+                "evidences": SimpleUploadedFile("verificacion.txt", b"Resultado no eficaz", content_type="text/plain"),
             },
-            format="json",
+            format="multipart",
         )
         self.assertEqual(effectiveness_response.status_code, status.HTTP_200_OK)
         in_app = recipients.get(channel=NotificationChannel.IN_APP)
@@ -1808,6 +1849,68 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertTrue(
             any("Responsable asignado" in item["evidence_note"] for item in patch_response.data["status_history"])
         )
+
+    def test_detail_separates_anomaly_intervenients_and_convocation_without_actions(self):
+        anomaly = self._immediate_anomaly("OBS-CONVOCATION")
+        reporter = User.objects.create_user(username="convocation-reporter", email="convocation-reporter@example.com")
+        manager = User.objects.create_user(username="convocation-manager", email="convocation-manager@example.com", access_level="mando_medio_activo")
+        invited = User.objects.create_user(username="convocation-invited", email="convocation-invited@example.com")
+        anomaly.reporter = reporter
+        anomaly.owner = manager
+        anomaly.save()
+        for user, role in [(reporter, "reporter"), (manager, "owner"), (self.user, "verifier")]:
+            AnomalyParticipant.objects.create(anomaly=anomaly, user=user, role=role)
+        treatment = Treatment.objects.create(code="TRT-CONVOCATION", primary_anomaly=anomaly, responsible=manager)
+        TreatmentParticipant.objects.create(treatment=treatment, user=manager, role="owner")
+        TreatmentParticipant.objects.create(treatment=treatment, user=invited, role="convoked")
+
+        response = self.client.get(f"/api/v1/anomalies/{anomaly.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["treatment_tasks"], [])
+        self.assertEqual({p["user"]["id"] for p in response.data["participants"]}, {str(reporter.pk), str(manager.pk), str(self.user.pk)})
+        self.assertEqual({p["user"]["id"] for p in response.data["treatments"][0]["participants"]}, {str(manager.pk), str(invited.pk)})
+        secondary = self._immediate_anomaly("OBS-SECONDARY-CONVOCATION")
+        TreatmentAnomaly.objects.create(treatment=treatment, anomaly=secondary, is_primary=False)
+        response = self.client.get(f"/api/v1/anomalies/{secondary.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["treatments"][0]["id"], str(treatment.pk))
+
+    def test_verifier_cleanup_preserves_real_verifications_and_manual_assignments(self):
+        from importlib import import_module
+        from types import SimpleNamespace
+        from django.apps import apps
+        from django.db import connection
+
+        anomaly = self._immediate_anomaly("OBS-ROLE-CLEANUP")
+        legacy_note = "Registra y verifica cierre por Observacion."
+        premature = User.objects.create_user(username="premature-verifier", email="premature@example.com")
+        actual = User.objects.create_user(username="actual-verifier", email="actual@example.com")
+        historical = User.objects.create_user(username="historical-verifier", email="historical@example.com")
+        for user in [self.user, premature, actual, historical]:
+            AnomalyParticipant.objects.create(anomaly=anomaly, user=user, role="verifier", note=legacy_note)
+        AnomalyParticipant.objects.create(anomaly=anomaly, user=premature, role="owner")
+        manual = AnomalyParticipant.objects.create(anomaly=anomaly, user=premature, role="observer", note="Seguimiento manual")
+        AnomalyEffectivenessCheck.objects.create(
+            anomaly=anomaly, verified_by=actual, verified_at=timezone.now(),
+            is_effective=True, comment="Verificación real", evidence_summary="Muestra conforme",
+        )
+        treatment = Treatment.objects.create(code="TRT-ROLE-CLEANUP", primary_anomaly=anomaly, responsible=self.user)
+        AuditEvent.objects.create(
+            entity_type="actions.treatment", entity_id=treatment.pk,
+            action="treatment.effectiveness_validated", actor=historical,
+        )
+        migrate = import_module("apps.anomalies.migrations.0022_correct_observation_verifier_roles").correct_observation_verifier_roles
+        migrate(apps, SimpleNamespace(connection=connection))
+
+        self.assertFalse(AnomalyParticipant.objects.filter(anomaly=anomaly, user=premature, role="verifier").exists())
+        self.assertTrue(AnomalyParticipant.objects.filter(anomaly=anomaly, user=premature, role="owner").exists())
+        self.assertTrue(AnomalyParticipant.objects.filter(pk=manual.pk).exists())
+        for user in [self.user, actual, historical]:
+            self.assertTrue(AnomalyParticipant.objects.filter(anomaly=anomaly, user=user, role="verifier").exists())
+        audit = AuditEvent.objects.filter(entity_id=anomaly.pk, action="anomaly.participant_role_corrected")
+        self.assertEqual(audit.count(), 4)
+        migrate(apps, SimpleNamespace(connection=connection))
+        self.assertEqual(audit.count(), 4)
 
     def test_valid_classification_requires_responsible(self):
         payload = self._build_payload("011", include_severity=False)

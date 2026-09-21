@@ -73,6 +73,7 @@ export function MyAnomaliesPage() {
   const adminUser = useMemo(() => isAdminUser(user), [user]);
   const strictAdminUser = user?.access_level === "administrador" || user?.access_level === "desarrollador";
   const [search, setSearch] = useState("");
+  const [anomalyType, setAnomalyType] = useState("");
   const [page, setPage] = useState(1);
   const [classificationError, setClassificationError] = useState<string | null>(null);
   const [classificationMessage, setClassificationMessage] = useState<string | null>(null);
@@ -90,7 +91,7 @@ export function MyAnomaliesPage() {
     }
 
     const [anomalies, catalogs, users] = await Promise.all([
-      fetchMyAnomalies(adminUser ? undefined : user.id, search, page),
+      fetchMyAnomalies(adminUser ? undefined : user.id, search, page, anomalyType),
       fetchCatalogBootstrap(),
       adminUser ? fetchUsers({ active: true, pageSize: 200 }) : Promise.resolve({ count: 0, next: null, previous: null, results: [] as UserDirectoryItem[] }),
     ]);
@@ -98,13 +99,15 @@ export function MyAnomaliesPage() {
     return {
       anomalies,
       criteria: catalogs.severities,
+      anomalyTypes: catalogs.anomalyTypes,
       users: users.results.filter((candidate) =>
         ["mando_medio_activo", "administrador", "desarrollador"].includes(candidate.access_level),
       ),
     };
-  }, [user?.id, search, adminUser, page]);
+  }, [user?.id, search, anomalyType, adminUser, page]);
 
   const criteria: CatalogSummary[] = data?.criteria ?? [];
+  const anomalyTypes: CatalogSummary[] = data?.anomalyTypes ?? [];
   const users: UserDirectoryItem[] = data?.users ?? [];
   const totalCount = data?.anomalies.count ?? 0;
   const visibleAssociationOptions = useMemo(() => {
@@ -332,13 +335,26 @@ export function MyAnomaliesPage() {
           </Link>
         ) : null}
         ariaLabel="Filtros de seguimiento de anomalias"
-        onClear={() => { setSearch(""); setPage(1); }}
-        items={[{
-          id: "search",
-          label: "Buscar",
-          active: Boolean(search),
-          content: <input aria-label="Buscar anomalias" onChange={handleSearchChange} placeholder="Codigo, titulo, asignado a o estado de hallazgo" type="search" value={search} />,
-        }]}
+        onClear={() => { setSearch(""); setAnomalyType(""); setPage(1); }}
+        items={[
+          {
+            id: "search",
+            label: "Buscar",
+            active: Boolean(search),
+            content: <input aria-label="Buscar anomalias" onChange={handleSearchChange} placeholder="Codigo, titulo, asignado a o estado de hallazgo" type="search" value={search} />,
+          },
+          {
+            id: "anomaly-type",
+            label: "Tipo de desvio",
+            active: Boolean(anomalyType),
+            content: (
+              <select aria-label="Buscar por tipo de desvio" onChange={(event) => { setAnomalyType(event.target.value); setPage(1); }} value={anomalyType}>
+                <option value="">Todos los tipos de desvio</option>
+                {anomalyTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
+              </select>
+            ),
+          },
+        ]}
       />
 
       {classificationError ? <div className="panel danger">{classificationError}</div> : null}

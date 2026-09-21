@@ -152,7 +152,7 @@ def build_tracking_search_query(term: str) -> Q:
     return query
 
 
-TRACKING_FILTER_PARAMS = {"search", "status", "stage", "site", "area", "owner", "ordering", "order", "order_by"}
+TRACKING_FILTER_PARAMS = {"search", "status", "stage", "site", "area", "owner", "anomaly_type", "ordering", "order", "order_by"}
 
 
 def has_active_tracking_filter(params) -> bool:
@@ -542,6 +542,8 @@ class AnomalyViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(owner_id=owner_id)
         if reporter_id := params.get("reporter"):
             queryset = queryset.filter(reporter_id=reporter_id)
+        if anomaly_type_id := params.get("anomaly_type"):
+            queryset = queryset.filter(anomaly_type_id=anomaly_type_id)
         if term := params.get("search"):
             queryset = queryset.filter(build_tracking_search_query(term)).distinct()
         if self.action == "list" and not has_active_tracking_filter(params):
@@ -717,7 +719,7 @@ class AnomalyViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
         return Response(serializer.data)
 
-    @action(detail=True, methods=["post"], url_path="immediate-action")
+    @action(detail=True, methods=["post"], url_path="immediate-action", parser_classes=[MultiPartParser, FormParser, JSONParser])
     def save_immediate_action(self, request, pk=None):
         anomaly = self.get_object()
         serializer = self.get_serializer(data=request.data)
@@ -726,6 +728,7 @@ class AnomalyViewSet(viewsets.ModelViewSet):
             anomaly=anomaly,
             user=request.user,
             data=dict(serializer.validated_data),
+            files=request.FILES.getlist("evidences"),
             request_id=self._request_id(),
         )
         return self._detail_response(anomaly.pk)

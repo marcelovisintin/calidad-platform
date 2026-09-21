@@ -1285,14 +1285,6 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
         actor=user,
         note="Responsable de Observacion.",
     )
-    _ensure_participant_role(
-        anomaly=locked,
-        participant_user=user,
-        role=ParticipantRole.VERIFIER,
-        actor=user,
-        note="Registra y verifica cierre por Observacion.",
-    )
-
     now = timezone.now()
     previous_status = locked.current_status
     previous_stage = locked.current_stage
@@ -1755,6 +1747,12 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, file
             {"effectiveness_verified_at": "La fecha de realizacion no puede ser anterior a la fecha de validacion."}
         )
 
+    evidence_files = list(files or [])
+    if not evidence_files:
+        raise ValidationError({"evidences": "Debe adjuntar al menos una evidencia objetiva de la verificacion."})
+    for file_obj in evidence_files:
+        validate_evidence_file(file_obj)
+
     before = snapshot_anomaly(locked)
     previous_status = locked.current_status
     previous_stage = locked.current_stage
@@ -1789,8 +1787,14 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, file
     )
     check.full_clean()
     check.save()
-    for file_obj in files or []:
-        validate_evidence_file(file_obj)
+    _ensure_participant_role(
+        anomaly=locked,
+        participant_user=user,
+        role=ParticipantRole.VERIFIER,
+        actor=user,
+        note="Verificó la eficacia de la Observación.",
+    )
+    for file_obj in evidence_files:
         AnomalyAttachment.objects.create(
             anomaly=locked, file=file_obj, original_name=getattr(file_obj, "name", "") or "evidencia-eficacia",
             content_type=normalized_upload_content_type(file_obj), note="Evidencia objetiva de eficacia.",
@@ -1889,7 +1893,7 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, file
 
 
 @transaction.atomic
-def save_immediate_action(*, anomaly: Anomaly, user, data: dict, request_id: str = "") -> AnomalyImmediateAction:
+def save_immediate_action(*, anomaly: Anomaly, user, data: dict, files=None, request_id: str = "") -> AnomalyImmediateAction:
     immediate_action = save_observation_load(anomaly=anomaly, user=user, data=data, request_id=request_id)
     if (data.get("actions_taken") or "").strip():
         data = {
@@ -1899,7 +1903,7 @@ def save_immediate_action(*, anomaly: Anomaly, user, data: dict, request_id: str
         }
         immediate_action = save_observation_action_taken(anomaly=anomaly, user=user, data=data, request_id=request_id)
     if data.get("effectiveness_is_effective") is not None:
-        immediate_action = verify_observation_effectiveness(anomaly=anomaly, user=user, data=data, request_id=request_id)
+        immediate_action = verify_observation_effectiveness(anomaly=anomaly, user=user, data=data, files=files, request_id=request_id)
     return immediate_action
 def transition_anomaly(*, anomaly: Anomaly, user, target_stage: str | None = None, target_status: str | None = None, comment: str, request_id: str = "") -> Anomaly:
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)

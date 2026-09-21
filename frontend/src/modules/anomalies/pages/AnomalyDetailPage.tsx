@@ -43,6 +43,50 @@ export function AnomalyDetailPage() {
       ? "En curso"
       : "No registrado";
 
+  const participantRoleLabels: Record<string, string> = {
+    reporter: "Registro",
+    owner: "Responsable de la anomalía",
+    reviewer: "Revisión de hallazgos",
+    analyst: "Análisis de causa",
+    implementer: "Ejecución de acciones",
+    verifier: "Asignado a verificación",
+    observer: "Seguimiento",
+  };
+  const treatmentRoleLabels: Record<string, string> = {
+    owner: "Responsable vinculado",
+    convoked: "Convocado",
+    facilitator: "Facilitador",
+  };
+  const participantsByUser = new Map<string, { id: string; name: string; roles: Set<string> }>();
+  for (const item of data?.participants ?? []) {
+    const userId = item.user?.id;
+    const key = userId || item.id;
+    const participant = participantsByUser.get(key) ?? {
+      id: key,
+      name: item.user?.full_name || item.user?.username || "Usuario no disponible",
+      roles: new Set<string>(),
+    };
+    if (item.role === "verifier") {
+      let verified = false;
+      if (userId && data?.initial_verification?.verified_by?.id === userId) {
+        participant.roles.add("Verificación inicial");
+        verified = true;
+      }
+      if (userId && data?.effectiveness_checks.some((check) => check.verified_by?.id === userId)) {
+        participant.roles.add("Validación de eficacia");
+        verified = true;
+      }
+      if (!verified) participant.roles.add(participantRoleLabels.verifier);
+    } else {
+      participant.roles.add(participantRoleLabels[item.role] || item.role);
+    }
+    if (userId && data?.classification?.classified_by?.id === userId) {
+      participant.roles.add("Revisión de hallazgos");
+    }
+    participantsByUser.set(key, participant);
+  }
+  const anomalyParticipants = Array.from(participantsByUser.values());
+
   const normalizeAttachmentUrl = (fileUrl: string) => {
     if (!fileUrl) {
       return "#";
@@ -276,7 +320,7 @@ export function AnomalyDetailPage() {
             </article>
 
             <article className="panel">
-              <div className="section-head"><h2>Participacion y verificaciones</h2></div>
+              <div className="section-head"><h2>Intervinientes y verificaciones</h2></div>
               <dl className="key-grid">
                 <div><dt>Verificacion inicial</dt><dd>{initialVerificationLabel}</dd></div>
                 <div><dt>Revisión de hallazgos</dt><dd>{classificationLabel}</dd></div>
@@ -284,8 +328,44 @@ export function AnomalyDetailPage() {
                 <div><dt>Analisis de causa</dt><dd>{causeAnalysisLabel}</dd></div>
                 <div><dt>Eficacia</dt><dd>{data.effectiveness_summary || "Sin verificacion de eficacia"}</dd></div>
                 <div><dt>Aprendizaje</dt><dd>{data.learning?.has_learning === false ? data.learning.no_learning_reason : data.learning?.learned_text || "Sin aprendizaje registrado"}</dd></div>
-                <div><dt>Participantes</dt><dd>{data.participants.length ? data.participants.map((item) => item.user?.full_name || item.role).join(", ") : "Sin participantes"}</dd></div>
+                <div>
+                  <dt>Intervinientes de la anomalía</dt>
+                  <dd>
+                  {anomalyParticipants.length ? anomalyParticipants.map((participant) => (
+                    <div key={participant.id}>
+                      {participant.name}: {Array.from(participant.roles).join(" · ")}
+                    </div>
+                  )) : "Sin intervinientes registrados."}
+                  </dd>
+                </div>
               </dl>
+            </article>
+
+            <article className="panel">
+              <div className="section-head"><h2>Convocatoria de tratamientos</h2></div>
+              <div className="stack-list">
+                {(data.treatments ?? []).length ? data.treatments.map((treatment) => (
+                  <div key={treatment.id}>
+                    <div className="section-head compact">
+                      <button className="button button-secondary" type="button" onClick={() => handleOpenTreatment(treatment.id)}>Ver tratamiento</button>
+                    </div>
+                    <dl className="key-grid">
+                      <div><dt>Tratamiento</dt><dd>{treatment.code}</dd></div>
+                      <div><dt>Programado</dt><dd>{formatDateTime(treatment.scheduled_for)}</dd></div>
+                      <div><dt>Convocatoria</dt><dd>{treatment.convocation_confirmed_at ? "Confirmada" : "Sin confirmar"}</dd></div>
+                      <div><dt>Participantes</dt><dd>
+                      {treatment.participants.length ? treatment.participants.map((participant) => (
+                        <div key={participant.id}>
+                            {participant.user?.full_name || participant.user?.username || "Usuario no disponible"}
+                            {": "}{participant.user?.id === treatment.responsible?.id ? "Responsable del tratamiento" : treatmentRoleLabels[participant.role] || participant.role}
+                        </div>
+                      )) : "Sin participantes en la convocatoria."}
+                      </dd></div>
+                      <div><dt>Responsable de validación de eficacia</dt><dd>{treatment.effectiveness_responsible?.full_name || "Sin asignar"}</dd></div>
+                    </dl>
+                  </div>
+                )) : <p className="muted-copy">Esta anomalía todavía no tiene tratamientos vinculados.</p>}
+              </div>
             </article>
 
             <article className="panel">

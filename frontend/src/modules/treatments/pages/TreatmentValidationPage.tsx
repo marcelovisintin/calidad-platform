@@ -197,13 +197,12 @@ export function TreatmentValidationPage() {
       {message ? <div className="panel success">{message}</div> : null}
       {formError ? <div className="panel danger">{formError}</div> : null}
 
-      <DataState loading={loading} error={error} onRetry={reload}>
-        <div className="user-management-grid">
-          <section className="panel">
-            <div className="section-head compact">
+        <div className="user-management-grid validation-management-grid">
+          <section className="panel validation-list-panel">
+            <div className="section-head compact validation-list-header">
               <div><p className="eyebrow">Validaciones</p><h2>Todos los estados</h2></div>
             </div>
-            <label className="field">
+            <label className="field validation-search-field">
               <span>Buscar</span>
               <input
                 onChange={(event) => { setSearch(event.target.value); setPage(1); }}
@@ -212,7 +211,8 @@ export function TreatmentValidationPage() {
                 value={search}
               />
             </label>
-            <div className="stack-list user-list-scroll validation-work-list">
+            <DataState loading={loading} error={error} onRetry={reload}>
+              <div className="stack-list user-list-scroll validation-work-list">
               {items.map((item) => (
                 <button
                   className={`list-card selectable-card work-list-card${selectedKey === itemKey(item) ? " active" : ""}`}
@@ -231,7 +231,8 @@ export function TreatmentValidationPage() {
                 </button>
               ))}
               {!items.length ? <p className="muted-copy">No hay validaciones para los origenes seleccionados.</p> : null}
-            </div>
+              </div>
+            </DataState>
             <PaginationControls page={page} totalCount={data?.count ?? 0} onPageChange={setPage} disabled={loading || busy} />
           </section>
 
@@ -252,7 +253,7 @@ export function TreatmentValidationPage() {
                     <div><dt>Fecha de validacion</dt><dd>{selectedItem.due_date ? formatDate(selectedItem.due_date) : "Sin fecha"}</dd></div>
                     <div><dt>Responsable</dt><dd>{selectedItem.responsible?.full_name || selectedItem.responsible?.username || "Sin responsable"}</dd></div>
                     <div><dt>Resultado actual</dt><dd>{resultLabel(selectedItem.result)}</dd></div>
-                    <div><dt>Fecha de validacion</dt><dd>{selectedItem.validated_at ? formatDateTime(selectedItem.validated_at) : "Sin validar"}</dd></div>
+                    <div><dt>Fecha real de validacion</dt><dd>{selectedItem.validated_at ? formatDateTime(selectedItem.validated_at) : "Sin validar"}</dd></div>
                   </dl>
 
                   {selectedItem.validation_comment ? (
@@ -286,7 +287,7 @@ export function TreatmentValidationPage() {
                       <div className="form-grid">
                         {selectedItem.source === "observation" ? (
                           <label className="field" data-tour="validation-real-date">
-                            <span>Fecha de realizacion</span>
+                            <span>Fecha real de la validacion</span>
                             <input disabled={!selectedItem.can_validate || busy} onChange={(event) => setVerifiedAt(event.target.value)} required type="datetime-local" value={verifiedAt} />
                           </label>
                         ) : null}
@@ -331,7 +332,6 @@ export function TreatmentValidationPage() {
             </DataState>
           </section>
         </div>
-      </DataState>
     </section>
   );
 }

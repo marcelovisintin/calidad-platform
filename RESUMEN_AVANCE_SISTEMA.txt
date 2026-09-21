@@ -1462,3 +1462,3200 @@ ____25/8 - OBSERVACION TRT Y CODIGO OBS_________________________________________
 - La notificacion pendiente anterior se reemplaza por una tarea especifica con acceso a Tratamientos.
 - Se validaron migraciones, frontend y las 135 pruebas del backend en el entorno local.
 - Estado: implementado en rama de prueba y disponible en el puerto 8091. Produccion pendiente de prueba y aprobacion.
+_____02/09_______________________________________________________________________________________________________________
+
+.En anomalias relacionadas agregar en la busqueda filtrado por de "tipo de desvio" y sacar de la busqueda por "titulo". echo ok
+
+................................................................................................................
+En seguimiento anmomalioas las sujeridas para mostrar se debe mostrar solo las padres. aquellas anomalias ya asociadas 
+a un tratamiento se consideran hijas y no se muestran ahi.  echo ok
+...................................................................................................................
+en seguimioento de anomalias al confirmar no conformidad que aparezca un cartrel indicando esta seguro? para evitar
+ la generacion pór error de un trastamiento.  ECHO OK
+ .......................................................................................................................
+ en tratamientos, listado de tratamewinto poner arriba de todo un boton "ELIMINAR" que abre una tarjeta que pide nro de tratamiento a eliminar
+ y boton confirmar con cartel de esta seguro?. Los tratamientos que son eliminables son aquellos que aun no registren campos o datos agregados 
+ o modificados en la vista 1 u 2 de tratamientos. echo ok
+ ..........................................................................................................................
+Analiza Revisar y propone la modificacion del flujo de “Observaciones” y “Seguimiento de anomalías / Revisión de hallazgos” dentro del sistema de gestión de calidad.
+
+Objetivo general:
+Ajustar la lógica de generación, ejecución, acciones y verificación de eficacia de las observaciones, manteniendo la coherencia con las políticas ya existentes de tratamientos, trazabilidad, responsables, fechas, cierre, reapertura e historial.
+
+Importante:
+No eliminar ni romper funcionalidades actuales.
+No hacer refactors innecesarios.
+Conservar la lógica existente de permisos, auditoría, historial, estados, bloqueos y validaciones.
+Antes de implementar, revisar cómo funciona actualmente la política de Tratamientos, especialmente:
+- creación de tratamiento;
+- asignación de responsable;
+- fecha de realización;
+- cierre;
+- evaluación de eficacia;
+- comportamiento cuando la evaluación resulta eficaz;
+- comportamiento cuando la evaluación resulta no eficaz;
+- relación entre tareas/acciones y cierre del registro.
+
+------------------------------------------------------------
+1. MODIFICACIÓN EN SEGUIMIENTO DE ANOMALÍAS / REVISIÓN DE HALLAZGOS
+------------------------------------------------------------
+
+Ubicación:
+Seguimiento de anomalías → Revisión de hallazgos.
+
+Situación actual:
+Cuando en la revisión de hallazgos se elige la opción “Observación”, se abre una instancia/modal/pantalla de “Confirmar observación”.
+Actualmente allí se selecciona el responsable único de la observación.
+
+Cambio solicitado:
+En “Confirmar observación” se debe agregar/mover la opción:
+
+“Clasificar como observación TRT (con tratamiento)”
+
+Esta opción actualmente se encuentra en:
+Observaciones → Carga de observación.
+
+Debe dejar de estar ubicada allí y pasar a la pantalla/modal de “Confirmar observación” dentro de Revisión de hallazgos.
+
+También se debe agregar un nuevo campo:
+
+“Fecha de realización”
+
+Esta fecha debe quedar asociada al flujo que se genere después de confirmar.
+
+Mantener el botón “Confirmar” como está actualmente, respetando su estilo visual y comportamiento general, pero adaptando la lógica interna a los nuevos campos.
+
+Flujo esperado al confirmar:
+
+Caso A: Observación clasificada como TRT / con tratamiento
+- Si la observación se marca como “Observación TRT”:
+  - Se debe generar un Tratamiento.
+  - El tratamiento debe crearse con el responsable seleccionado en “Confirmar observación”.
+  - El tratamiento debe tomar la “Fecha de realización” agregada en esta pantalla.
+  - Mantener la política ya existente de generación de tratamiento.
+  - Registrar en historial la creación del tratamiento desde la revisión de hallazgos.
+  - Mantener trazabilidad entre:
+    - anomalía original;
+    - revisión de hallazgos;
+    - observación clasificada como TRT;
+    - tratamiento generado.
+
+Caso B: Observación NO clasificada como TRT / sin tratamiento
+- Si la observación no se marca como TRT:
+  - Se debe generar una Observación normal.
+  - La observación debe quedar asignada al usuario elegido como responsable.
+  - La observación debe tomar la fecha indicada como fecha de terminación/realización prevista, según la denominación actual del sistema.
+  - Registrar en historial la generación de la observación.
+  - Mantener trazabilidad con la anomalía original y la revisión de hallazgos.
+
+Validaciones:
+- Responsable obligatorio.
+- Fecha de realización obligatoria.
+- La opción “Clasificar como observación TRT” debe ser clara visualmente.
+- Si se marca como TRT, no debe duplicarse una observación normal innecesaria.
+- Si no se marca como TRT, no debe generarse tratamiento.
+- Evitar duplicidades si el usuario confirma más de una vez.
+- Respetar permisos y estados actuales.
+
+------------------------------------------------------------
+2. MODIFICACIÓN EN OBSERVACIONES
+------------------------------------------------------------
+
+Ubicación:
+Módulo Observaciones.
+
+Se debe reorganizar el flujo visual y funcional en tarjetas secuenciales.
+
+------------------------------------------------------------
+2.1 PRIMERA TARJETA: DATOS GENERALES DE LA OBSERVACIÓN
+------------------------------------------------------------
+
+La primera tarjeta debe mostrar:
+
+- Responsable
+- Fecha límite de ejecución
+- Comentario
+- Botón “Siguiente”
+
+Comportamiento:
+- Esta tarjeta representa la información inicial de la observación.
+- El botón “Siguiente” habilita la segunda tarjeta de “Acciones tomadas”.
+- No avanzar si faltan datos obligatorios según las reglas actuales.
+- Mantener la estética actual del sistema.
+
+Validaciones:
+- Responsable obligatorio.
+- Fecha límite de ejecución obligatoria.
+- Comentario obligatorio si actualmente la lógica del sistema lo exige.
+- Registrar cambios relevantes en historial.
+
+------------------------------------------------------------
+2.2 SEGUNDA TARJETA: ACCIONES TOMADAS
+------------------------------------------------------------
+
+Al presionar “Siguiente” en la primera tarjeta, se debe habilitar una segunda tarjeta llamada:
+
+“Acciones tomadas”
+
+Campos para cargar una acción:
+
+- Detalle de la acción
+- Fecha estimada de realización
+- Fecha estimada de verificación de eficacia
+- Botón “Guardar”
+
+Comportamiento:
+- Al guardar una acción, debe quedar listada debajo o dentro de la tarjeta.
+- Las acciones guardadas no deben poder editarse.
+- Sí debe permitirse cargar más acciones si es necesario.
+- Cada acción debe quedar asociada a la observación.
+- Cada acción debe tener su propio estado interno según la lógica existente o la que se defina.
+- Registrar cada acción en historial.
+
+Reglas:
+- No permitir guardar acción sin detalle.
+- No permitir guardar acción sin fecha estimada de realización.
+- No permitir guardar acción sin fecha estimada de verificación de eficacia.
+- Las acciones listadas deben mostrarse en modo solo lectura.
+- Si se necesita corregir una acción, revisar si existe política actual de anulación/cancelación. No agregar edición directa si rompe trazabilidad.
+- Mantener coherencia con la lógica de tareas/acciones en Tratamientos.
+
+------------------------------------------------------------
+2.3 TERCERA TARJETA: VERIFICACIÓN DE EFICACIA
+------------------------------------------------------------
+
+La tercera tarjeta debe aparecer recién cuando exista al menos una acción cargada.
+
+Nombre sugerido:
+“Verificación de eficacia”
+
+Campos que debe mostrar/cargar:
+
+- Fecha estimada de verificación de eficacia
+- Acción correspondiente tomada como referencia
+- Selector de resultado:
+  - Eficaz
+  - No eficaz
+- Fecha de realización de la verificación
+- Detalle de la verificación
+
+Regla para determinar la fecha estimada de verificación:
+- Si existe una sola acción:
+  - tomar la fecha estimada de verificación de eficacia cargada en esa acción.
+- Si existe más de una acción:
+  - tomar siempre la fecha estimada de verificación de eficacia más lejana de todas las acciones cargadas.
+  - mostrar también cuál es la acción correspondiente a esa fecha más lejana.
+- Esta fecha debe usarse como referencia para la verificación de eficacia de la observación.
+
+Comportamiento:
+- La tarjeta debe permitir registrar la verificación de eficacia.
+- La verificación debe quedar asociada a la observación.
+- Registrar en historial:
+  - fecha estimada usada;
+  - acción tomada como referencia;
+  - resultado eficaz/no eficaz;
+  - fecha real de verificación;
+  - detalle de la verificación;
+  - usuario que realizó la verificación.
+
+------------------------------------------------------------
+3. LÓGICA DE CIERRE DE OBSERVACIÓN
+------------------------------------------------------------
+
+Caso A: Resultado eficaz
+Si la verificación de eficacia resulta “Eficaz”:
+- Revisar que todas las acciones de la observación estén cerradas/finalizadas.
+- Si la observación fue eficaz y todas las acciones están cerradas:
+  - cerrar la observación.
+  - registrar cierre en historial.
+- Si la observación fue eficaz pero quedan acciones abiertas:
+  - no cerrar todavía la observación.
+  - mostrar mensaje indicando que existen acciones pendientes.
+  - mantener observación en estado correspondiente hasta que las acciones estén cerradas.
+
+Importante:
+Revisar la política y lógica actual de Tratamientos para replicar el criterio de cierre de manera coherente.
+
+Caso B: Resultado no eficaz
+Si la verificación de eficacia resulta “No eficaz”:
+- Revisar cómo está implementada actualmente la lógica de Tratamientos cuando una evaluación de eficacia da no eficaz.
+- Proponer e implementar una lógica equivalente o coherente para Observaciones.
+
+Criterio esperado para propuesta:
+La observación no debe cerrarse.
+Debe quedar en un estado que permita generar nuevas acciones, una nueva instancia de análisis o una nueva verificación posterior.
+Debe conservarse el historial de la verificación no eficaz.
+No se deben borrar acciones anteriores.
+No se debe sobrescribir la verificación anterior sin trazabilidad.
+
+Opciones posibles a evaluar:
+- Reabrir observación para cargar nuevas acciones.
+- Generar una nueva ronda/ciclo de acciones.
+- Mantener la observación en estado “No eficaz” hasta que se carguen nuevas acciones.
+- Permitir una nueva verificación luego de nuevas acciones.
+- Seguir exactamente la política de Tratamientos si ya existe una política madura y consistente.
+
+Antes de implementar el comportamiento definitivo, revisar el código actual de Tratamientos y aplicar el mismo criterio si corresponde.
+
+------------------------------------------------------------
+4. TRAZABILIDAD E HISTORIAL
+------------------------------------------------------------
+
+Debe registrarse historial para:
+
+- confirmación de observación desde revisión de hallazgos;
+- clasificación como observación TRT;
+- generación de tratamiento desde observación TRT;
+- generación de observación normal;
+- asignación de responsable;
+- fecha de realización / fecha límite;
+- carga de acciones;
+- cierre de acciones;
+- cálculo de fecha estimada de verificación;
+- verificación de eficacia;
+- resultado eficaz/no eficaz;
+- cierre de observación;
+- reapertura o nuevo ciclo si no fue eficaz.
+
+El historial debe permitir reconstruir qué usuario hizo cada acción, en qué fecha y qué cambió.
+
+------------------------------------------------------------
+5. PERMISOS Y BLOQUEOS
+------------------------------------------------------------
+
+Respetar permisos existentes.
+
+Reglas generales:
+- Solo usuarios autorizados deben poder confirmar observaciones.
+- Solo responsables o usuarios con permisos superiores deben poder cargar acciones, según la política actual.
+- No permitir modificar observaciones cerradas, salvo usuarios autorizados y dejando historial.
+- No permitir editar acciones ya guardadas si la política definida es de solo lectura.
+- No permitir verificar eficacia si no existe al menos una acción cargada.
+- No permitir cerrar observación si no están dadas las condiciones de cierre.
+
+------------------------------------------------------------
+6. INTERFAZ Y EXPERIENCIA DE USUARIO
+------------------------------------------------------------
+
+Mantener estilo visual actual del sistema.
+
+El flujo de Observaciones debe quedar claro y secuencial:
+
+Tarjeta 1:
+Datos generales de la observación.
+
+Tarjeta 2:
+Acciones tomadas.
+
+Tarjeta 3:
+Verificación de eficacia.
+
+Cada tarjeta debe mostrar solo lo que corresponde según el estado de avance.
+
+Mensajes esperados:
+- “Debe cargar al menos una acción antes de verificar eficacia.”
+- “La observación no puede cerrarse porque existen acciones pendientes.”
+- “La observación fue cerrada correctamente.”
+- “La verificación resultó no eficaz. Deben cargarse nuevas acciones o seguir el flujo definido.”
+- “La acción fue guardada correctamente y no podrá editarse.”
+
+------------------------------------------------------------
+7. CRITERIOS DE ACEPTACIÓN
+------------------------------------------------------------
+
+La modificación se considera correcta si:
+
+1. En Revisión de hallazgos, al elegir Observación, la pantalla de Confirmar observación permite:
+   - seleccionar responsable;
+   - marcar o no “Clasificar como observación TRT”;
+   - cargar fecha de realización;
+   - confirmar.
+
+2. La opción “Clasificar como observación TRT” ya no queda ubicada en Observaciones / Carga de observación, sino en Confirmar observación.
+
+3. Si se confirma como TRT:
+   - se genera tratamiento;
+   - toma responsable seleccionado;
+   - toma fecha de realización;
+   - queda trazabilidad con la anomalía.
+
+4. Si se confirma sin TRT:
+   - se genera observación;
+   - se asigna al responsable seleccionado;
+   - toma fecha de realización o fecha límite correspondiente;
+   - queda trazabilidad con la anomalía.
+
+5. En Observaciones aparece una primera tarjeta con:
+   - responsable;
+   - fecha límite de ejecución;
+   - comentario;
+   - botón siguiente.
+
+6. El botón “Siguiente” habilita la tarjeta de Acciones tomadas.
+
+7. En Acciones tomadas se puede cargar:
+   - detalle de acción;
+   - fecha estimada de realización;
+   - fecha estimada de verificación de eficacia.
+
+8. Las acciones guardadas aparecen listadas y no pueden editarse.
+
+9. Se pueden cargar múltiples acciones.
+
+10. Con la primera acción cargada aparece la tarjeta de Verificación de eficacia.
+
+11. La fecha estimada de verificación de eficacia de la observación se calcula tomando:
+   - la fecha de la única acción si hay una;
+   - la fecha más lejana si hay varias.
+
+12. La tarjeta de Verificación de eficacia muestra la acción correspondiente a la fecha más lejana.
+
+13. Se puede registrar:
+   - eficaz / no eficaz;
+   - fecha real de verificación;
+   - detalle de verificación.
+
+14. Si fue eficaz y todas las acciones están cerradas:
+   - se cierra la observación.
+
+15. Si fue eficaz pero hay acciones abiertas:
+   - no se cierra y muestra advertencia.
+
+16. Si no fue eficaz:
+   - revisar lógica de Tratamientos;
+   - aplicar una lógica equivalente/coherente;
+   - permitir continuidad sin perder trazabilidad.
+
+17. Todo queda registrado en historial.
+
+18. No se rompe la lógica actual de Tratamientos, Anomalías, Seguimiento, permisos ni estados.
+
+------------------------------------------------------------
+8. PRUEBAS FUNCIONALES SOLICITADAS
+------------------------------------------------------------
+
+Realizar pruebas manuales o automatizadas sobre los siguientes casos:
+
+Caso 1:
+Anomalía → Revisión de hallazgos → Observación sin TRT → Confirmar.
+Resultado esperado:
+Se crea observación normal asignada al responsable con fecha de realización/límite.
+
+Caso 2:
+Anomalía → Revisión de hallazgos → Observación con TRT → Confirmar.
+Resultado esperado:
+Se genera tratamiento con responsable y fecha de realización.
+
+Caso 3:
+Observación normal → completar primera tarjeta → siguiente.
+Resultado esperado:
+Se habilita tarjeta de acciones tomadas.
+
+Caso 4:
+Cargar una acción.
+Resultado esperado:
+La acción queda listada como solo lectura y aparece tarjeta de verificación.
+
+Caso 5:
+Cargar varias acciones con distintas fechas estimadas de verificación.
+Resultado esperado:
+La tarjeta de verificación toma la fecha más lejana y muestra la acción correspondiente.
+
+Caso 6:
+Verificación eficaz con todas las acciones cerradas.
+Resultado esperado:
+La observación se cierra.
+
+Caso 7:
+Verificación eficaz con acciones abiertas.
+Resultado esperado:
+La observación no se cierra y se informa que hay acciones pendientes.
+
+Caso 8:
+Verificación no eficaz.
+Resultado esperado:
+La observación no se cierra y continúa según la lógica definida a partir de Tratamientos.
+
+Caso 9:
+Usuario sin permisos intenta modificar observación.
+Resultado esperado:
+Acceso denegado o acción bloqueada.
+
+Caso 10:
+Intentar editar una acción ya guardada.
+Resultado esperado:
+No debe permitirse edición directa.
+
+------------------------------------------------------------
+9. ENTREGA ESPERADA
+------------------------------------------------------------
+
+Al finalizar, informar:
+
+- Archivos modificados.
+- Modelos modificados o creados.
+- Migraciones generadas.
+- Endpoints modificados o creados.
+- Componentes frontend modificados.
+- Validaciones agregadas.
+- Cambios en historial/auditoría.
+- Pruebas realizadas.
+- Riesgos detectados.
+- Recomendaciones adicionales si la lógica actual de Tratamientos requiere ajustes.
+.......................................................................................................................
+PLATAFORMA CORPORATIVA DE CALIDAD
+RESUMEN DE AVANCE DEL SISTEMA
+Fecha de corte: 2026-03-22
+
+1. OBJETIVO GENERAL
+
+El sistema fue disenado para gestionar anomalias, acciones, tareas, notificaciones y trazabilidad operativa dentro de un entorno corporativo. La arquitectura actual ya permite operar localmente en planta y, al mismo tiempo, deja preparada la migracion futura a infraestructura cloud sin cambios fuertes de arquitectura.
+
+2. ARQUITECTURA GENERAL
+
+Backend:
+- Django
+- Django REST Framework
+- PostgreSQL
+- JWT para autenticacion
+
+Frontend:
+- React
+- TypeScript
+- Vite
+- PWA base
+
+Despliegue:
+- Docker Compose local
+- Nginx para servir frontend y hacer proxy de API
+- Gunicorn para backend
+- Volumenes persistentes para datos, adjuntos, logs y backups
+
+3. MODULOS IMPLEMENTADOS
+
+3.1 Accounts
+- Login
+- Refresh token
+- Logout
+- Usuario actual
+- Roles
+- Permisos
+- Scopes por usuario
+
+3.2 Catalog
+- Sitios
+- Areas
+- Tipos de anomalia
+- Origenes
+- Severidades
+- Prioridades
+- Tipos de accion
+
+3.3 Anomalies
+- Registro de anomalia
+- Workflow completo de 12 etapas
+- Historial de estados
+- Participantes
+- Comentarios
+- Adjuntos
+- Verificacion inicial 6M
+- Clasificacion
+- Analisis de causa
+- Propuestas
+- Resultados
+- Verificacion de eficacia
+- Cierre
+- Estandarizacion y aprendizaje
+
+3.4 Actions
+- Planes de accion
+- Acciones individuales
+- Responsable
+- Prioridad
+- Fecha compromiso
+- Evidencia esperada
+- Evidencia cargada
+- Comentario de cierre
+- Historial de acciones
+
+3.5 Notifications
+- Bandeja interna
+- Pendientes
+- Tareas por usuario
+- Marcado de lectura
+- Resolucion de tareas
+
+3.6 Audit
+- Consulta de eventos
+- Resumen de auditoria
+- Trazabilidad transversal
+
+4. WORKFLOW DE ANOMALIAS SOPORTADO
+
+Etapas:
+1. Registro
+2. Contencion
+3. Verificacion inicial
+4. Clasificacion
+5. Analisis de causa
+6. Propuestas
+7. Plan de accion
+8. Ejecucion y seguimiento
+9. Resultados
+10. Verificacion de eficacia
+11. Cierre
+12. Estandarizacion y aprendizaje
+
+Estados principales:
+- registered
+- in_evaluation
+- in_analysis
+- in_treatment
+- pending_verification
+- closed
+- cancelled
+- reopened
+
+Reglas ya implementadas:
+- Toda anomalia tiene ID unico
+- Toda transicion relevante se audita
+- No se puede cerrar sin verificacion minima
+- No se puede completar aprendizaje sin registrar learning
+- Si falta informacion obligatoria, el backend bloquea la transicion
+- La logica critica del workflow vive en backend
+
+5. FRONTEND INICIAL YA OPERATIVO
+
+Pantallas disponibles:
+- Login
+- Dashboard
+- Nueva anomalia
+- Confirmacion de carga
+- Mis anomalias
+- Detalle de anomalia
+- Mis acciones
+- Pendientes
+- Bandeja interna
+
+Capacidades del frontend:
+- Consumo real de API DRF
+- Refresh automatico de sesion
+- Rutas protegidas
+- Manejo de loading y errores
+- Vista responsive
+- Experiencia simple para Windows y Android
+
+6. VALIDACIONES YA REALIZADAS
+
+Backend:
+- check de Django
+- tests de modulos principales
+- validacion funcional real del workflow completo de anomalias
+- validacion de acciones, notificaciones y auditoria
+
+Frontend:
+- npm install
+- npm run check
+- npm run build
+- pruebas manuales reales sobre:
+  - login
+  - dashboard
+  - nueva anomalia
+  - confirmacion
+  - mis anomalias
+  - detalle y timeline
+  - mis acciones
+  - pendientes
+  - bandeja interna
+
+Despliegue local:
+- Stack Docker levantado y verificado
+- PostgreSQL en contenedor
+- Backend en contenedor
+- Frontend en contenedor
+- Admin accesible
+- API accesible
+- Frontend accesible en localhost
+
+7. DESPLIEGUE LOCAL CLOUD-READY
+
+Separacion ya definida:
+- aplicacion backend
+- frontend
+- base de datos
+- archivos adjuntos
+- configuracion por variables de entorno
+- logs
+- backups
+
+Buenas practicas ya aplicadas:
+- no hardcodear IPs en configuracion principal
+- variables de entorno centralizadas
+- rutas portables
+- media y static fuera del codigo
+- logs persistentes
+- backups con carpeta dedicada
+- misma origin para frontend y backend en despliegue productivo local
+
+8. ARCHIVOS Y DOCUMENTACION CLAVE
+
+Documentacion:
+- README.md
+- docs/deployment/local-cloud-ready.md
+- docs/workflows/anomalies-workflow.md
+- docs/architecture/system-overview.md
+
+Infraestructura:
+- deploy/docker/docker-compose.local.yml
+- deploy/docker/backend.Dockerfile
+- deploy/docker/frontend.Dockerfile
+- deploy/nginx/calidad.conf
+- deploy/docker/.env.server.example
+- deploy/backups/backup_local.sh
+
+9. ESTADO REAL AL MOMENTO
+
+El sistema ya no esta en fase de solo maqueta.
+Actualmente cuenta con:
+- backend funcional
+- frontend funcional
+- integracion real frontend-backend
+- despliegue local en Docker validado
+- acceso por navegador
+
+10. PENDIENTES RECOMENDADOS A FUTURO
+
+- Carga de datos base para entornos nuevos
+- Restore automatizado de backups
+- Catalogos consumidos 100 por ciento desde API
+- Monitoreo y observabilidad
+- Publicacion por nombre interno de red
+- Endurecimiento de seguridad productiva
+
+11. CONCLUSION
+
+La plataforma ya cuenta con una base tecnica solida para operar como sistema corporativo
+ de gestion de anomalias en entorno local de fabrica. La solucion queda preparada para crecer 
+ funcionalmente y para migrar a nube en una etapa futura con cambios concentrados en infraestructura,
+  configuracion y migracion de datos.
+
+
+Modif a partir del 2 de abril
+en tratamientos detalle de tratamiento vista 2 de analisis cuando creo una nueva tarea los campos de la
+tarea que fueron rellenados deben vaciarce porque si por error apreto nueva mente crear tarea se duplica. 
+si los campos estan vacios no debe generarce nueva tarea hasta que esten completos, y son todos obligatorios. 
+tambien hay que pulir los botones de vista tienen un signo de interrogacion en el medio que hay que sacar.
+en tratameinto cuando le damos a guardar analisis deberia aparecer un emergente que pida confirmacion 
+una vez confirmada en seguimiento de anomalias deberia verce reflejado en la tarjeta participantes y verificaciones 
+campo analisis de causa. (deebria decir analizado) tambien debe actualizare ahi la tarjeta historial con la creacion
+ del tratameinto y luego con los pasos del mismo.
+
+ con la carga de anomalias se debe poder cargar imagenes o pdfs. como evidencia objetiva.
+ durante el tratamiento deben estar visibles las evidencias objetivas de las anomalias que intervienen, tambien debe 
+ poder agregarce 
+ evidencias al tratamiento.
+ en las tareas tambien debe ser posible agregar evidencias durante su realizacion.
+
+ en el listado de anomalias o tratamientos o etapas del historial o cualquier otro listado, listar solo 10 por pagina
+  y hacer paginacion.
+
+
+secciones principales acciones y pendientes,  en el panel izq. "mis acciones" que sea solo "acciones". Acciones listara el historico de acciones realizadas (tareas)
+  y se debe poder filtrar 
+ por anomalia a la que pertence, tratamiento al que pertenece, fecha de terminada, usuario que la realizo. el listado 
+ deberea ser de 10 por paginas con 
+ paginacion como las otras listas.
+ en el panel izq. "mis acciones" que sea solo "acciones". Acciones listara el historico de acciones realizadas (tareas)
+  y se debe poder filtrar 
+ por anomalia a la que pertence, tratamiento al que pertenece, fecha de terminada, usuario que la realizo. el listado 
+ deberea ser de 10 por paginas con 
+ paginacion como las otras listas.
+__________________________________________________________________________________________________________________________
+
+ cuando una anomalia es clasificada como accion inmediata, no se debe permitir crear tratamiento, se deberia abrir
+ nueva pantalla para anomalias con accion inmediata y dentro de esta poner una observacion un responsable fecha y acciones
+ a tomar o que se tomaron. fecha verificacion de eficacia y luego cierre directo sin mas.
+
+------------------------------------------------------------------------------------------------------------------------
+
+Cuando todas las tareas de un tratamiento estén en estado COMPLETADAS, el sistema debe cambiar automáticamente el 
+estado del tratamiento a "VERIFICACION_DE_EFICACIA".
+
+En este estado, el ADMIN debe:
+- Cargar fecha de verificación
+- Asignar responsable verificador
+
+El verificador debe:
+- Cargar evidencia objetiva (archivos)
+- Indicar resultado: EFICAZ o NO EFICAZ
+- Cargar comentarios
+- Cargar fecha de verificación
+
+Si el resultado es EFICAZ:
+- El ADMIN puede cerrar el tratamiento -> estado CERRADO_EFICAZ
+
+Si el resultado es NO EFICAZ:
+- El ADMIN debe crear un NUEVO TRATAMIENTO
+- El nuevo tratamiento debe estar asociado al tratamiento original (tratamiento_origen_id)
+- El tratamiento original queda en estado CERRADO_NO_EFICAZ
+
+Debe existir historial de cambios de estado y trazabilidad entre tratamientos.
+No se puede cerrar un tratamiento sin verificación de eficacia.
+
+deberia de verce el codigo de la anomalia acutal, ya reservarlo para esta anomalia si hubiera multiples usuarios 
+creando nuevas anomalias ya el numero estaria reservado para esta.
+_________________________________________________________________________________________________
+
+ y avisarle al usuario que tenia a cargo el tratamiento  que verifique si fue eficaz. si fue eficaz se cierra, si no 
+ se convoca nuevamente otro tratamiento 
+ al cual se asociara el anterior con todos sus datos.
+
+
+
+ las tarjetas señaladas que estan en edicion o con foco en ellas deberian de  tener un color verde un tono o dos mas arriba 
+ que el fondo para destacar visualmente el foco en ellas
+
+Hay que revisar bien usuario comun solo ve tareas en la que esta involucrado y puede editarlas y completarlas
+mando medio puede ver las tareas de todos los usuarios y editarlas pero no puede agregar ni borrar
+admin puede hacer todo.
+
+usuario comun no ve tratamientos directamente , mando medio los ve y puede editarlos pero no borrarlos ni cerrarlos 
+ni aprobar verificacion e 
+
+_21/04________________________________________________________________________________________________________
+En seguimiento de anomalias el campo clasificacion solo se puede cambiar una vez agregar
+ cartel de " esta seguro de la clasificacion? " , si la anomalia no ha pasado aun a una siguiente etapa se podra
+  habilitar nuevamente el cambio poner cartel " se habilita el cambiode clasificacion" si la anomalia ya paso
+   a otra etapa   cartel " no se puede modificar la clasificacion".   ECHO QUEDO BIEN
+...........................................................................................................
+cuando creamos tratamiento,(boton crear tratamiento en tratamientos, se le asigna un Id eso es correcto lo
+ que falta es que ahi cambie el estado de la anomalia a tratameinto creado e impacte en detalle de
+ anomalia historial y en participacion y verificaciones,entre clasificacion y antes de analisis de causa ) 
+ tambien este cambio servira para bloquear cambio de clasificacion. ECHO QUEDO BIEN
+_22/04__________________________________________________________________________________________________________
+revisar tareas y acciones son lo mismo?  
+................................................................................................................
+EN TRATAMIENTOS--ANOMALIAS ASOCIADAS A TRATAMEINTOS-------SELECCIONAR solo aparece la ultima anomalia y no todo
+el listado tambien seria necesario que se pueda filtrar anomalias por campos como ID ANOMALIA-SECTOR-AREA-USUARIO-Fecha
+para facilitar cuando el listado se haga extenso. ECHO OK
+.........................................................................................................
+Vamos a comitear y pushear. nombre 2026-04-22.     ECHO OK
+...........................................................................................................
+en TRATAMIENTOS----VISTA 2 ANALISIS-----EDITAR TAREA, EVIDENCIA DE LA TAREA pasarlo a ACCIONES como un formulario que se despliega
+una vez que se hizo click en alguna de las tareas que figuran en el listado filtrado en la pagina ACCIONES.
+............................................................................................................
+aciones todo usuario puede entrar a acciones pero debe ver solo las que le pertencen y debe poder modificarlas.
+ Usuarios con nivel administrador o desarrollador pueden ver todas pero solo modificar las suyas. 
+ (esto a modo de idea porque en permisos se debe poder establecer y cambiar esto.)
+(cargadas en el tratameinto, en analisis, tareas surgidas del tratameinto, responsable)
+........................................................................................................
+en ACCIONES Y PENDIENTES en el filtro ESTADO cuando pongo VENCIDA da :
+<!doctype html> <html lang="en"> <head> <title>Server Error (500)</title> </head> <body> <h1>Server Error (500)</h1><p></p> </body> </html>
+-24/04____________________________________________________________________________________________________________________________
+
+El nombre CLASIFICACION cambiar por REVICION DE HALLAZGOS       ECHO OK
+..................................................................................................................
+
+
+Contexto/Rol:
+Actuá como desarrollador senior full-stack especializado en sistemas de gestión de calidad, permisos de usuarios y aplicaciones web empresariales.
+
+Estamos trabajando en un sistema de gestión de anomalías / calidad. Dentro del sistema ya existe un Panel de Gestión con tarjetas o secciones relacionadas a usuarios, roles y alcances.
+
+Objetivo:
+Revisar y mejorar la funcionalidad de permisos de usuario dentro del Panel de Gestión.
+
+Ubicación funcional:
+Panel de Gestión → Tarjetas:
+- Roles y alcances
+- Alcances de usuario
+- Usuarios
+
+Necesito que implementes o ajustes una interfaz para que el Administrador pueda asignar permisos y alcances a cada usuario mediante listas tipo checklist.
+
+Concepto funcional:
+Cada usuario debe tener:
+1. Nivel de acceso
+2. Rol asignado
+3. Permisos o alcances específicos habilitados manualmente
+
+Niveles de acceso:
+- Usuario activo
+- Mando medio activo
+- Administrador
+- Desarrollador
+
+Permisos / alcances disponibles:
+1. Menú contextual
+2. Nueva anomalía
+3. Seguimiento de anomalía
+4. Acción inmediata
+5. Tratamientos
+   5a. Creación de tratamientos
+   5b. Convocatoria
+   5c. Análisis
+6. Acciones
+7. Pendientes
+8. Verificación de eficacia
+
+Requerimiento principal:
+En la tarjeta o sección "Alcances de usuario", el Administrador debe poder:
+- Seleccionar un usuario
+- Ver su nivel de acceso actual
+- Ver su rol actual
+- Ver una lista tipo checklist con todos los permisos disponibles
+- Marcar o desmarcar permisos
+- Guardar los cambios
+- Ver una confirmación clara luego de guardar
+
+Reglas recomendadas:
+- El nivel de acceso define una base jerárquica.
+- Los permisos checklist definen los alcances reales.
+- No hardcodear permisos en condicionales dispersos.
+- Centralizar la lógica de permisos para que sea fácil de mantener.
+- Evitar sobreingeniería.
+- Mantener compatibilidad con la estructura actual del proyecto.
+
+Criterios de calidad:
+- Antes de modificar código, analizá la estructura actual del proyecto.
+- Identificá modelos, vistas, templates, formularios y rutas relacionadas con usuarios, roles y permisos.
+- Proponé un breve plan de implementación.
+- Luego implementá por etapas.
+- No rompas funcionalidades existentes.
+- Reutilizá componentes existentes cuando sea posible.
+- El código debe quedar claro, mantenible y preparado para crecer.
+- Agregá validaciones básicas.
+- Si hay migraciones de base de datos necesarias, generarlas correctamente.
+- Si detectás inconsistencias en el modelo actual de permisos, explicalas antes de cambiar.
+
+Formato de trabajo:
+1. Primero inspeccioná el proyecto.
+2. Luego explicá qué encontraste.
+3. Proponé el plan.
+4. Implementá los cambios.
+5. Indicá qué archivos modificaste.
+6. Indicá cómo probar la funcionalidad.
+
+Prompt operativo:
+Revisá el sistema actual de permisos de usuario en el Panel de Gestión, especialmente las tarjetas "Roles y alcances", "Alcances de usuario" 
+y "Usuarios". Necesito que en "Alcances de usuario" exista una interfaz tipo checklist para que el Administrador pueda asignar permisos
+ específicos a cada usuario.
+
+El sistema debe contemplar los niveles de acceso: Usuario activo, Mando medio activo, Administrador y Desarrollador.
+
+Los permisos disponibles deben incluir: Menú contextual, Nueva anomalía, Seguimiento de anomalía, Acción inmediata, Tratamientos,
+Creación de tratamientos, Convocatoria, Análisis, Acciones, Pendientes y Verificación de eficacia.
+
+Primero analizá la estructura existente y no modifiques nada hasta tener claro cómo está armado. Después implementá la mejora de forma limpia 
+y mantenible.
+Permisos usuario revisar funcion de tarjeta rol y campo nivel de acceso en tarjeta usuarios.  ECHO OK
+__25/04___________________________________________________________________________________________________________
+he detectado que cargo un usuario administrador con todo los permisos y no permite registrar anomalias 
+no se si hay relacion. ECHO OK
+
+................................................................................................................
+quedo bastante bien detecto un problemita cuando un usuario (ej mechi) que participa de un tratameinto se le asigna tarea al entrar en  
+en acciones se ven todas las tareas del tratameinto la que es para ella y la que es para otro usuario. 
+solo deberia de ver tareas que sean para ella. ECHO OK
+............................................................................................................................................
+cuando un usuario cambia el estado de una tarea se le debe obligar a cargar la nota de la evidencia. este cambio se debe registrar
+ en el historial de seguimiento de anomalias en el .el usuario puede volver a cambiar el estado pero siempre con la obligacion de carga la nota 
+ en la evidencia.Consulta/Tarea:
+Modificar la lógica de cambio de estado de tareas para que sea obligatorio cargar una nota de evidencia en cada cambio, registrar esa información en el historial de la anomalía y mejorar la visualización del historial agregando dicha evidencia debajo del evento.
+
+Especificaciones funcionales:
+1. Cada vez que un usuario cambie el estado de una tarea, el sistema debe exigir una nota de evidencia obligatoria.
+2. La nota de evidencia:
+   - No puede estar vacía ni contener solo espacios.
+   - Debe ser obligatoria en todos los cambios de estado, sin excepción.
+3. El usuario puede cambiar el estado múltiples veces, pero en cada cambio debe ingresar una nueva nota de evidencia.
+4. Si no se ingresa la nota, el sistema debe impedir el cambio de estado y mostrar un mensaje claro al usuario.
+5. Esta validación debe implementarse en backend (obligatorio), y opcionalmente reforzarse en frontend.
+6. Cada cambio de estado debe generar un registro en el historial de seguimiento de la anomalía asociada, incluyendo:
+   - tarea afectada
+   - estado anterior
+   - nuevo estado
+   - usuario que realizó el cambio
+   - fecha y hora
+   - nota de evidencia
+
+Especificaciones de datos:
+7. La nota de evidencia debe persistirse (en el modelo de historial o donde corresponda según la arquitectura actual).
+8. El historial debe estar asociado a la anomalía (no solo a la tarea), respetando el diseño existente.
+
+Especificaciones de interfaz (historial):
+9. Mantener la línea actual del historial como resumen, por ejemplo:
+   “Tratamiento TRT-2026-0012: se actualiza la tarea TRT-2026-0012-T02 a estado completed.”
+10. Debajo de esa línea, agregar la evidencia cargada en el cambio de estado.
+11. Formato visual esperado:
+
+   Línea principal (sin cambios)
+   ↓
+   Evidencia: [texto ingresado por el usuario]
+   ↓
+   Fecha y usuario (como está actualmente)
+
+12. Si el registro histórico no tiene evidencia (por datos antiguos):
+   - Mostrar “Evidencia: Sin evidencia registrada” o
+   - Ocultarlo si se considera mejor para no ensuciar la vista.
+13. La evidencia debe mostrarse con un estilo visual secundario:
+   - texto más pequeño o color más tenue
+   - leve indentación o separación visual
+14. No modificar ni romper el diseño actual de las tarjetas del historial, solo enriquecerlo.
+
+Criterios de calidad:
+- No permitir cambios de estado sin evidencia (regla crítica).
+- Validación robusta en backend.
+- Mantener compatibilidad con funcionalidades existentes.
+- Código limpio, reutilizable y consistente con los modelos actuales.
+- Evitar duplicación de lógica.
+- Asegurar que cada cambio de estado genera su propio registro de historial (no sobrescribir).
+
+Testing:
+- Caso 1: cambio de estado sin evidencia → debe fallar.
+- Caso 2: cambio de estado con evidencia → debe guardarse correctamente.
+- Caso 3: múltiples cambios de estado → deben generar múltiples registros con sus respectivas evidencias.
+- Caso 4: visualización del historial → debe mostrar evidencia debajo del evento.
+
+Formato de respuesta esperado:
+1. Analizar la implementación actual.
+2. Indicar qué modelos, vistas y templates se deben modificar.
+3. Implementar la validación y persistencia de evidencia.
+4. Implementar el registro en historial.
+5. Ajustar el template del historial para mostrar la evidencia.
+6. Explicar brevemente la solución.
+7. Indicar cómo probar man         ECHO OK
+ ............................................................................................................................................
+ en seguimiento de anomalias ---- historial -- se debe de ver para cada movimiento las notas observaciones
+  causas etc que se carguen en dicho movimiento.  ECHO OK
+ ....................................................................................................................................................
+ en seguimiento de anomalias en la tarjeta de la imagen deberia estar tambien el campo descripcion detallada. ECHO OK
+.......................................................................................................................
+__27/04____________________________________________________________________________________________________________________________
+
+Agregar como obligatoria en: tratameinto---vista 2---- analisis, luego de causa raiz encontradas y antes de tareas surgidas del tratameinto
+una tarjetacon  campo que diga " Fecha de evaluacion de eficacia " y otro que diga "Responsable" el responsable se eligira de una lista desplegable en las que esten todos los convocados 
+al tratamiento. ECHO OK
+-___28/04________________________________________________________________________________________________________________
+Si un tratamiento  paso de la fecha de tratamiento agendada, esta realizado ya que  se le cargo al menos una causa raiz,
+con su respectivo detalle y tiene cargada la evaluacion de eficacia y si las tareas que se agregaron estan en estado 
+completada, se debe validar, agreguemos en la barra lateral luego de acciones y antes de pendiente una opcion Validacion,
+en el menu contextual----secciones principales agregar tarjeta validacion. la validacion la realiza el responszable designado,
+se debe cargar eficaz o no eficaz, si no es eficaz el tratameinto se vuelve a reabrir, si es eficaz el tratameinto se cierra,
+todo esto debe reflejarce en seguimiento anomalias historial.  
+ ..........................................................................................................................
+VER HAY UNA CONFUCOIN ENTRE PROCESOS AREAS SECRTOR PRINCIPAL CUANDO VOY A ALCANCES DE USUARIOS... 
+PENSAR NO ME QUEDA MUY EN CLARO QUE QUICE HACER!!!
+...........................................................................................................................
+tratamiento guardar agenda borra la fecha agendada deberia quedar visible.
+...........................................................................................................................
+en tratamientos--analisis--primer paso elegir metodo y cargar observaciones, guardar analisis, segundo paso si hubiera 
+seleccionar archivo y cargar nota de evidencias 
+__BASE DE DATOS VACIA___28/04________________________________________________________________________________________________________
+USUARIOS: SECTOR PRINCIPAL
+
+____7/05/2026___________________________________________________________________________________________________________________
+
+Analisar evaluacion de eficacia ruta y Resultados.
+"Todavia no hay evaluacion de eficacia guardada. Completa los datos y presiona Guardar analisis" ECHO OK
+................................................................................................................................
+ESTANDO PARA UN TRATAMIENTO LA VALIDACION ECHA Y EN ESTADO EFICAZ EN SEGUIMIENTO DE ANOMALIAS LAS ANOMALIAS ASOCIADAS A EL 
+TRATAMEINTO DEBEN DE PASARCE AL ESTADO CERRADO Y NO PERMITIR LA EDICION DE NINGUN DATO DE EL TRATAMIENTO O ANOMALIAS ASOCIADAS. ECHO OK
+...............................................................................................................................
+Ordenar bien tratamiento vista 2 analisis de causa no me convence el orden hace flujograma ECHO A MEDIAS 
+.............................................................................................................................
+en una misma tarea permitir varias causas raiz
+ECHO OK
+..............................................................................................................................
+
+en acciones y pendientes cuando uno selecciona una tarea que ya fue completada no se muestra en edicion la evidencia de la tarea
+ y tampoco la nota de la evidencia que ya fue cargada. ver si no se esta gurdando o es solo visualizacion. ECHO OK
+ ..............................................................................................................................
+ cuando creo nuevo tratamiento aparece la tarjeta con el nuevo tratameinto pero en la seccion de detalle del tratamiento sigue
+ visualizandoce el ultimo que estuvo actvivo, debo de ahcer click en otro tratameinto y luego si vuelvo a clikear ahi recien cambia
+ ECHO OK
+ ______8/05/2026___________________________________________________________________________________________________________________
+```text
+Contexto/Rol:
+Estás trabajando sobre el sistema de Gestión de Calidad / Seguimiento de Anomalías desarrollado en Django. El sistema ya cuenta con un menú contextual llamado “Secciones principales”, donde existen tarjetas como “Seguimiento de anomalías”. Necesitamos agregar una nueva sección de consulta y auditoría, exclusivamente de lectura, orientada al seguimiento de tratamientos/procedimientos.
+
+IMPORTANTE:
+La nueva funcionalidad debe reutilizar la lógica visual y la experiencia de usuario de “Seguimiento de anomalías”, pero NO debe reutilizar la lógica de edición operativa del tratamiento.
+La nueva pantalla debe comportarse como una “vista espejo” o “vista de auditoría” del tratamiento, diseñada únicamente para consulta y trazabilidad.
+
+Objetivo:
+Agregar en el menú contextual → “Secciones principales” una nueva tarjeta llamada:
+
+“Seguimiento de tratamientos”
+
+Al seleccionar esta tarjeta, debe abrirse un formulario/pantalla visualmente similar a “Seguimiento de anomalías”, pero orientado al seguimiento y consulta de tratamientos/procedimientos.
+
+Especificaciones funcionales:
+
+1. Nueva tarjeta en menú contextual
+- Ubicación: menú contextual → Secciones principales.
+- Nombre visible: “Seguimiento de tratamientos”.
+- Mantener el mismo diseño visual y comportamiento de navegación de las tarjetas existentes.
+- La tarjeta debe abrir una nueva vista específica de seguimiento de tratamientos.
+
+2. Nueva pantalla: Seguimiento de tratamientos
+Crear una nueva vista/pantalla llamada:
+
+“Seguimiento de tratamientos”
+
+Debe reutilizar:
+- estilos,
+- layouts,
+- componentes visuales,
+- tablas,
+- tarjetas,
+- cabeceras,
+- filtros,
+- estructura responsive
+
+del módulo “Seguimiento de anomalías”.
+
+IMPORTANTE:
+NO reutilizar la lógica de edición ni formularios operativos del tratamiento.
+Esta nueva pantalla debe funcionar únicamente como:
+- vista de consulta,
+- auditoría,
+- seguimiento histórico.
+
+3. Búsqueda y filtros
+La pantalla debe permitir buscar tratamientos/procedimientos mediante:
+
+- Código de procedimiento.
+- Usuario.
+- Proceso.
+
+Los filtros deben poder combinarse.
+
+Implementar:
+- búsqueda parcial,
+- filtros dinámicos,
+- comportamiento consistente con “Seguimiento de anomalías”.
+
+4. Listado de tratamientos/procedimientos
+La vista debe listar los registros encontrados mostrando como mínimo:
+
+- Código de procedimiento.
+- Nombre o descripción.
+- Usuario responsable o relacionado.
+- Proceso asociado.
+- Estado actual.
+- Fecha relevante (creación, programación o validación según disponibilidad).
+
+5. Estados visibles
+El listado debe mostrar claramente el estado del tratamiento, por ejemplo:
+- Pendiente.
+- En análisis.
+- En ejecución.
+- Validado eficaz.
+- Reabierto.
+- Cerrado.
+
+Usar badges, colores o indicadores visuales similares a los ya existentes en el sistema.
+
+6. Apertura de detalle
+Al hacer clic sobre un procedimiento/tratamiento listado:
+- abrir una nueva pantalla/formulario de detalle,
+- exclusivamente de lectura.
+
+7. Vista detalle tipo “espejo”
+La vista detalle debe mostrar toda la información actualmente cargada en el tratamiento/procedimiento.
+
+Debe incluir:
+- Datos generales.
+- Información de la anomalía asociada.
+- Convocados.
+- Causas raíz.
+- Detalles cargados.
+- Tareas generadas.
+- Responsables.
+- Fechas.
+- Evaluación de eficacia.
+- Responsable de validación.
+- Resultado de validación.
+- Estado actual.
+- Historial completo o seguimiento histórico.
+
+IMPORTANTE:
+Esta pantalla debe comportarse como una “vista espejo” del tratamiento:
+- mostrar todo,
+- permitir navegación,
+- permitir lectura,
+- pero NO permitir modificación alguna.
+
+8. Restricciones de edición (MUY IMPORTANTE)
+
+NO permitir:
+- editar,
+- guardar,
+- eliminar,
+- cambiar estado,
+- agregar comentarios,
+- crear tareas,
+- modificar causas raíz,
+- modificar validaciones.
+
+No mostrar:
+- botones Guardar,
+- Editar,
+- Eliminar,
+- Agregar,
+- Cambiar estado,
+- Acciones operativas.
+
+Si se reutilizan componentes existentes:
+- convertir inputs en readonly,
+- deshabilitar selects,
+- bloquear textareas,
+- ocultar acciones editables.
+
+Validar también desde backend:
+- esta vista debe aceptar únicamente GET.
+- bloquear POST, PUT, PATCH y DELETE.
+
+9. Arquitectura recomendada
+Implementar esta funcionalidad como un módulo independiente de consulta.
+
+NO reutilizar directamente la vista operativa de tratamiento para evitar:
+- conflictos,
+- permisos incorrectos,
+- edición accidental,
+- efectos colaterales.
+
+Preferentemente:
+- crear vistas específicas readonly,
+- templates específicos readonly,
+- serializers/contextos de solo lectura,
+- componentes reutilizables visuales.
+
+10. Permisos
+- Mantener compatibilidad con el sistema actual de roles y alcances.
+- Reutilizar la lógica de permisos existente donde corresponda.
+- Solo usuarios autorizados deben poder ingresar.
+
+11. Historial y trazabilidad
+- La consulta NO debe generar eventos nuevos.
+- NO debe modificar historial.
+- NO debe alterar estados.
+- Solo mostrar información existente.
+
+12. Robustez
+La vista debe funcionar correctamente aunque:
+- falten causas raíz,
+- falten tareas,
+- no exista evaluación de eficacia,
+- no exista validación,
+- haya tratamientos incompletos.
+
+13. Optimización
+Evitar:
+- consultas duplicadas,
+- N+1 queries,
+- carga innecesaria.
+
+Usar:
+- select_related,
+- prefetch_related,
+- paginación si corresponde.
+
+14. UX/UI
+Mantener coherencia total con:
+- diseño actual,
+- colores,
+- tarjetas,
+- navegación,
+- sidebar,
+- tablas,
+- formularios del sistema.
+
+La experiencia debe sentirse parte nativa del sistema actual.
+
+Criterios de calidad:
+- Código limpio y mantenible.
+- No romper funcionalidades existentes.
+- No alterar “Seguimiento de anomalías”.
+- Mantener separación clara entre:
+  - vista operativa editable,
+  - vista de auditoría readonly.
+- Evitar duplicación innecesaria.
+- Reutilizar componentes visuales correctamente.
+- Mantener seguridad backend y frontend.
+
+Resultado esperado:
+Codex debe implementar:
+
+1. Nueva tarjeta “Seguimiento de tratamientos”.
+2. Nueva URL y navegación.
+3. Vista de búsqueda y listado.
+4. Filtros por:
+   - código,
+   - usuario,
+   - proceso.
+5. Estados visibles.
+6. Vista detalle readonly tipo espejo.
+7. Protección frontend y backend contra edición.
+8. Templates necesarios.
+9. Integración visual coherente con el sistema actual.
+10. Validación final de funcionamiento sin afectar módulos existentes.
+
+Antes de modificar:
+Analizar cómo está implementado actualmente:
+- Seguimiento de anomalías.
+- Tratamientos/procedimientos.
+- Estados.
+- Roles y permisos.
+- Historial.
+- Templates reutilizables.
+- Componentes visuales existentes.
+
+ ECHO OK
+```
+.............................................................................................................................
+Acciones inmediatas cerradas por mes filtrar por analisis de repetitividad
+(teniendo en cuenta y aca agregar cuando claudia ahace el analisis que tenga un campo desplegable con los diferentes 
+tipos de anomalias o c ausas)acciones de repitencia agregar en tratemiento convocatoria lugar de la convocatoria carga
+ de evidencia de tarea obligatorio. 
+ ____11/05/2026______________________________________________________________________________________________________________
+
+ se cambia el campo "tipo de anomalias" por "tipo de desvio" ECHO OK
+ .......................................................................................................
+ En el módulo “Seguimiento de anomalías”, junto al botón o sección “Revisión de hallazgos”, agregar un nuevo botón
+  llamado “Estudio de repitencia”. ECHO OK
+
+Al hacer clic, debe abrirse un nuevo formulario/pantalla con el mismo estilo visual,
+ estructura y diseño que el resto de formularios del sistema.
+
+Nombre de la nueva pantalla:
+“Estudio de repitencia”
+
+Funcionalidad requerida:
+
+1. Filtro de fecha
+- Agregar un selector de fecha llamado “Desde fecha”.
+- El sistema debe tomar como rango de análisis desde la fecha seleccionada hasta el día actual.
+- Si no se selecciona una fecha, mostrar un mensaje solicitando completar el filtro antes de ejecutar el análisis.
+
+2. Análisis de datos
+El sistema debe analizar todas las anomalías registradas en la base de datos dentro del período seleccionado.
+
+Se deben calcular y mostrar los siguientes KPIs:
+
+A. Cantidad de anomalías por “Tipo de desvío”
+- Agrupar las anomalías por el campo “tipo de desvío”.
+- Mostrar para cada tipo de desvío la cantidad total de anomalías encontradas en el período.
+
+B. Cantidad de anomalías por sector para cada tipo de desvío
+- Para cada “tipo de desvío”, agrupar también por “sector”.
+- Mostrar la cantidad de anomalías correspondientes a cada sector dentro de cada tipo de desvío.
+
+3. Presentación visual
+- Mostrar los KPIs en paneles o tarjetas, manteniendo el mismo diseño del sistema.
+- Primero mostrar un panel resumen con:
+  - Período analizado.
+  - Total general de anomalías encontradas.
+  - Cantidad por tipo de desvío.
+- Luego mostrar otro panel con el detalle:
+  - Tipo de desvío.
+  - Sector.
+  - Cantidad de anomalías.
+
+4. Listado de anomalías intervinientes
+Debajo de los paneles KPI, mostrar una tabla con las anomalías que formaron parte del análisis.
+
+La tabla debe incluir las siguientes columnas:
+- ID
+- Título
+- Observaciones
+- Tipo de desvío
+- Sector
+- Fecha de registro
+
+5. Comportamiento esperado
+- La pantalla debe actualizar los resultados al seleccionar la fecha y ejecutar la búsqueda.
+- Si no hay anomalías en el período seleccionado, mostrar el mensaje:
+  “No se encontraron anomalías para el período seleccionado.”
+- No modificar registros desde esta pantalla. Será solo de consulta y análisis.
+- Respetar permisos existentes del sistema.
+- Mantener coherencia con nombres de rutas, vistas, templates, formularios y estilos ya utilizados en el proyecto.
+
+6. Criterios técnicos
+- Implementar la lógica preferentemente en una vista separada.
+- Reutilizar componentes, estilos y templates existentes.
+- Evitar duplicar código innecesariamente.
+- Validar correctamente el filtro de fecha.
+- Ordenar los resultados de mayor a menor cantidad de anomalías.
+- Mantener trazabilidad visual: al hacer clic en una anomalía del listado, si el sistema ya cuenta con vista de detalle,
+ permitir acceder a ella.
+
+Resultado esperado:
+Una nueva pantalla llamada “Estudio de repitencia” integrada dentro de “Seguimiento de anomalías”, 
+que permita analizar repeticiones de anomalías por tipo de desvío y sector dentro de un período seleccionado. ECHO OK
+............................................................................................................................
+
+Se modifico paleta de colores y grosor de contornos de tarjetas. ECHO OK
+
+...........................................................................................................................
+Objetivo:
+Registrar aprendizajes derivados de tratamientos cuya validación haya sido marcada como “eficaz”.
+
+Ubicación:
+Agregar una nueva sección en el menú correspondiente del sistema con el nombre:
+“Lecciones aprendidas”.
+
+Regla de aparición:
+Cuando un tratamiento tenga la validación final en estado “eficaz”, deberá aparecer automáticamente en la sección “Lecciones aprendidas”.
+
+Diseño:
+- Copiar la tarjeta/listado visual utilizado en “Seguimiento de tratamientos”.
+- Mantener el mismo estilo, formato, colores, estructura y comportamiento visual del sistema.
+- En cada tarjeta de tratamiento, agregar a la derecha un bloque editable para registrar la lección aprendida.
+
+Campos requeridos:
+
+1. Pregunta:
+“¿Hubo un aprendizaje?”
+- Agregar selector o casilla de verificación con opciones:
+  - Sí
+  - No
+
+Si la respuesta es “Sí”, mostrar y requerir:
+- Campo de texto:
+  “¿Qué se aprendió?”
+- Campo para subir archivos:
+  “Evidencia objetiva”
+- Permitir adjuntar uno o varios archivos.
+
+Si la respuesta es “No”, mostrar y requerir:
+- Campo de texto:
+  “¿Por qué no se aprendió?”
+
+2. Pregunta:
+“¿Modifica procedimiento?”
+- Agregar selector o casilla de verificación con opciones:
+  - Sí
+  - No
+
+Si la respuesta es “Sí”, mostrar y requerir:
+- Campo de texto:
+  “Observaciones sobre modificación de procedimiento”
+
+Si la respuesta es “No”:
+- No mostrar campos adicionales.
+
+3. Botón:
+Agregar botón:
+“Guardar cambios”
+
+Comportamiento esperado:
+- Al guardar, registrar la información asociada al tratamiento correspondiente.
+- No duplicar tratamientos en la sección.
+- Si ya existe una lección aprendida cargada para un tratamiento, mostrar los datos guardados y permitir editarlos
+ según permisos existentes.
+- Registrar fecha y usuario que guardó o modificó la lección aprendida.
+- Mantener trazabilidad en el historial del tratamiento.
+- Si se adjuntan archivos, guardarlos como evidencia objetiva asociada a la lección aprendida.
+
+Validaciones:
+- Si “Hubo un aprendizaje” = Sí, el campo “¿Qué se aprendió?” debe ser obligatorio.
+- Si “Hubo un aprendizaje” = No, el campo “¿Por qué no se aprendió?” debe ser obligatorio.
+- Si “Modifica procedimiento” = Sí, el campo de observaciones debe ser obligatorio.
+- No permitir guardar sin completar los campos obligatorios según corresponda.
+
+Criterios técnicos:
+- Crear modelo, formulario, vista, ruta y template necesarios si no existen.
+- Reutilizar componentes visuales existentes del sistema.
+- Mantener compatibilidad con permisos actuales.
+- La sección debe mostrar únicamente tratamientos con validación eficaz.
+- Ordenar los tratamientos por fecha de validación más reciente primero.
+- Usar nombres claros y consistentes para modelos, campos, rutas y templates.
+
+Resultado esperado:
+Una nueva sección “Lecciones aprendidas” donde se listen automáticamente los tratamientos eficaces y se permita
+ registrar si hubo aprendizaje,
+ qué se aprendió, evidencia objetiva, si modifica procedimiento y observaciones correspondientes. ECHO OK
+ ___12/05_______________________________________________________________________________________________________________.
+ en seguimiento anomalias dentro de detalles de anomalias agregar  la seccion lecciones aprendidas.
+ tambien en seguimiento de tratamientos detalles read only . colocar en ambas  responsable que cargo el aprendizaje, 
+ fecha, que se aprendio, evidencia objetiva, si modifica rtastamiento y su detalle. ECHO. pido correcion de tarjeta 
+ esta mal ordenada. ECHO OK
+
+ ........................................................................................................................
+ en seguimiento de tratamientos, el subtitulo dice "Consulta y auditoria readonly de tratamientos, procedimientos, 
+ tareas y validaciones"  cambiar el "readonly" por "solo lectura" lo mismo en la seccion read only.ECHO OK
+ ..............................................................................................................................
+ Implementar los siguientes cambios de nomenclatura y optimización visual en el módulo de Gestión de Anomalías, 
+ asegurando consistencia en TODAS las vistas, formularios, tablas, filtros, historiales, tarjetas y componentes relacionados,
+  no solo en “Nueva anomalía”.
+
+OBJETIVO GENERAL:
+Mejorar claridad conceptual y reducir la necesidad de scroll en pantallas operativas.
+---
+## CAMBIOS DE NOMENCLATURA
+1. NUEVA ANOMALÍA – PASO 1
+* Cambiar el campo:
+  "Proceso afectado"
+  por:
+  "Elaborado por"
+2. NUEVA ANOMALÍA – PASO 2
+   Dentro de “Contexto operativo”:
+* Eliminar completamente los campos:
+  * “Proceso”
+  * “Prioridad”
+* Cambiar el nombre del campo:
+  "Origen"
+  por:
+  "Imputado a"
+---
+## REGLA DE CONSISTENCIA GLOBAL
+Revisar TODO el sistema y actualizar los nombres anteriores en:
+* Formularios
+* Tablas
+* Tarjetas
+* Filtros
+* Modales
+* Historiales
+* Seguimiento de anomalías
+* Seguimiento de tratamientos
+* Reportes
+* Tooltips
+* Placeholders
+* Validaciones
+* APIs/serializers si corresponde
+* Labels internos visibles al usuario
+IMPORTANTE:
+No deben quedar referencias visibles al usuario con los nombres antiguos.
+---
+## OPTIMIZACIÓN VISUAL / UX
+Reducir la necesidad de scroll vertical especialmente en:
+* Nueva anomalía
+* Contexto operativo
+* Formularios tipo wizard/pasos
+Aplicar mejoras visuales como:
+* Menor separación vertical entre campos
+* Compactar márgenes y paddings
+* Mejor distribución horizontal
+* Uso eficiente de grillas responsive
+* Agrupación lógica de campos
+* Mantener legibilidad y compatibilidad mobile
+OBJETIVO:
+Que la mayor cantidad posible de información relevante entre en pantalla sin perder claridad.
+---
+## VALIDACIONES
+* Verificar que los cambios no rompan:
+  * carga de anomalías
+  * edición
+  * filtros
+  * búsquedas
+  * historiales
+  * exportaciones
+  * relaciones con tratamientos
+* Confirmar que los campos eliminados:S
+  * no sigan siendo obligatorios
+  * no generen errores backend
+  * no aparezcan en validaciones
+---
+## RESULTADO ESPERADO
+* Interfaz más compacta y limpia
+* Terminología consistente en todo el sistema
+* Menor scroll operativo
+* Formularios más rápidos de usar
+* Sin referencias visibles a nombres antiguos
+ECHO OK
+ .............................................................................................................................
+ en seguimiento de tratamientos historial de auditoria deberia ser historial de tatamiento, el historial esta con 
+ las hitos en ingles passar a español. ECHO OK
+ ..............................................................................................................................
+ en seguimiento de tratameinto la seccion lecciones aprendidas cambiar para que entre dentro de la seccion detalle.
+  debe ser diferente a la de seguimiento de anomalia (esta no tocar ya que esta bien) ECHO OK
+ ..............................................................................................................................
+En la tarjeta de carga de imputado a  el campo  orden de visualizacion se eberia de ver en los registros y a la vez no
+permitir poner un valor que ya existe. ECHO OK
+____18/05_______________________________________________________________________________________________________________________
+1. En “Crear Tratamiento” debe mostrarse la lista de anomalías disponibles para tratamiento.
+
+2. Al seleccionar una anomalía, el sistema debe verificar:
+   “¿Hay un tratamiento abierto al cual se pueda asociar esta anomalía?”
+
+3. Si SÍ existe un tratamiento abierto adecuado:
+   - Mostrar tratamientos abiertos disponibles.
+   - Permitir seleccionar uno.
+   - Asociar la anomalía al tratamiento elegido.
+   - Registrar la asociación en historial/seguimiento.
+   - No generar un tratamiento nuevo.
+
+4. Si NO existe un tratamiento abierto adecuado:
+   - Generar un nuevo tratamiento a partir de la anomalía seleccionada.
+   - Luego consultar si hay otras anomalías disponibles para asociar a ese tratamiento.
+
+5. Si hay otras anomalías para asociar:
+   - Mostrar listado de anomalías compatibles.
+   - Permitir seleccionar una o varias.
+   - Asociarlas al tratamiento recién creado.
+   - Registrar cada asociación en historial/seguimiento.
+
+6. Si no hay otras anomalías para asociar:
+   - El tratamiento queda creado solo con la anomalía inicial.
+
+Reglas:
+- Solo pueden aparecer en “Crear Tratamiento” anomalías con revisión de hallazgos realizada y clasificadas para tratamiento.
+- No se debe crear automáticamente un tratamiento si la anomalía se asocia a uno abierto existente.
+- Solo se pueden asociar anomalías a tratamientos abiertos.
+- No permitir asociación con tratamientos cerrados, eficaces, bloqueados o validados.
+- Toda asociación o desasociación debe quedar registrada en historial.
+- Revisar esta lógica en todas las secciones donde se creen o asocien tratamientos.
+
+Criterio de aceptación:
+Desde “Crear Tratamiento”, el sistema debe permitir tomar anomalías ya revisadas y clasificadas para tratamiento, primero intentando asociarlas
+ a un tratamiento abierto existente y solo creando uno nuevo cuando corresponda. ECHO OK
+..........................................................................................................................
+con el objetivo de hacer todo mas facil de seguir en secciones principales tarjeta, arriba a la derecha agregar 
+un numero  en rojo facil de ver: 1 registrar anomalia 2 seguimiento 3 tratamiento 4 accion inmediata 5 accion inmediata 6 acciones y pendientes
+7validacion 8 lecciones aprendidas 9 bandeja interna. ECHO OK
+............................................................................................................................
+en lecciones aprendidas evidencia objetiva ,ai cargo evidencioa objetiva y luego  quiero verlo en evidencias lecciones aprendidas_evidencias cargadas
+o  en seguiimiento anomalia,me da error (HTTP 401 Unauthorized
+Allow: GET, HEAD, OPTIONS
+Content-Type: application/json
+Vary: Accept
+WWW-Authenticate: Bearer realm="api") ECHO OK
+___21/05_____________________________________________________________________________________________________________________________
+ EN CONFIGURACION Y MAESTROS TARJETA NUEVO USUARIOS AGREGAR CMPO FOTO (AQUI SE CARGARA LA FOTO DEL USUARIO) LUEGO SE DEBE VER EN LA ETIQUIETA 
+ DE ARRIBA A LA DERECHA (LA QUE ESTA EN LA PAGINA PRINCIPAL Y DE FONDO) LA FOTO DEL USUARIO Y DEBAJO EL NOMBRE.
+ .......................................................................................................................................
+ Implementar una funcionalidad de importación masiva de usuarios en el sistema.
+
+Objetivo:
+Permitir que un administrador pueda cargar usuarios de forma masiva mediante un archivo Excel o CSV, incluyendo datos principales como nombre, apellido, correo electrónico, legajo, rol, área y foto de perfil.
+
+Ubicación sugerida:
+Administración / Usuarios / Importación masiva.
+
+Campos esperados en el archivo:
+- legajo
+- nombre
+- apellido
+- email
+- rol
+- área
+- usuario_activo
+- foto
+
+La columna “foto” debe permitir indicar el nombre del archivo de imagen asociado al usuario, por ejemplo:
+1025.jpg
+
+Además del Excel/CSV, permitir opcionalmente subir un archivo ZIP con las fotos de perfil.
+El sistema debe relacionar cada foto con el usuario usando el campo “foto” o, si corresponde, el legajo.
+
+Flujo esperado:
+1. El administrador ingresa a “Importación masiva de usuarios”.
+2. Carga el archivo Excel o CSV.
+3. Opcionalmente carga un ZIP con las fotos de perfil.
+4. El sistema analiza el archivo antes de importar.
+5. El sistema muestra una vista previa con:
+   - usuarios nuevos;
+   - usuarios existentes;
+   - usuarios con errores;
+   - correos repetidos;
+   - legajos repetidos;
+   - fotos encontradas;
+   - fotos faltantes.
+6. El administrador confirma la importación.
+7. El sistema crea o actualiza los usuarios según corresponda.
+8. El sistema muestra un reporte final de la importación.
+
+Reglas de validación:
+- El legajo debe ser obligatorio y único.
+- El email debe ser obligatorio, válido y único.
+- Nombre y apellido deben ser obligatorios.
+- El rol debe existir dentro de los roles definidos en el sistema.
+- El área debe existir dentro de las áreas definidas en el sistema.
+- usuario_activo debe aceptar valores como sí/no, true/false o activo/inactivo.
+- La foto debe ser opcional.
+- Si se indica una foto y no existe en el ZIP, mostrar advertencia pero no bloquear toda la importación.
+- No importar registros con errores críticos.
+- No duplicar usuarios existentes.
+
+Opciones de importación:
+Agregar una opción para definir el comportamiento ante usuarios existentes:
+- Crear solo usuarios nuevos.
+- Actualizar usuarios existentes.
+- Crear nuevos y actualizar existentes.
+
+Fotos de perfil:
+- Permitir formatos jpg, jpeg, png y webp.
+- Validar tamaño máximo de archivo.
+- Guardar la imagen en el campo de perfil correspondiente.
+- Si no se carga foto, mantener la foto actual o usar avatar por defecto.
+
+Seguridad y permisos:
+- Solo usuarios administradores deben poder acceder a esta función.
+- Registrar en historial o auditoría quién realizó la importación, fecha y cantidad de registros procesados.
+- No permitir que usuarios sin permisos modifiquen usuarios mediante importación.
+
+Reporte final:
+Al finalizar, mostrar:
+- cantidad de usuarios creados;
+- cantidad de usuarios actualizados;
+- cantidad de usuarios omitidos;
+- listado de errores;
+- listado de advertencias;
+- posibilidad de descargar el reporte en CSV o Excel.
+
+Criterio de aceptación:
+El sistema debe permitir importar usuarios masivamente desde Excel/CSV, asociar fotos desde un ZIP, 
+validar datos antes de guardar, mostrar una previsualización, permitir confirmar la importación y generar un reporte final, 
+sin afectar usuarios existentes de manera accidental.
+Se simpliofico no se cargaron fotos y otros detalles en la masiva. ECHO OK
+..............................................................................................................................
+___22/05/2026___________________________________________________________________________________________________________________
+revisar en nueva anomalia no deja elejir elaborado por solo miuestra una opcion de la lista.        ECHO OK
+..................................................................................................................................
+_27/05___________________________________________________________________________________________________________________________
+
+Cambiar todas las leyendas "imputado a " por "Asignado a".      ECHO OK
+..................................................................................................................................
+en resumen rapido eliminar el boton de nueva anomalia ECHO OK
+..................................................................................................................................
+_____28/05_______________________________________________________________________________________________________________________
+La prioridad inmediata no es corregir la app funcional, porque todavía no existe evidencia suficiente sobre ella; la prioridad es 
+desbloquear la auditabilidad. Primero, hace falta exponer la aplicación y sus artefactos operativos de forma verificable: 
+un compose.yaml o equivalente, definición de servicios, redes y volúmenes, política de variables/env_file, ubicación de logs y
+ un método reproducible para resetear datos de prueba. Docker define precisamente esos elementos en Compose, y además recomienda
+  no usar variables de entorno planas para secretos sensibles cuando puede usarse secrets. 
+
+Segundo, el servicio debe ser alcanzable desde el entorno de auditoría. Docker documenta que al publicar un puerto con -p el 
+backend de Docker hace accesible ese puerto al host o a la red local; también recuerda que el binding puede quedar en 0.0.0.0 
+o restringirse a 127.0.0.1. Si la app vive en una VM, en Docker Desktop o en otra capa aislada, la publicación del puerto y el
+ canal de acceso tienen que quedar explícitos. 
+
+Tercero, una vez desbloqueado el acceso, la secuencia óptima de auditoría debería ser esta: autenticación y gestión de sesión;
+ inventario de usuarios y roles reales; control de acceso por módulo y por request; ciclo de vida completo de anomalías/incidentes;
+  API discovery y pruebas no destructivas de auth bypass/IDOR/CSRF/XSS; uploads; password reset; logging y reporting; usabilidad, 
+  mobile y accesibilidad. Sobre esa segunda fase, los criterios más importantes son: mínimo privilegio y validación por request, 
+  sesiones con expiración server-side, no usar GET para cambios de estado, password reset robusto, uploads endurecidos, logging 
+  suficiente para detectar eventos sensibles, contraseñas basadas en longitud razonable y accesibilidad evaluada con WCAG 2.2. 
+
+Si se resuelve únicamente un requisito para destrabar la siguiente corrida, el más rentable es este: hacer que el login sea 
+realmente accesible desde el entorno de análisis y acompañarlo con el archivo Compose y la ruta de logs. Eso permitiría pasar 
+de un informe de bloqueo de infraestructura a una auditoría funcional y de seguridad verdadera, con hallazgos sobre la aplicación
+ y no sólo sobre la accesibilidad del entorno.
+ ..................................................................................................................................
+ __29/05___________________________________________________________________________________________________________________________
+ en acciones inmediatas al registrar la accion inmediata dividir la carga de datos en dos secciones, la primer seccion: responsable,
+  fecha de carga(dice ahora fecha de accion), observacion,acciones tomadas, Agregar un boton de 
+  carga y al presionarlo guardamos estos datos en el historial y visualizamos luego la segunda seccion con fecha de verificacio de eficacia,
+  selector eficaz si/ no observacion, si se opta por fue eficaz se cierra definitivamente si no fue eficaz queda pendiente y aparece cartel 
+  " No eficaz reveer acciones tomadas"  ECHO OK
+  ...................................................................................................................................
+  en seguimiento anomalias en las tarejtas del listado de anomalia debajo del titulo breve en cada anomalia deberia de estar 
+  el tipo de desvio de la misma, igualmente al seleccionarla para entrear al detalle e historial en la primer tarjeta deberia de figurar 
+  junto al titulo,y en estudio de repitencia en la tarjeta tipo de desvio por sector en cada tipo listado debe mostrar el "asignado a" en 
+  lugar de "elaborado por" ECHO OK
+  ____4/6/2026___________________________________________________________________________________________________________________
+
+  Ver asignacion de id a anomalias.
+  ......................................................................................................................................
+  8/6___________________________________________________________________________________________________________________
+ordenamos nueva anomalia: paso1 "datos de inicio" proceso/area afectada fecha y hora elaborado por asignado a tipo de desvio.
+y en paso 2 "contexto" titulo observacion y evidencia objetiva 
+___22/06_______________________________________________________________________________________________________________________________
+
+Revision con claudia mechi y jorge: Buscar la palabra revicion de haalazgos error ortografioco. OK echo
+.........................................................................................................
+Elaborado por en nueva anomalia   OK ECHO
+eliminar limpiar evidencias y agregar uno que diga quitar todo. ECHO OK
+......................................................................................................................
+buscar en seguimiento de anomalias por estado de hallazgo. EC HO OK
+.........................................................................................................................................
+Estudio de repitencia al hacer click en lo que queremos ver que aparezcan solo esas anomAlias. ECHO OK
+........................................................................................................................................
+estudio de repitencia agregar de filtrar por tipo de hallazgos    ECHO OK
+............................................................................................
+seguimiento de anomlaias revision de hallazgos observacion-no conformidad-oportunidad de mejoras-invalida  ECHO OK
+..........................................................................................
+si la anomalia es observacoion  aparece para observacion(reemplaza a acciona inmediata) y en tratamiento, al elejir un ade las dos desaparece de la otyra. ECHO OK
+.................................................................................................................
+en accion inmediata(observacion) fecha de carga cambiar por fecha de limite de ejecucion o agrego una fech
+agregar fecha de veridficacion en el responsable que hace la tarea. agegar evidencia objetiva
+en listado de tipos de descvio informacion erronea
+detalle anomalia no meustra la evidencia                                                  ECHO OK
+.......................................................................................
+en observacion cambiar la regla de solo usuarios registrados pueden gestionar observacion por usuario elejido responsable ECHO OK
+...................................................................................................
+en revision de hallazgos el admin asigna el responsable de hacer tratamiento observacion
+
+sacar el rol, sacar area, nota una sola elejor todos los usuarios y luego convocar.  ECHO OK
+
+__8/7________________________________________________________________________________________________________________
+en tratamiento metodos y observaciones dejan de visualizarce cuando cargamos evidencia o agregamosd causa.
+deberia quedar siempre visible y guardado pero editable
+...................................................
+tratamiento responsable de tarea cualquiera
+
+controlar que fecha de evaluacion de eficacia sea posterior a fecha de cierre de acciones.
+..............................................................................................................
+en verificacion de eficacia antes de cerrar una vez que fue eficaz tilde de modifica procedimiento si/no, si si genera accion con responsable fecha. si es no pasa a lecciones aprendidas.
+
+validacion que aparazaca en admin todo el listado de todos los usuarios
+
+____2/7_____________________________________________________________________________________________________________
+
+en la busqueda poder anidar filtros ej primero por estado de hallazgo y luego por codigo y luego por titulo.
+uaR EL MIMSO ESTILO DE BARRA QUE YA TIENE Y PÓNERLE UN BOTON QUE DIGA " & "
+____11/8__________________________________________________________________________________________________________________
+El sistema está bien preparado para incorporar correos: ya existe un módulo de notificaciones internas y el modelo contempla el canal email. Lo ampliaremos sin afectar los datos ni el flujo actual.
+Roadmap
+Fase 1 — Preferencia por usuario
+En “Configuración y maestros → Usuarios”:
+Agregar casilla “Notificación por correo”.
+Valor predeterminado: desactivado para usuarios actuales y nuevos.
+No permitir activarla si el usuario no tiene un correo válido.
+Mostrar en la tarjeta si las notificaciones están activadas.
+Crear la migración y pruebas correspondientes.
+Esta fase no enviará ningún correo, por lo que puede desplegarse sin riesgo.
+Fase 2 — Motor de envío
+Aprovechar el módulo existente:
+Actividad confirmada
+        ↓
+Notificación interna
+        ↓
+¿Usuario habilitado para correo?
+        ↓ Sí
+Correo pendiente → Envío SMTP → Enviado / Fallido / Reintento
+Características:
+El correo se genera únicamente después de guardar correctamente la operación.
+Una falla del correo nunca impide crear una anomalía, tratamiento o tarea.
+Registro del resultado del envío.
+Reintentos controlados.
+Sin agregar Celery ni infraestructura innecesaria.
+Credenciales SMTP guardadas fuera de Git.
+En pruebas se utilizará una cuenta controlada.
+Fase 3 — Confirmación de anomalía
+Correo al usuario que registró la anomalía:
+Código y título.
+Fecha y sector.
+Confirmación de creación correcta.
+Enlace para abrirla en el sistema.
+Nunca se adjuntarán evidencias ni información sensible.
+Fase 4 — Invitación a tratamiento
+Correo cuando se agrega un participante:
+Tratamiento y anomalía relacionados.
+Rol asignado.
+Fecha prevista, si existe.
+Enlace al tratamiento.
+No se enviará nuevamente por modificaciones que no cambien la participación.
+Fase 5 — Asignación de tareas
+Correo al responsable cuando:
+Se crea una tarea y se le asigna.
+La tarea se reasigna a otra persona.
+Incluirá descripción, fecha prevista, tratamiento relacionado y enlace.
+Fase 6 — Verificación de eficacia
+Correo al responsable cuando se le asignen:
+La verificación de eficacia.
+La fecha de evaluación.
+Más adelante podremos agregar recordatorios por vencimiento.
+Estado: implementada y probada localmente para tratamientos y observaciones.
+La notificación crea también una tarea interna, evita duplicados si no cambia la asignación, reemplaza el aviso anterior
+si cambia el responsable o la fecha y cierra la tarea cuando se registra la verificación.
+Fase 7 — Informe de cierre al usuario que generó la anomalía
+Enviar un correo al usuario que registró la anomalía cuando esta pase efectivamente a estado Cerrada.
+El correo debe generarse una sola vez por cada cierre y adaptarse al camino recorrido:
+- Tratamiento finalizado y validado como eficaz: tratamiento, principales acciones realizadas, resultado de eficacia y fecha de cierre.
+- Observación finalizada y verificada como eficaz: observación, acción tomada, resultado de eficacia y fecha de cierre.
+- Hallazgo clasificado como Inválido: clasificación, motivo registrado, usuario que realizó la revisión y fecha de cierre.
+Incluir código, título y un resumen breve de lo actuado, sin adjuntar evidencias ni información sensible.
+Respetar la casilla “Notificación por correo” del usuario generador.
+Una reapertura y un cierre posterior deben producir un nuevo informe correspondiente al nuevo ciclo, sin duplicar correos por ediciones comunes.
+Fase 8 — Prueba controlada
+Activar la casilla únicamente en uno o dos usuarios de prueba.
+Probar todos los eventos, incluidos los tres caminos de cierre.
+Verificar ausencia de correos duplicados.
+Simular una falla del servidor SMTP.
+Confirmar que las operaciones se guardan aunque el correo falle.
+Después habilitar individualmente a los usuarios reales.
+
+-----------------------------------------------------------------------------------------------------------------
+La lógica actual tiene una brecha:
+No Conformidad, Observación y Oportunidad de mejora exigen seleccionar responsable.
+Ese usuario queda como responsable de la anomalía.
+Actualmente no recibe correo por esta asignación.
+No Conformidad y Oportunidad de mejora quedan disponibles para tratamiento.
+Observación permite hoy dos caminos: gestión directa sin tratamiento o derivación a tratamiento.
+Además, un usuario común podría ser responsable pero no tener permisos suficientes para crear el tratamiento.
+La lógica propuesta sería:
+Al confirmar la Revisión de hallazgos, guardar al usuario como responsable.
+Crear una tarea interna y enviarle correo si tiene habilitada la casilla “Notificación”.
+Informarle que debe ingresar al sistema, crear/gestionar el tratamiento y convocar participantes.
+Darle automáticamente visibilidad y permisos sobre esa anomalía y su tratamiento.
+Si cambia el responsable, cerrar la tarea anterior y notificar solamente al nuevo.
+No notificar cuando la clasificación sea “Inválida”.
+----------------------------------------------------------------------------------------
+
+____12/8 - SIMPLIFICACION DE ACCESOS_________________________________________________________________________________
+
+Se reemplaza la autorización por roles y alcances de sector por una política central basada en:
+- nivel de acceso del usuario;
+- relación concreta con el registro (responsable, convocado o asignado).
+
+Reglas vigentes:
+- Desarrollador: acceso completo al sistema.
+- Administrador: acceso completo a secciones, configuración y control global de pendientes; no ejecuta tareas ni
+  verificaciones asignadas a otros usuarios.
+- Mando medio activo: gestiona tratamientos, observaciones y planes cuando fue designado responsable; puede convocar
+  usuarios y delegar tareas y verificaciones.
+- Usuario activo: registra anomalías y trabaja solamente sobre invitaciones, acciones, tareas y verificaciones propias.
+- Los permisos específicos permanecen configurables, pero no pueden superar el límite del nivel de acceso.
+- Sitio y sector quedan como datos informativos del lugar/proceso y no intervienen en la autorización.
+- En Revisión de hallazgos solo se puede designar como responsable a Mando medio, Administrador o Desarrollador.
+- Los participantes de tratamiento se incorporan como Convocados; ser convocado o facilitador no concede gestión.
+- Las pantallas Acciones y Validación son personales para todos los niveles. El Administrador controla el conjunto desde
+  el resumen global, incluyendo verificaciones de eficacia por usuario y vencimiento.
+
+Los modelos de roles dejaron de usarse en aplicación y API. Sus tablas anteriores se conservan archivadas en base de datos
+para permitir recuperación histórica; no otorgan permisos ni se muestran en la interfaz.
+
+____14/8 - SEPARACION DE PENDIENTES Y COMPLETADAS____________________________________________________________________
+
+- Tareas pendientes muestra solamente tareas en estado Pendiente o En curso.
+- Acciones y pendientes muestra solamente tareas asignadas en estado Pendiente o En curso.
+- Cada pantalla incorpora un listado Completadas desplegable, cerrado por defecto, con contador y paginación propia.
+- Al completar una tarea, se actualizan ambos listados para retirarla de pendientes y conservarla en el historial.
+- Los filtros de fecha terminada se aplican al listado histórico de completadas.
+
+____25/8 - CREDENCIALES PROVISORIAS DE USUARIO_______________________________________________________________________
+
+- La tarjeta de usuario solicita contraseña provisoria y confirmación antes de reasignar una credencial.
+- El administrador puede asignar una clave provisoria sencilla de al menos 8 caracteres, incluso solo numérica.
+- Si la deja vacía, el sistema genera una clave numérica aleatoria de 8 dígitos y la muestra durante la carga.
+- La clave solo se ofrece para copiar después de que el servidor confirma que fue guardada correctamente.
+- Si la validación falla, el formulario conserva los datos y muestra el motivo; la contraseña anterior no se modifica.
+- Una reasignación válida marca must_change_password y obliga al usuario a definir su clave definitiva al ingresar.
+- La contraseña definitiva exige al menos 8 caracteres, mayúscula, minúscula, número y carácter especial.
+- La creación sin clave manual conserva la generación segura del servidor y muestra la credencial una sola vez.
+- Se agregaron pruebas del ciclo reasignación, login y cambio obligatorio, y del rechazo por confirmación diferente.
+
+____25/8 - ORDENES AFECTADAS________________________________________________________________________________________
+
+- Nueva anomalia permite asociar una o varias ordenes debajo de Observacion.
+- Cada fila registra tipo de orden, numero y cantidad de piezas/productos; el grupo es opcional, pero una fila iniciada
+  exige los tres datos y no admite cantidades menores que uno ni duplicados dentro de la misma anomalia.
+- Configuracion y maestros incorpora Tipos de ordenes afectadas, con OP, OF y OM iniciales, ampliables o desactivables.
+- El detalle y la confirmacion de la anomalia muestran todas las ordenes relacionadas.
+- El Panel de gestion incorpora Ordenes afectadas con filtros por tipo, numero, anomalia, proceso, cantidad, estado y fecha.
+- Los totalizadores muestran ordenes unicas, registros de afectacion, anomalias involucradas, cantidad total y desglose
+  por tipo. Todos los totales respetan los filtros aplicados.
+- El listado puede exportarse a CSV y respeta la misma visibilidad de anomalias definida para cada usuario.
+- Los campos anteriores de OF y cantidad se conservan internamente por compatibilidad y se migran como tipo OF sin
+  perdida de datos. La nueva relacion admite multiples ordenes por anomalia.
+- Estado: implementado y validado en el entorno local de pruebas. Produccion pendiente de aprobacion.
+
+____25/8 - OBSERVACION TRT Y CODIGO OBS____________________________________________________________________________
+
+- Las anomalias clasificadas como Observacion incorporan el sufijo -OBS sin alterar el numero correlativo original.
+- La migracion actualiza tambien las Observaciones existentes; las relaciones internas continúan usando el identificador UUID.
+- Carga de Observacion incorpora la casilla Observacion TRT (con tratamiento).
+- Una Observacion comun no aparece ni puede vincularse desde Tratamientos.
+- Al confirmar Observacion TRT conserva su clasificacion como Observacion, sale del circuito de ejecucion directa y queda
+  disponible para crear un tratamiento o asociarla a uno abierto.
+- Al seleccionar TRT se ocultan Acciones tomadas y Verificacion de eficacia; no corresponde cargar datos de ejecucion directa.
+- Si las Acciones tomadas se confirman sin TRT, la casilla TRT queda bloqueada de forma definitiva para ese circuito.
+- Al vincularla efectivamente, el camino cambia de Observacion TRT pendiente a Tratamiento sin perder datos ni historial.
+- La notificacion pendiente anterior se reemplaza por una tarea especifica con acceso a Tratamientos.
+- Se validaron migraciones, frontend y las 135 pruebas del backend en el entorno local.
+- Estado: implementado en rama de prueba y disponible en el puerto 8091. Produccion pendiente de prueba y aprobacion.
+_____02/09_______________________________________________________________________________________________________________
+
+.En anomalias relacionadas agregar en la busqueda filtrado por de "tipo de desvio" y sacar de la busqueda por "titulo". echo ok
+
+................................................................................................................
+En seguimiento anmomalioas las sujeridas para mostrar se debe mostrar solo las padres. aquellas anomalias ya asociadas 
+a un tratamiento se consideran hijas y no se muestran ahi.  echo ok
+...................................................................................................................
+en seguimioento de anomalias al confirmar no conformidad que aparezca un cartrel indicando esta seguro? para evitar
+ la generacion pór error de un trastamiento.  ECHO OK
+ .......................................................................................................................
+ en tratamientos, listado de tratamewinto poner arriba de todo un boton "ELIMINAR" que abre una tarjeta que pide nro de tratamiento a eliminar
+ y boton confirmar con cartel de esta seguro?. Los tratamientos que son eliminables son aquellos que aun no registren campos o datos agregados 
+ o modificados en la vista 1 u 2 de tratamientos. echo ok
+ ..........................................................................................................................
+Analiza Revisar y propone la modificacion del flujo de “Observaciones” y “Seguimiento de anomalías / Revisión de hallazgos” dentro del sistema de gestión de calidad.
+
+Objetivo general:
+Ajustar la lógica de generación, ejecución, acciones y verificación de eficacia de las observaciones, manteniendo la coherencia con las políticas ya existentes de tratamientos, trazabilidad, responsables, fechas, cierre, reapertura e historial.
+
+Importante:
+No eliminar ni romper funcionalidades actuales.
+No hacer refactors innecesarios.
+Conservar la lógica existente de permisos, auditoría, historial, estados, bloqueos y validaciones.
+Antes de implementar, revisar cómo funciona actualmente la política de Tratamientos, especialmente:
+- creación de tratamiento;
+- asignación de responsable;
+- fecha de realización;
+- cierre;
+- evaluación de eficacia;
+- comportamiento cuando la evaluación resulta eficaz;
+- comportamiento cuando la evaluación resulta no eficaz;
+- relación entre tareas/acciones y cierre del registro.
+
+------------------------------------------------------------
+1. MODIFICACIÓN EN SEGUIMIENTO DE ANOMALÍAS / REVISIÓN DE HALLAZGOS
+------------------------------------------------------------
+
+Ubicación:
+Seguimiento de anomalías → Revisión de hallazgos.
+
+Situación actual:
+Cuando en la revisión de hallazgos se elige la opción “Observación”, se abre una instancia/modal/pantalla de “Confirmar observación”.
+Actualmente allí se selecciona el responsable único de la observación.
+
+Cambio solicitado:
+En “Confirmar observación” se debe agregar/mover la opción:
+
+“Clasificar como observación TRT (con tratamiento)”
+
+Esta opción actualmente se encuentra en:
+Observaciones → Carga de observación.
+
+Debe dejar de estar ubicada allí y pasar a la pantalla/modal de “Confirmar observación” dentro de Revisión de hallazgos.
+
+También se debe agregar un nuevo campo:
+
+“Fecha de realización”
+
+Esta fecha debe quedar asociada al flujo que se genere después de confirmar.
+
+Mantener el botón “Confirmar” como está actualmente, respetando su estilo visual y comportamiento general, pero adaptando la lógica interna a los nuevos campos.
+
+Flujo esperado al confirmar:
+
+Caso A: Observación clasificada como TRT / con tratamiento
+- Si la observación se marca como “Observación TRT”:
+  - Se debe generar un Tratamiento.
+  - El tratamiento debe crearse con el responsable seleccionado en “Confirmar observación”.
+  - El tratamiento debe tomar la “Fecha de realización” agregada en esta pantalla.
+  - Mantener la política ya existente de generación de tratamiento.
+  - Registrar en historial la creación del tratamiento desde la revisión de hallazgos.
+  - Mantener trazabilidad entre:
+    - anomalía original;
+    - revisión de hallazgos;
+    - observación clasificada como TRT;
+    - tratamiento generado.
+
+Caso B: Observación NO clasificada como TRT / sin tratamiento
+- Si la observación no se marca como TRT:
+  - Se debe generar una Observación normal.
+  - La observación debe quedar asignada al usuario elegido como responsable.
+  - La observación debe tomar la fecha indicada como fecha de terminación/realización prevista, según la denominación actual del sistema.
+  - Registrar en historial la generación de la observación.
+  - Mantener trazabilidad con la anomalía original y la revisión de hallazgos.
+
+Validaciones:
+- Responsable obligatorio.
+- Fecha de realización obligatoria.
+- La opción “Clasificar como observación TRT” debe ser clara visualmente.
+- Si se marca como TRT, no debe duplicarse una observación normal innecesaria.
+- Si no se marca como TRT, no debe generarse tratamiento.
+- Evitar duplicidades si el usuario confirma más de una vez.
+- Respetar permisos y estados actuales.
+
+------------------------------------------------------------
+2. MODIFICACIÓN EN OBSERVACIONES
+------------------------------------------------------------
+
+Ubicación:
+Módulo Observaciones.
+
+Se debe reorganizar el flujo visual y funcional en tarjetas secuenciales.
+
+------------------------------------------------------------
+2.1 PRIMERA TARJETA: DATOS GENERALES DE LA OBSERVACIÓN
+------------------------------------------------------------
+
+La primera tarjeta debe mostrar:
+
+- Responsable
+- Fecha límite de ejecución
+- Comentario
+- Botón “Siguiente”
+
+Comportamiento:
+- Esta tarjeta representa la información inicial de la observación.
+- El botón “Siguiente” habilita la segunda tarjeta de “Acciones tomadas”.
+- No avanzar si faltan datos obligatorios según las reglas actuales.
+- Mantener la estética actual del sistema.
+
+Validaciones:
+- Responsable obligatorio.
+- Fecha límite de ejecución obligatoria.
+- Comentario obligatorio si actualmente la lógica del sistema lo exige.
+- Registrar cambios relevantes en historial.
+
+------------------------------------------------------------
+2.2 SEGUNDA TARJETA: ACCIONES TOMADAS
+------------------------------------------------------------
+
+Al presionar “Siguiente” en la primera tarjeta, se debe habilitar una segunda tarjeta llamada:
+
+“Acciones tomadas”
+
+Campos para cargar una acción:
+
+- Detalle de la acción
+- Fecha estimada de realización
+- Fecha estimada de verificación de eficacia
+- Botón “Guardar”
+
+Comportamiento:
+- Al guardar una acción, debe quedar listada debajo o dentro de la tarjeta.
+- Las acciones guardadas no deben poder editarse.
+- Sí debe permitirse cargar más acciones si es necesario.
+- Cada acción debe quedar asociada a la observación.
+- Cada acción debe tener su propio estado interno según la lógica existente o la que se defina.
+- Registrar cada acción en historial.
+
+Reglas:
+- No permitir guardar acción sin detalle.
+- No permitir guardar acción sin fecha estimada de realización.
+- No permitir guardar acción sin fecha estimada de verificación de eficacia.
+- Las acciones listadas deben mostrarse en modo solo lectura.
+- Si se necesita corregir una acción, revisar si existe política actual de anulación/cancelación. No agregar edición directa si rompe trazabilidad.
+- Mantener coherencia con la lógica de tareas/acciones en Tratamientos.
+
+------------------------------------------------------------
+2.3 TERCERA TARJETA: VERIFICACIÓN DE EFICACIA
+------------------------------------------------------------
+
+La tercera tarjeta debe aparecer recién cuando exista al menos una acción cargada.
+
+Nombre sugerido:
+“Verificación de eficacia”
+
+Campos que debe mostrar/cargar:
+
+- Fecha estimada de verificación de eficacia
+- Acción correspondiente tomada como referencia
+- Selector de resultado:
+  - Eficaz
+  - No eficaz
+- Fecha de realización de la verificación
+- Detalle de la verificación
+
+Regla para determinar la fecha estimada de verificación:
+- Si existe una sola acción:
+  - tomar la fecha estimada de verificación de eficacia cargada en esa acción.
+- Si existe más de una acción:
+  - tomar siempre la fecha estimada de verificación de eficacia más lejana de todas las acciones cargadas.
+  - mostrar también cuál es la acción correspondiente a esa fecha más lejana.
+- Esta fecha debe usarse como referencia para la verificación de eficacia de la observación.
+
+Comportamiento:
+- La tarjeta debe permitir registrar la verificación de eficacia.
+- La verificación debe quedar asociada a la observación.
+- Registrar en historial:
+  - fecha estimada usada;
+  - acción tomada como referencia;
+  - resultado eficaz/no eficaz;
+  - fecha real de verificación;
+  - detalle de la verificación;
+  - usuario que realizó la verificación.
+
+------------------------------------------------------------
+3. LÓGICA DE CIERRE DE OBSERVACIÓN
+------------------------------------------------------------
+
+Caso A: Resultado eficaz
+Si la verificación de eficacia resulta “Eficaz”:
+- Revisar que todas las acciones de la observación estén cerradas/finalizadas.
+- Si la observación fue eficaz y todas las acciones están cerradas:
+  - cerrar la observación.
+  - registrar cierre en historial.
+- Si la observación fue eficaz pero quedan acciones abiertas:
+  - no cerrar todavía la observación.
+  - mostrar mensaje indicando que existen acciones pendientes.
+  - mantener observación en estado correspondiente hasta que las acciones estén cerradas.
+
+Importante:
+Revisar la política y lógica actual de Tratamientos para replicar el criterio de cierre de manera coherente.
+
+Caso B: Resultado no eficaz
+Si la verificación de eficacia resulta “No eficaz”:
+- Revisar cómo está implementada actualmente la lógica de Tratamientos cuando una evaluación de eficacia da no eficaz.
+- Proponer e implementar una lógica equivalente o coherente para Observaciones.
+
+Criterio esperado para propuesta:
+La observación no debe cerrarse.
+Debe quedar en un estado que permita generar nuevas acciones, una nueva instancia de análisis o una nueva verificación posterior.
+Debe conservarse el historial de la verificación no eficaz.
+No se deben borrar acciones anteriores.
+No se debe sobrescribir la verificación anterior sin trazabilidad.
+
+Opciones posibles a evaluar:
+- Reabrir observación para cargar nuevas acciones.
+- Generar una nueva ronda/ciclo de acciones.
+- Mantener la observación en estado “No eficaz” hasta que se carguen nuevas acciones.
+- Permitir una nueva verificación luego de nuevas acciones.
+- Seguir exactamente la política de Tratamientos si ya existe una política madura y consistente.
+
+Antes de implementar el comportamiento definitivo, revisar el código actual de Tratamientos y aplicar el mismo criterio si corresponde.
+
+------------------------------------------------------------
+4. TRAZABILIDAD E HISTORIAL
+------------------------------------------------------------
+
+Debe registrarse historial para:
+
+- confirmación de observación desde revisión de hallazgos;
+- clasificación como observación TRT;
+- generación de tratamiento desde observación TRT;
+- generación de observación normal;
+- asignación de responsable;
+- fecha de realización / fecha límite;
+- carga de acciones;
+- cierre de acciones;
+- cálculo de fecha estimada de verificación;
+- verificación de eficacia;
+- resultado eficaz/no eficaz;
+- cierre de observación;
+- reapertura o nuevo ciclo si no fue eficaz.
+
+El historial debe permitir reconstruir qué usuario hizo cada acción, en qué fecha y qué cambió.
+
+------------------------------------------------------------
+5. PERMISOS Y BLOQUEOS
+------------------------------------------------------------
+
+Respetar permisos existentes.
+
+Reglas generales:
+- Solo usuarios autorizados deben poder confirmar observaciones.
+- Solo responsables o usuarios con permisos superiores deben poder cargar acciones, según la política actual.
+- No permitir modificar observaciones cerradas, salvo usuarios autorizados y dejando historial.
+- No permitir editar acciones ya guardadas si la política definida es de solo lectura.
+- No permitir verificar eficacia si no existe al menos una acción cargada.
+- No permitir cerrar observación si no están dadas las condiciones de cierre.
+
+------------------------------------------------------------
+6. INTERFAZ Y EXPERIENCIA DE USUARIO
+------------------------------------------------------------
+
+Mantener estilo visual actual del sistema.
+
+El flujo de Observaciones debe quedar claro y secuencial:
+
+Tarjeta 1:
+Datos generales de la observación.
+
+Tarjeta 2:
+Acciones tomadas.
+
+Tarjeta 3:
+Verificación de eficacia.
+
+Cada tarjeta debe mostrar solo lo que corresponde según el estado de avance.
+
+Mensajes esperados:
+- “Debe cargar al menos una acción antes de verificar eficacia.”
+- “La observación no puede cerrarse porque existen acciones pendientes.”
+- “La observación fue cerrada correctamente.”
+- “La verificación resultó no eficaz. Deben cargarse nuevas acciones o seguir el flujo definido.”
+- “La acción fue guardada correctamente y no podrá editarse.”
+
+------------------------------------------------------------
+7. CRITERIOS DE ACEPTACIÓN
+------------------------------------------------------------
+
+La modificación se considera correcta si:
+
+1. En Revisión de hallazgos, al elegir Observación, la pantalla de Confirmar observación permite:
+   - seleccionar responsable;
+   - marcar o no “Clasificar como observación TRT”;
+   - cargar fecha de realización;
+   - confirmar.
+
+2. La opción “Clasificar como observación TRT” ya no queda ubicada en Observaciones / Carga de observación, sino en Confirmar observación.
+
+3. Si se confirma como TRT:
+   - se genera tratamiento;
+   - toma responsable seleccionado;
+   - toma fecha de realización;
+   - queda trazabilidad con la anomalía.
+
+4. Si se confirma sin TRT:
+   - se genera observación;
+   - se asigna al responsable seleccionado;
+   - toma fecha de realización o fecha límite correspondiente;
+   - queda trazabilidad con la anomalía.
+
+5. En Observaciones aparece una primera tarjeta con:
+   - responsable;
+   - fecha límite de ejecución;
+   - comentario;
+   - botón siguiente.
+
+6. El botón “Siguiente” habilita la tarjeta de Acciones tomadas.
+
+7. En Acciones tomadas se puede cargar:
+   - detalle de acción;
+   - fecha estimada de realización;
+   - fecha estimada de verificación de eficacia.
+
+8. Las acciones guardadas aparecen listadas y no pueden editarse.
+
+9. Se pueden cargar múltiples acciones.
+
+10. Con la primera acción cargada aparece la tarjeta de Verificación de eficacia.
+
+11. La fecha estimada de verificación de eficacia de la observación se calcula tomando:
+   - la fecha de la única acción si hay una;
+   - la fecha más lejana si hay varias.
+
+12. La tarjeta de Verificación de eficacia muestra la acción correspondiente a la fecha más lejana.
+
+13. Se puede registrar:
+   - eficaz / no eficaz;
+   - fecha real de verificación;
+   - detalle de verificación.
+
+14. Si fue eficaz y todas las acciones están cerradas:
+   - se cierra la observación.
+
+15. Si fue eficaz pero hay acciones abiertas:
+   - no se cierra y muestra advertencia.
+
+16. Si no fue eficaz:
+   - revisar lógica de Tratamientos;
+   - aplicar una lógica equivalente/coherente;
+   - permitir continuidad sin perder trazabilidad.
+
+17. Todo queda registrado en historial.
+
+18. No se rompe la lógica actual de Tratamientos, Anomalías, Seguimiento, permisos ni estados.
+
+------------------------------------------------------------
+8. PRUEBAS FUNCIONALES SOLICITADAS
+------------------------------------------------------------
+
+Realizar pruebas manuales o automatizadas sobre los siguientes casos:
+
+Caso 1:
+Anomalía → Revisión de hallazgos → Observación sin TRT → Confirmar.
+Resultado esperado:
+Se crea observación normal asignada al responsable con fecha de realización/límite.
+
+Caso 2:
+Anomalía → Revisión de hallazgos → Observación con TRT → Confirmar.
+Resultado esperado:
+Se genera tratamiento con responsable y fecha de realización.
+
+Caso 3:
+Observación normal → completar primera tarjeta → siguiente.
+Resultado esperado:
+Se habilita tarjeta de acciones tomadas.
+
+Caso 4:
+Cargar una acción.
+Resultado esperado:
+La acción queda listada como solo lectura y aparece tarjeta de verificación.
+
+Caso 5:
+Cargar varias acciones con distintas fechas estimadas de verificación.
+Resultado esperado:
+La tarjeta de verificación toma la fecha más lejana y muestra la acción correspondiente.
+
+Caso 6:
+Verificación eficaz con todas las acciones cerradas.
+Resultado esperado:
+La observación se cierra.
+
+Caso 7:
+Verificación eficaz con acciones abiertas.
+Resultado esperado:
+La observación no se cierra y se informa que hay acciones pendientes.
+
+Caso 8:
+Verificación no eficaz.
+Resultado esperado:
+La observación no se cierra y continúa según la lógica definida a partir de Tratamientos.
+
+Caso 9:
+Usuario sin permisos intenta modificar observación.
+Resultado esperado:
+Acceso denegado o acción bloqueada.
+
+Caso 10:
+Intentar editar una acción ya guardada.
+Resultado esperado:
+No debe permitirse edición directa.
+
+------------------------------------------------------------
+9. ENTREGA ESPERADA
+------------------------------------------------------------
+
+Al finalizar, informar:
+
+- Archivos modificados.
+- Modelos modificados o creados.
+- Migraciones generadas.
+- Endpoints modificados o creados.
+- Componentes frontend modificados.
+- Validaciones agregadas.
+- Cambios en historial/auditoría.
+- Pruebas realizadas.
+- Riesgos detectados.
+- Recomendaciones adicionales si la lógica actual de Tratamientos requiere ajustes. ECHO OK
+.......................................................................................................................
+
+Analizar el mando medio califica como trt una observacion pero no aparece el trtaameinto
+ cread oen la seccion tratamiento   ECHO OK
+ ...............................................................................................................
+ 1.	Cuando clasificamos una anomalía como NC y tengo para asociarla a un tratamiento,
+  que no me pida seleccionar un responsable, ya que al asociarla a otro tratamiento ya tiene responsable.
+2.	Cuanto tiempo se reserva en número/ código visible para una carga de anomalía? 10 minutos ECHO OK
+3.	En la carga de anomalía, en la primer tarjeta, que serian los datos de “Elaborado por” “asignado a”
+ y “tipo de desvío” que la casilla este vacía y sea obligatorio seleccionar una opción. ECHO OK
+...............................................................................................................
+
+
+propuesta adaptada quedaría así:
+1. En seguimiento de anomalias
+            │
+            
+
+2. Seleccionar anomalías relacionadas
+            │
+            ├── Ninguna tiene tratamiento
+            │       ↓
+            │   Se conserva el responsable elegido
+            │       ↓
+            │   Se crea un tratamiento nuevo
+            │
+            └── Una o más tienen tratamiento
+                    ↓
+                Se determina la anomalía más antigua
+                    ↓
+                Se hereda el responsable de su tratamiento
+                    ↓
+                Se reutiliza ese tratamiento
+Comportamiento propuesto:
+1. Al clasificar la NC, primero se selecciona un responsable.
+2. Luego se seleccionan las anomalías relacionadas. Cada tarjeta mostrará:
+   - Sin tratamiento, o
+   - Código del tratamiento existente.
+   - Responsable actual.
+   - Fecha de la anomalía.
+3. Si ninguna seleccionada tiene tratamiento:
+   - Se mantiene el responsable elegido inicialmente.
+   - Al confirmar, se crea un nuevo tratamiento.
+   - La NC queda como anomalía principal.
+4. Si alguna seleccionada ya tiene tratamiento:
+   - No se crea otro tratamiento.
+   - Se reutiliza el tratamiento existente.
+   - El responsable elegido inicialmente es reemplazado automáticamente por el responsable heredado.
+   - El formulario mostrará: “Responsable heredado de TRT-XXXX: Nombre”.
+5. Si se seleccionan varias anomalías con tratamientos diferentes:
+   - Se toma como referencia la anomalía más antigua según su fecha de detección.
+   - Se conserva el código y el responsable del tratamiento vinc antiguo.
+   - Los demás tratamientos pendientes y vacíos se consolidan dentro de ese tratamiento.
+   - Los códigos cancelados se conservan en auditoría.
+   - Si alguno ya tiene convocatoria, agenda, causas, acciones o acciones cargadas, se bloquea la consolidación.
+6. Antes de confirmar se mostrará un resumen:
+   - Tratamiento nuevo o tratamiento reutilizado.
+   - Responsable definitivo.
+   - Anomalía principal.
+   - Anomalías relacionadas.
+   - Tratamientos que serán consolidados, si corresponde.
+El backend volverá a calcular la antigüedad y el responsable heredado para evitar manipulaciones desde la pantalla. ECHO OK
+
+..................................................................................................................
+
+no olvidarce de las ayudas en los cambios.....
+
+.....................................................................................................................
+
+1 En seguimiento anomalias: agregar un boton "asociar anomalias" si se preciona el boton despliega para seleccion 
+mediante una casilla de check todos los tratamientos que cumplen con lo siguiente: estan creados y estan en cualquier 
+situacion de la logica y carga hasta los tratameintos que tienen todas las acciones completadas.entonces esta anomalia
+se asocia a el tratamiento seleccionado y es clasificada automaticamente como no conformidad. Si no se presiona el boton
+asociar permite como ahora clasificar la anomalia. como invalida, no conformidad, observacion, oportunidad de mejora.
+Si se clasifica como no conformidad se sigue con la seleccion del responsable fecha limite del tratamiento, responsable,
+comentario (no obligatorio) y se crea nmuevo trtamiento. Revisar reglas y politicas anteriores y cambiar por estas nuevas. 
+Analizar y proponer. Quitar, de  "confirmar la no conformidad "la tarjetas anomalias relacionadas y ajustar las ayudas. EC HO OK
+.....................................................................................
+ en Nueva anomalia: tarjeta 8/9, no remarca el campo observacion toda la pantalla queda grisada.
+
+
+ en seguimiento aqnomalias en buscar cambiar area por asignado A
+
+ ...............................................................................
+ En segruimientoi anomalias ver porque no se muestra la anomalia asociada a un tratameinto. ECHO OK
+ ..................................................................................
+
+ Analiza las politicas del sistema y Realizame un informe con todos los mensajes de correo saliente para cada cada caso a que etapa pertenecen 
+ y algun otro dato de relevancia, colocalo en una tabla. ECHO OK
+
+ Generemos una tarjeta en configuracion y maestros de nombre "edicion correos" para que admin pueda modificar los textos
+  de los correos salientes, al clikear en la tarjeta despliga un formulario con cada caso que genera correo etapa destinatario cuerpo campos etc.
+. propon mejoa de la idea y usa La tabla que adjunte.
+ECHO OK
+____14-9______________________________________________________________________________________________________________
+en validaciom fecha limite bloquea.revisar lo nombres en tarjetas de las fechas limites. 
+"fecha limite de inicio de tratamiento"
+..............................................................................................................
+en acciones cuando cargo una nota de evidencia de cambio luego no se muestra en ningun lado. Revisa esto si es asi deberiamos de mostrar en acciones 
+todo lo cargado, y si encunetras donde se muestra dimelo. tambien las acciones que provienen de tratameinto 
+son codificadas como TRT-2026-xxxx-Txx y deberian de ser TRT-2026-xxxx-Axx ECHO OK
+.................................................................................................................
+
+en seguimiento anomalias revicion de hallazgos cuando elijo observacion no
+deberia permitir tocar el botoon asociar anomalias. sacar el campo 
+causa asignada de aqui. el responsable elegido cargara la causa asignada de 
+manera obligatoria en observaciones ECHO OK
+.......................................................................................................................
+en validacion, tratameinto u observacion el campo "observacion" que esta abajo cambiar nombre por "fundamentos de la eficacia"
+revisar todos los lugares donde impacte y se muestre y tambien realizar el cambio. ECHO OK
+
+__15-9______________________________________________________________________________________________________________
+
+En Lecciones aprendidas, el responsable de la medicion de eficacia es el responsable de completar la parte de 
+lecciones aprendidas. que se guarde en el histortial cada vez que edita y aprieta el boton  "guardar cambios"Pero
+el responsable de "PUBLICAR” sera admin, generemos el boton publicar y cuando admin presiona se envia correo a todos 
+aquellos que participaron del tratameinto en algun momento o parte de el, y se da por cerrado el tratamiento y en el historial del mismo y en el historial
+ de la anomalaia se carga la leccion aprendida con  todo lo que diga el historial de la misma en un solo registro. Tambien cuando modifica procedimiento
+ se debe abrir una nueva tarjeta que genere una nueva accion con el responsable y fecha limite de realizacion obligatoria.
+
+en  lecciones aprendidas cuando tiene historial de modificaciones,al hacer scroll la tarjeta se encima con el historial.
+...................................................................................................................................
+## Contexto / Rol
+
+Estás trabajando sobre un sistema de **Gestión de Calidad – Anomalías** desarrollado en **Python, Django y PostgreSQL**.
+
+Necesito que primero revises la implementación actual del módulo de anomalías, tratamientos, medición de eficacia, lecciones aprendidas, acciones, historial, permisos, notificaciones por correo, ayuda general y recorrido guiado del sistema.
+
+No asumas nombres de modelos, vistas, URLs, templates, funciones o campos. Antes de modificar, identifica cómo está implementado actualmente y reutiliza la arquitectura, convenciones y lógica existente siempre que sea posible.
+
+El objetivo es ampliar y ajustar el módulo **Lecciones Aprendidas** sin romper funcionalidades existentes ni duplicar lógica.
+
+---
+
+# OBJETIVO GENERAL
+
+Implementar un flujo completo para **Lecciones Aprendidas** donde:
+
+* El Responsable de Medición de Eficacia sea quien complete la Lección Aprendida.
+* Cada guardado genere una nueva versión en el historial.
+* La publicación sea responsabilidad exclusiva de un Administrador.
+* La publicación cierre formalmente el tratamiento.
+* Se notifique por correo a todos los participantes históricos del tratamiento.
+* La Lección Aprendida publicada quede registrada de forma consolidada en los historiales correspondientes.
+* Si la Lección Aprendida implica modificar un procedimiento, se genere obligatoriamente una nueva acción.
+* Todo el cambio funcional se refleje también en la **Ayuda General** y en el **Recorrido Guiado del sistema**, ampliando las tarjetas correspondientes.
+
+---
+
+# 1. RESPONSABLE DE LECCIONES APRENDIDAS
+
+El usuario definido como:
+
+**Responsable de Medición de Eficacia**
+
+debe ser automáticamente el responsable de completar la sección:
+
+**Lecciones Aprendidas**
+
+No debe existir otro usuario común habilitado para modificar esta información.
+
+Revisar y asegurar los permisos correspondientes tanto del lado del frontend como del backend.
+
+La seguridad no debe depender solamente de ocultar botones en la interfaz.
+
+---
+
+# 2. GUARDAR CAMBIOS EN LECCIONES APRENDIDAS
+
+Dentro de Lecciones Aprendidas debe existir el botón actual o equivalente:
+
+**Guardar cambios**
+
+Cada vez que el Responsable de Medición de Eficacia presiona este botón debe generarse automáticamente un nuevo registro en el historial de la Lección Aprendida.
+
+Cada registro debe guardar:
+
+* Fecha
+* Hora
+* Contenido completo resultante de la Lección Aprendida después del guardado
+
+No es necesario guardar explícitamente:
+
+* Usuario que realizó la modificación
+* Contenido anterior
+
+Motivos:
+
+El único usuario autorizado para modificar la Lección Aprendida es el Responsable de Medición de Eficacia asignado.
+
+El contenido anterior ya se encuentra almacenado en el registro histórico inmediatamente anterior.
+
+Cada registro histórico debe funcionar como una **fotografía completa de la Lección Aprendida en ese momento**.
+
+No registrar solamente mensajes genéricos como:
+
+> “Se modificó la Lección Aprendida”.
+
+Debe conservarse el contenido real de cada versión.
+
+---
+
+# 3. HISTORIAL DE VERSIONES
+
+La secuencia debe quedar conceptualmente de esta manera:
+
+Versión 1
+Fecha y hora
+Contenido completo de la Lección Aprendida
+
+Versión 2
+Fecha y hora
+Contenido completo actualizado
+
+Versión 3
+Fecha y hora
+Contenido completo actualizado
+
+Etc.
+
+Nunca sobrescribir versiones anteriores.
+
+Debe poder reconstruirse fácilmente la evolución completa de la Lección Aprendida.
+
+---
+
+# 4. ESTADOS DE LECCIONES APRENDIDAS
+
+Evaluar la implementación actual y adaptar, si corresponde, los estados a una lógica similar a:
+
+* BORRADOR
+* LISTA PARA PUBLICAR
+* PUBLICADA
+
+El Responsable de Medición de Eficacia completa y modifica la Lección Aprendida.
+
+Cuando considere terminada la carga debe poder enviarla a publicación.
+
+Puede utilizarse una acción como:
+
+**Enviar para publicación**
+
+La Lección Aprendida queda entonces disponible para revisión administrativa.
+
+---
+
+# 5. PUBLICACIÓN EXCLUSIVA POR ADMINISTRADOR
+
+Crear un botón:
+
+**PUBLICAR**
+
+Este botón debe estar disponible exclusivamente para usuarios con rol Administrador.
+
+Validar nuevamente el permiso en backend.
+
+El Responsable de Medición de Eficacia:
+
+* puede completar;
+* puede guardar;
+* puede modificar mientras corresponda;
+* puede enviarla para publicación;
+
+pero:
+
+**NO puede publicar.**
+
+---
+
+# 6. QUÉ DEBE OCURRIR AL PRESIONAR “PUBLICAR”
+
+Cuando el Administrador presione PUBLICAR debe ejecutarse una operación completa y consistente.
+
+La operación debe:
+
+1. Validar que la Lección Aprendida tenga la información obligatoria.
+
+2. Validar las acciones derivadas obligatorias que correspondan.
+
+3. Marcar la Lección Aprendida como PUBLICADA.
+
+4. Registrar:
+
+   * fecha de publicación;
+   * administrador que realizó la publicación, si la arquitectura existente maneja esta información.
+
+5. Bloquear la edición normal de la Lección Aprendida publicada.
+
+6. Cerrar formalmente el tratamiento relacionado.
+
+7. Registrar el evento correspondiente en el historial del tratamiento.
+
+8. Registrar el evento correspondiente en el historial general de la anomalía.
+
+9. Identificar todos los participantes históricos del tratamiento.
+
+10. Enviar correo de notificación a dichos participantes.
+
+La operación debe ser segura frente a errores parciales.
+
+Evaluar utilizar una transacción de base de datos para evitar situaciones como:
+
+* Lección publicada pero tratamiento abierto.
+* Tratamiento cerrado pero historial incompleto.
+* Acción obligatoria inexistente.
+* Datos inconsistentes.
+
+---
+
+# 7. REGISTRO CONSOLIDADO DE LA PUBLICACIÓN
+
+Al publicar la Lección Aprendida debe crearse un evento especial de historial.
+
+Conceptualmente:
+
+**LECCIÓN APRENDIDA PUBLICADA**
+
+Debe almacenarse en:
+
+### Historial del tratamiento
+
+y también en:
+
+### Historial general de la anomalía
+
+Este registro debe contener en un único evento toda la información relevante de la Lección Aprendida publicada.
+
+Debe incluir:
+
+* contenido final de la Lección Aprendida;
+* fecha de publicación;
+* estado final;
+* referencia al tratamiento;
+* historial completo de versiones de la Lección Aprendida.
+
+El objetivo es que ese registro funcione como una **fotografía documental completa e inmutable del cierre**.
+
+No queremos depender de consultar tablas que posteriormente puedan cambiar.
+
+Analizar la mejor solución técnica según la arquitectura existente.
+
+Podría utilizarse, por ejemplo:
+
+* snapshot JSON;
+* estructura serializada;
+* modelo de evento histórico;
+* mecanismo equivalente ya utilizado por el sistema.
+
+Priorizar reutilizar el mecanismo existente antes de crear uno nuevo.
+
+---
+
+# 8. PARTICIPANTES DEL TRATAMIENTO
+
+Cuando se publica una Lección Aprendida deben identificarse todas las personas que participaron formalmente en el tratamiento en cualquier momento.
+
+No limitarse a los responsables actuales.
+
+Revisar el historial y relaciones existentes para obtener participantes como:
+
+* creador de la anomalía;
+* responsables asignados;
+* responsables anteriores;
+* responsables de acciones;
+* responsables de análisis;
+* responsable de medición de eficacia;
+* usuarios que hayan tenido una participación registrada dentro del tratamiento;
+* cualquier otro participante que el modelo actual considere parte formal del tratamiento.
+
+Eliminar usuarios duplicados.
+
+Excluir usuarios sin correo válido cuando corresponda y manejar esta situación sin impedir innecesariamente la publicación.
+
+---
+
+# 9. ENVÍO DE CORREO
+
+Al publicar, enviar una notificación a todos los participantes históricos identificados.
+
+Evitar correos duplicados.
+
+El correo debería informar como mínimo:
+
+* número o identificación de la anomalía;
+* tratamiento relacionado;
+* que el tratamiento fue cerrado;
+* que se publicó la Lección Aprendida;
+* resumen o contenido relevante;
+* enlace al registro cuando el sistema ya tenga URLs adecuadas para ello.
+
+Reutilizar el sistema de correo existente.
+
+No implementar un segundo mecanismo paralelo si ya existe un servicio o función de notificaciones.
+
+---
+
+# 10. MODIFICACIÓN DE PROCEDIMIENTO
+
+Dentro de Lecciones Aprendidas existe o debe existir el concepto:
+
+**Modifica procedimiento**
+
+Si:
+
+**Modifica procedimiento = Sí**
+
+debe generarse una nueva tarjeta de acción.
+
+Esta acción debe estar relacionada con:
+
+Anomalía
+→ Tratamiento
+→ Lección Aprendida
+→ Acción derivada
+
+La acción debe tener como mínimo:
+
+* descripción de la acción;
+* responsable;
+* fecha límite de realización.
+
+Los siguientes campos deben ser obligatorios:
+
+**Responsable**
+
+**Fecha límite**
+
+La acción no puede guardarse incompleta.
+
+---
+
+# 11. REGLA PARA PUBLICAR CUANDO SE MODIFICA UN PROCEDIMIENTO
+
+Si:
+
+**Modifica procedimiento = Sí**
+
+el sistema NO debe permitir publicar la Lección Aprendida hasta que exista la correspondiente acción derivada válida.
+
+Pero:
+
+la acción NO necesita estar terminada para poder publicar la Lección Aprendida.
+
+Flujo esperado:
+
+Lección Aprendida
+→ se determina que modifica procedimiento
+→ se crea acción obligatoria
+→ se asigna responsable
+→ se asigna fecha límite
+→ Admin publica Lección Aprendida
+→ se cierra tratamiento
+→ la acción derivada continúa abierta hasta su cumplimiento.
+
+Esto es importante.
+
+No mantener artificialmente abierto el tratamiento solamente porque una modificación de procedimiento pueda tardar varios días o semanas.
+
+---
+
+# 12. TARJETA DE ACCIÓN DERIVADA
+
+La nueva acción debe verse dentro del sistema utilizando el mismo diseño y lógica de las tarjetas de acciones existentes.
+
+No crear un componente visual completamente independiente si ya existen tarjetas reutilizables.
+
+Debe quedar claramente identificada como:
+
+**Acción derivada de Lección Aprendida**
+
+o una denominación equivalente coherente con la interfaz actual.
+
+Debe poder visualizarse su relación con la Lección Aprendida original.
+
+---
+
+# 13. BLOQUEO POSTERIOR A LA PUBLICACIÓN
+
+Una Lección Aprendida publicada debe quedar protegida de modificaciones comunes.
+
+No debe poder editarse normalmente luego de la publicación.
+
+Si existe algún mecanismo administrativo excepcional de reapertura o corrección, revisar cómo trabaja actualmente el sistema.
+
+No agregar una reapertura nueva salvo que sea estrictamente necesario.
+
+Nunca eliminar ni modificar silenciosamente el snapshot publicado original.
+
+---
+
+# 14. HISTORIAL DE LA ANOMALÍA
+
+Revisar especialmente el historial general de la anomalía.
+
+Cuando se publique la Lección Aprendida debe aparecer un evento claramente visible.
+
+Ejemplo conceptual:
+
+**Lección Aprendida publicada**
+
+Debe permitir conocer:
+
+* fecha;
+* tratamiento relacionado;
+* contenido final;
+* historial de versiones;
+* acciones derivadas;
+* situación de “Modifica procedimiento”;
+* cierre del tratamiento.
+
+No llenar el historial principal con decenas de registros individuales de cada edición.
+
+Los guardados intermedios pertenecen al historial interno de Lecciones Aprendidas.
+
+Al historial general debe llegar principalmente el evento consolidado de publicación.
+
+---
+
+# 15. HISTORIAL DEL TRATAMIENTO
+
+Aplicar el mismo criterio.
+
+El tratamiento debe mostrar claramente que:
+
+* se publicó la Lección Aprendida;
+* se cerró el tratamiento;
+* existe, si corresponde, una acción derivada por modificación de procedimiento.
+
+---
+
+# 16. AYUDA GENERAL DEL SISTEMA
+
+Este punto es obligatorio.
+
+Después de implementar los cambios funcionales, revisar la **Ayuda General** existente.
+
+Actualizarla para reflejar exactamente el nuevo funcionamiento.
+
+Agregar o ampliar la documentación correspondiente a:
+
+### Lecciones Aprendidas
+
+Explicar:
+
+* quién es el responsable de completarlas;
+* relación con Responsable de Medición de Eficacia;
+* funcionamiento de Guardar cambios;
+* generación automática del historial;
+* significado del historial de versiones;
+* envío para publicación;
+* rol exclusivo del Administrador;
+* botón PUBLICAR;
+* cierre del tratamiento;
+* envío automático de correos;
+* participantes notificados;
+* bloqueo después de publicar;
+* comportamiento de “Modifica procedimiento”;
+* generación de acciones derivadas;
+* responsable obligatorio;
+* fecha límite obligatoria.
+
+La ayuda debe estar escrita para un usuario funcional, no solamente para un programador.
+
+Debe explicar **qué hacer, quién lo hace y qué sucede después**.
+
+---
+
+# 17. RECORRIDO GUIADO DEL SISTEMA
+
+También es obligatorio actualizar el recorrido o tour guiado existente.
+
+Localizar cómo está implementado actualmente.
+
+Ampliar las tarjetas del recorrido relacionadas con:
+
+* Medición de eficacia;
+* Lecciones Aprendidas;
+* Guardar cambios;
+* historial;
+* Enviar para publicación;
+* Publicar;
+* Modifica procedimiento;
+* creación de acciones derivadas;
+* cierre del tratamiento.
+
+Si actualmente existe una tarjeta genérica de Lecciones Aprendidas, ampliarla o dividirla en varias tarjetas cuando resulte necesario para explicar correctamente el flujo.
+
+El recorrido debe mostrar progresivamente:
+
+### Tarjeta 1
+
+Qué son las Lecciones Aprendidas.
+
+### Tarjeta 2
+
+Quién debe completarlas.
+
+### Tarjeta 3
+
+Cómo funciona Guardar cambios y el historial.
+
+### Tarjeta 4
+
+Cómo enviar para publicación.
+
+### Tarjeta 5
+
+Qué ocurre si se modifica un procedimiento.
+
+### Tarjeta 6
+
+Cómo se genera la acción derivada y cuáles son los campos obligatorios.
+
+### Tarjeta 7
+
+Qué hace el Administrador con PUBLICAR.
+
+### Tarjeta 8
+
+Qué ocurre al publicar:
+
+* cierre;
+* historial;
+* correos;
+* bloqueo.
+
+Adaptar la cantidad real de tarjetas al sistema existente.
+
+No crear un segundo sistema de recorrido.
+
+Modificar y ampliar el actual.
+
+---
+
+# 18. COHERENCIA ENTRE SISTEMA, AYUDA Y RECORRIDO
+
+Es fundamental que las tres cosas coincidan:
+
+**Funcionamiento real**
+
+**Ayuda General**
+
+**Recorrido Guiado**
+
+No debe existir una función explicada en la ayuda que el sistema no tenga.
+
+No debe existir un botón nuevo que no aparezca explicado en la ayuda.
+
+No debe quedar el recorrido mostrando el funcionamiento antiguo.
+
+---
+
+# 19. INTERFAZ
+
+Mantener el estilo visual actual del sistema.
+
+No realizar un rediseño general.
+
+Solamente agregar o modificar los componentes necesarios.
+
+Los botones deben tener jerarquía visual clara:
+
+* Guardar cambios
+* Enviar para publicación
+* PUBLICAR
+
+PUBLICAR debe distinguirse como una acción administrativa importante.
+
+Evitar botones duplicados o acciones ambiguas.
+
+---
+
+# 20. BACKEND Y PERMISOS
+
+Revisar las validaciones del backend.
+
+No confiar únicamente en:
+
+```python
+{% if user.is_admin %}
+```
+
+o en ocultar botones.
+
+Las acciones sensibles deben validarse también en:
+
+* vistas;
+* servicios;
+* formularios;
+* endpoints;
+* APIs;
+
+según corresponda a la arquitectura actual.
+
+Especialmente:
+
+* editar Lección Aprendida;
+* enviar para publicación;
+* publicar;
+* cerrar tratamiento;
+* generar acciones derivadas.
+
+---
+
+# 21. VALIDACIONES
+
+Agregar validaciones claras.
+
+Ejemplos:
+
+No publicar si:
+
+* falta información obligatoria;
+* la Lección Aprendida no está preparada para publicar;
+* Modifica procedimiento = Sí pero no existe acción;
+* falta responsable de la acción;
+* falta fecha límite.
+
+Mostrar mensajes entendibles al usuario.
+
+No mostrar errores técnicos innecesarios.
+
+---
+
+# 22. AUDITORÍA
+
+No eliminar historial existente.
+
+No sobrescribir registros históricos.
+
+No realizar cambios destructivos sin analizar primero los datos actuales.
+
+Si se requiere una migración de Django:
+
+* crearla correctamente;
+* revisar compatibilidad con datos existentes;
+* utilizar valores por defecto solamente cuando tengan sentido;
+* evitar pérdida de información.
+
+---
+
+# 23. TESTS
+
+Agregar o actualizar tests para cubrir como mínimo:
+
+1. Responsable de eficacia puede editar.
+2. Otro usuario común no puede editar.
+3. Cada Guardar cambios genera una versión histórica.
+4. Guardar varias veces conserva todas las versiones.
+5. El contenido anterior no se sobrescribe.
+6. Usuario común no puede publicar.
+7. Admin puede publicar.
+8. Publicar cambia el estado.
+9. Publicar cierra el tratamiento.
+10. Publicar crea historial consolidado.
+11. El historial consolidado llega al tratamiento.
+12. El historial consolidado llega a la anomalía.
+13. Se identifican participantes históricos.
+14. No se duplican destinatarios.
+15. Se ejecuta la notificación por correo.
+16. Modifica procedimiento = No permite flujo normal.
+17. Modifica procedimiento = Sí obliga a crear acción.
+18. Responsable de acción obligatorio.
+19. Fecha límite obligatoria.
+20. Una acción pendiente no impide publicar si ya fue correctamente creada.
+21. Una Lección publicada no puede ser editada normalmente.
+22. Los permisos se respetan desde backend.
+
+---
+
+# 24. FORMA DE TRABAJO
+
+Antes de modificar código:
+
+1. Analiza la arquitectura actual.
+2. Identifica modelos involucrados.
+3. Identifica relaciones.
+4. Identifica estados.
+5. Identifica permisos.
+6. Identifica servicios o funciones de historial.
+7. Identifica servicios de correo.
+8. Identifica tarjetas de acciones existentes.
+9. Identifica la Ayuda General.
+10. Identifica el sistema de recorrido guiado.
+11. Identifica tests existentes relacionados.
+
+Después presenta brevemente:
+
+### Estado actual encontrado
+
+### Cambios propuestos
+
+### Archivos que modificarás
+
+### Migraciones necesarias
+
+### Riesgos o decisiones detectadas
+
+Luego implementa los cambios.
+
+No detenerte después del análisis salvo que encuentres una contradicción crítica que impida continuar.
+
+---
+
+# 25. CRITERIOS DE CALIDAD
+
+La solución debe:
+
+* reutilizar la arquitectura existente;
+* evitar código duplicado;
+* respetar permisos;
+* mantener trazabilidad;
+* ser auditable;
+* evitar registros redundantes;
+* mantener historial inmutable;
+* mantener consistencia transaccional;
+* preservar funcionalidades anteriores;
+* mantener coherencia de interfaz;
+* actualizar Ayuda General;
+* actualizar Recorrido Guiado;
+* incluir tests;
+* no inventar modelos ni campos sin revisar primero el proyecto.
+
+Priorizar una solución simple, mantenible y coherente con Django y con la arquitectura existente del sistema.
+
+---
+
+# RESULTADO ESPERADO
+
+Al finalizar quiero recibir:
+
+1. Resumen de lo encontrado.
+2. Explicación de la solución implementada.
+3. Archivos modificados.
+4. Nuevos modelos/campos, si existieran.
+5. Migraciones realizadas.
+6. Cambios de permisos.
+7. Cambios realizados en historial.
+8. Implementación de PUBLICAR.
+9. Implementación de acciones derivadas.
+10. Cambios realizados en correos.
+11. Cambios en Ayuda General.
+12. Cambios en Recorrido Guiado y tarjetas ampliadas.
+13. Tests agregados o modificados.
+14. Resultado de los tests.
+15. Cualquier riesgo técnico pendiente.
+
+Finalmente, revisa el flujo completo de punta a punta:
+
+**Medición de eficacia → Lección Aprendida → Guardar cambios → Historial → Enviar para publicación → revisión Admin → PUBLICAR → registro consolidado → correos → cierre del tratamiento → acción derivada si corresponde.**
+
+Confirma que el comportamiento real, la Ayuda General y el Recorrido Guiado describen exactamente el mismo flujo.

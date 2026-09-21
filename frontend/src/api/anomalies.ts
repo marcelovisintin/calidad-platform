@@ -65,7 +65,7 @@ export function fetchWorkflowMetadata() {
   return apiRequest<WorkflowMetadata>("/anomalies/workflow-metadata/");
 }
 
-export function fetchMyAnomalies(reporterId?: string, search = "", page = 1) {
+export function fetchMyAnomalies(reporterId?: string, search = "", page = 1, anomalyType = "") {
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("page_size", "10");
@@ -162,6 +162,9 @@ export function fetchObservationLearnedLessons(page = 1, search = "") {
   const params = new URLSearchParams({ page: String(page), page_size: "10" });
   if (search.trim()) {
     params.set("search", search.trim());
+  }
+  if (anomalyType) {
+    params.set("anomaly_type", anomalyType);
   }
   return apiRequest<PagedResponse<ObservationLearnedLessonItem>>(
     `/anomalies/observation-learned-lessons/?${params.toString()}`,

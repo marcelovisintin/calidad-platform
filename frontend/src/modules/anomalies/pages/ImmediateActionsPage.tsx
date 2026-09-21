@@ -1,6 +1,7 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  addObservationActionEvidence,
   completeObservationAction,
   createObservationAction,
   fetchAnomalyDetail,
@@ -70,6 +71,9 @@ export function ImmediateActionsPage() {
   const [estimatedCompletionDate, setEstimatedCompletionDate] = useState(nowAsDate());
   const [actionEffectivenessDueDate, setActionEffectivenessDueDate] = useState(nowAsDate());
   const [completionDates, setCompletionDates] = useState<Record<string, string>>({});
+  const [actionEvidenceFiles, setActionEvidenceFiles] = useState<Record<string, File[]>>({});
+  const [actionEvidenceInputKeys, setActionEvidenceInputKeys] = useState<Record<string, number>>({});
+  const [actionErrors, setActionErrors] = useState<Record<string, string>>({});
   const [actionCompletedAt, setActionCompletedAt] = useState(nowAsDate());
   const [actionsTaken, setActionsTaken] = useState("");
   const [effectivenessDueAt, setEffectivenessDueAt] = useState(nowAsDate());
@@ -78,6 +82,8 @@ export function ImmediateActionsPage() {
   const [effectivenessVerifiedAt, setEffectivenessVerifiedAt] = useState(nowAsLocalDateTime());
   const [effectivenessResult, setEffectivenessResult] = useState<"" | "effective" | "not_effective">("");
   const [effectivenessComment, setEffectivenessComment] = useState("");
+  const [effectivenessEvidenceFiles, setEffectivenessEvidenceFiles] = useState<File[]>([]);
+  const [effectivenessEvidenceInputKey, setEffectivenessEvidenceInputKey] = useState(0);
 
   const [message, setMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -151,6 +157,8 @@ export function ImmediateActionsPage() {
           : "",
     );
     setEffectivenessComment(existing?.effectiveness_comment || selectedAnomaly.effectiveness_summary || "");
+    setEffectivenessEvidenceFiles([]);
+    setEffectivenessEvidenceInputKey((current) => current + 1);
     setObjectiveEvidenceFiles([]);
     setObjectiveEvidenceInputKey((current) => current + 1);
     setFormError(null);
@@ -163,6 +171,9 @@ export function ImmediateActionsPage() {
 
   useEffect(() => {
     setGeneralStepConfirmed(false);
+    setActionEvidenceFiles({});
+    setActionEvidenceInputKeys({});
+    setActionErrors({});
   }, [selectedAnomalyId]);
 
   const handleSearch = (event: ChangeEvent<HTMLInputElement>) => {
@@ -225,24 +236,23 @@ export function ImmediateActionsPage() {
     setFormError(null);
     setMessage(null);
     try {
-      await createObservationAction(selectedAnomalyId, {
+      const createdAction = await createObservationAction(selectedAnomalyId, {
         detail: actionDetail.trim(),
         estimated_completion_date: estimatedCompletionDate,
         effectiveness_due_date: actionEffectivenessDueDate,
       });
-      for (const file of objectiveEvidenceFiles) {
-        await uploadAnomalyAttachment(selectedAnomalyId, {
-          file,
-          originalName: file.name,
-        });
-      }
       setActionDetail("");
+      for (const file of objectiveEvidenceFiles) {
+        await addObservationActionEvidence(selectedAnomalyId, createdAction.id, { file });
+      }
       setObjectiveEvidenceFiles([]);
       setObjectiveEvidenceInputKey((current) => current + 1);
       await Promise.all([reload(), reloadDetail()]);
       setGeneralStepConfirmed(true);
       setMessage("La accion fue guardada correctamente y no podra editarse.");
     } catch (err) {
+      await Promise.all([reload(), reloadDetail()]);
+      setGeneralStepConfirmed(true);
       setFormError(err instanceof Error ? err.message : "No se pudo guardar la accion.");
     } finally {
       setSubmitting(false);
@@ -261,13 +271,50 @@ export function ImmediateActionsPage() {
     setSubmitting(true);
     setFormError(null);
     setMessage(null);
+    setActionErrors((current) => ({ ...current, [actionId]: "" }));
     try {
+      const files = actionEvidenceFiles[actionId] ?? [];
+      const hasSavedEvidence = selectedAnomaly?.attachments.some((attachment) => attachment.observation_action === actionId);
+      if (!hasSavedEvidence && files.length === 0) {
+        setActionErrors((current) => ({ ...current, [actionId]: "Selecciona una evidencia objetiva para finalizar esta accion." }));
+        return;
+      }
+      for (const file of files) {
+        await addObservationActionEvidence(selectedAnomalyId, actionId, { file });
+      }
+      setActionEvidenceFiles((current) => ({ ...current, [actionId]: [] }));
+      setActionEvidenceInputKeys((current) => ({ ...current, [actionId]: (current[actionId] ?? 0) + 1 }));
       await completeObservationAction(selectedAnomalyId, actionId, completedAt);
       await Promise.all([reload(), reloadDetail()]);
       setGeneralStepConfirmed(true);
       setMessage("Accion finalizada correctamente.");
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "No se pudo finalizar la accion.");
+      await reloadDetail();
+      setActionErrors((current) => ({ ...current, [actionId]: err instanceof Error ? err.message : "No se pudo finalizar la accion." }));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAddActionEvidence = async (actionId: string) => {
+    if (!selectedAnomalyId || !actionEvidenceFiles[actionId]?.length) {
+      return;
+    }
+    setSubmitting(true);
+    setFormError(null);
+    setMessage(null);
+    setActionErrors((current) => ({ ...current, [actionId]: "" }));
+    try {
+      for (const file of actionEvidenceFiles[actionId]) {
+        await addObservationActionEvidence(selectedAnomalyId, actionId, { file });
+      }
+      setActionEvidenceFiles((current) => ({ ...current, [actionId]: [] }));
+      setActionEvidenceInputKeys((current) => ({ ...current, [actionId]: (current[actionId] ?? 0) + 1 }));
+      await reloadDetail();
+      setMessage("Evidencia vinculada a la accion.");
+    } catch (err) {
+      await reloadDetail();
+      setActionErrors((current) => ({ ...current, [actionId]: err instanceof Error ? err.message : "No se pudo cargar la evidencia de la accion." }));
     } finally {
       setSubmitting(false);
     }
@@ -344,6 +391,10 @@ export function ImmediateActionsPage() {
       setFormError("Completa la fecha de realizacion de la validacion, el resultado y el fundamento de eficacia.");
       return;
     }
+    if (!effectivenessEvidenceFiles.length) {
+      setFormError("Adjunta al menos una evidencia objetiva de la verificacion de eficacia.");
+      return;
+    }
     if (effectivenessVerifiedAt.slice(0, 10) < effectivenessDueDate) {
       setFormError("La fecha de realizacion no puede ser anterior a la fecha de validacion.");
       return;
@@ -360,6 +411,7 @@ export function ImmediateActionsPage() {
         effectiveness_verified_at: toOffsetIso(effectivenessVerifiedAt),
         effectiveness_is_effective: isEffective,
         effectiveness_comment: effectivenessComment.trim(),
+        evidences: effectivenessEvidenceFiles,
       });
 
       await Promise.all([reload(), reloadDetail()]);
@@ -552,7 +604,7 @@ export function ImmediateActionsPage() {
                   {!hasLoadedAction && formError ? <div className="panel danger">{formError}</div> : null}
                   {!hasLoadedAction && message ? <div className="panel success">{message}</div> : null}
 
-                  {generalStepConfirmed && hasLoadedAction ? (
+                  {(generalStepConfirmed || selectedAnomaly.observation_resolution_path === "OBSERVATION") && hasLoadedAction ? (
                     <form className="form-section" data-tour="observation-actions" onSubmit={handleCreateObservationAction}>
                       <div className="section-head compact">
                         <div>
@@ -589,16 +641,6 @@ export function ImmediateActionsPage() {
                         </p>
                       ) : null}
 
-                      {selectedAnomaly.attachments.length ? (
-                        <div className="stack-list compact">
-                          {selectedAnomaly.attachments.map((attachment) => (
-                            <a className="text-link" href={attachment.file_url} key={attachment.id} rel="noopener noreferrer" target="_blank">
-                              {attachment.original_name}
-                            </a>
-                          ))}
-                        </div>
-                      ) : null}
-
                       <div className="form-actions">
                         <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed"} type="submit">
                           {submitting ? "Guardando..." : "Guardar"}
@@ -615,6 +657,33 @@ export function ImmediateActionsPage() {
                                 Realizacion estimada: {action.estimated_completion_date} | Fecha de validacion: {action.effectiveness_due_date}
                               </small>
                               {action.completed_at ? <small>Finalizada: {action.completed_at}</small> : null}
+                              {selectedAnomaly.attachments.filter((attachment) => attachment.observation_action === action.id).map((attachment) => (
+                                <a className="text-link" href={attachment.file_url} key={attachment.id} rel="noopener noreferrer" target="_blank">
+                                  {attachment.original_name}
+                                </a>
+                              ))}
+                              {actionErrors[action.id] ? <div className="panel danger" role="alert">{actionErrors[action.id]}</div> : null}
+                              {action.status === "pending" ? (
+                                <div className="form-actions">
+                                  <input
+                                    aria-label={`Evidencia objetiva de accion ${action.sequence}`}
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.rtf,.odt,.ods,.zip,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tif,.tiff,.heic,.heif"
+                                    key={`${action.id}-${actionEvidenceInputKeys[action.id] ?? 0}`}
+                                    multiple
+                                    onChange={(event) => setActionEvidenceFiles((current) => ({ ...current, [action.id]: Array.from(event.target.files ?? []) }))}
+                                    type="file"
+                                  />
+                                  {actionEvidenceFiles[action.id]?.length ? <small>{actionEvidenceFiles[action.id].length} archivo(s) seleccionado(s)</small> : null}
+                                  <button
+                                    className="button button-secondary"
+                                    disabled={submitting || !actionEvidenceFiles[action.id]?.length}
+                                    onClick={() => void handleAddActionEvidence(action.id)}
+                                    type="button"
+                                  >
+                                    Adjuntar evidencia
+                                  </button>
+                                </div>
+                              ) : null}
                             </div>
                             <div className="badge-stack align-end">
                               <StatusBadge compact value={action.status} overdue={action.is_overdue} />
@@ -716,13 +785,25 @@ export function ImmediateActionsPage() {
                           <span>Fundamento de eficacia</span>
                           <textarea disabled={!canVerifyEffectiveness} onChange={(event) => setEffectivenessComment(event.target.value)} required rows={3} value={effectivenessComment} />
                         </label>
+                        <label className="field field-span-2">
+                          <span>Evidencia objetiva de la verificacion (obligatoria)</span>
+                          <input
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.rtf,.odt,.ods,.zip,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tif,.tiff,.heic,.heif"
+                            disabled={!canVerifyEffectiveness}
+                            key={effectivenessEvidenceInputKey}
+                            multiple
+                            onChange={(event) => setEffectivenessEvidenceFiles(Array.from(event.target.files ?? []))}
+                            required
+                            type="file"
+                          />
+                        </label>
                       </div>
 
                     {formError ? <div className="panel danger">{formError}</div> : null}
                     {message ? <div className="panel success">{message}</div> : null}
 
                     <div className="form-actions" data-tour="observation-effectiveness-confirm">
-                      <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed" || !canVerifyEffectiveness || !effectivenessComment.trim()} type="submit">
+                      <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed" || !canVerifyEffectiveness || !effectivenessComment.trim() || !effectivenessEvidenceFiles.length} type="submit">
                         {submitting ? "Guardando..." : "Guardar verificacion"}
                       </button>
                     </div>

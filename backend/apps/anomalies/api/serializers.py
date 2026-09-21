@@ -8,6 +8,7 @@ from apps.actions.models import (
     ActionItemStatus,
     ActionPlan,
     Treatment,
+    TreatmentParticipant,
     TreatmentLearnedLessonEvidence,
     TreatmentTask,
 )
@@ -351,6 +352,27 @@ class AnomalyParticipantSerializer(serializers.ModelSerializer):
         fields = ("id", "user", "role", "note", "created_at", "updated_at")
 
 
+class AnomalyTreatmentParticipantSerializer(serializers.ModelSerializer):
+    user = UserSummarySerializer(read_only=True)
+
+    class Meta:
+        model = TreatmentParticipant
+        fields = ("id", "user", "role")
+
+
+class AnomalyTreatmentParticipationSerializer(serializers.ModelSerializer):
+    responsible = UserSummarySerializer(read_only=True)
+    effectiveness_responsible = UserSummarySerializer(read_only=True)
+    participants = AnomalyTreatmentParticipantSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Treatment
+        fields = (
+            "id", "code", "responsible", "participants", "scheduled_for",
+            "convocation_confirmed_at", "effectiveness_responsible",
+        )
+
+
 class AnomalyInitialVerificationSerializer(serializers.ModelSerializer):
     verified_by = UserSummarySerializer(read_only=True)
 
@@ -641,6 +663,7 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
     observation_actions = ObservationActionSerializer(many=True, read_only=True)
     action_plans = ActionPlanSummarySerializer(many=True, read_only=True)
     treatment_tasks = serializers.SerializerMethodField()
+    treatments = serializers.SerializerMethodField()
     learned_lessons = serializers.SerializerMethodField()
     affected_orders = AffectedOrderSerializer(many=True, read_only=True)
 
@@ -662,6 +685,16 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
             .order_by("execution_date", "created_at")
         )
         return TreatmentTaskPlanSerializer(queryset, many=True, context=self.context).data
+
+    def get_treatments(self, obj):
+        queryset = (
+            Treatment.objects.filter(Q(primary_anomaly=obj) | Q(anomaly_links__anomaly=obj))
+            .select_related("responsible", "effectiveness_responsible")
+            .prefetch_related("participants__user")
+            .distinct()
+            .order_by("code")
+        )
+        return AnomalyTreatmentParticipationSerializer(queryset, many=True, context=self.context).data
 
     def get_learned_lessons(self, obj):
         queryset = (
@@ -736,6 +769,7 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
             "observation_actions",
             "action_plans",
             "treatment_tasks",
+            "treatments",
             "learned_lessons",
             "created_at",
             "updated_at",

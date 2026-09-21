@@ -117,6 +117,7 @@ class ValidationItemsApiTests(APITestCase):
         return {(item["source"], item["id"]) for item in response.data["results"]}
 
     def test_admin_sees_both_origins_and_all_states(self):
+        Treatment.objects.filter(pk=self.other_treatment.pk).update(updated_at=timezone.now() + timedelta(days=1))
         self.client.force_authenticate(user=self.admin)
         response = self.client.get(self.endpoint)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -125,6 +126,7 @@ class ValidationItemsApiTests(APITestCase):
             {item["status"] for item in response.data["results"]},
             {"pending", "blocked"},
         )
+        self.assertEqual(response.data["results"][0]["status"], "pending")
 
     def test_middle_manager_only_sees_own_validations(self):
         self.client.force_authenticate(user=self.manager)
@@ -135,6 +137,24 @@ class ValidationItemsApiTests(APITestCase):
                 ("treatment", str(self.manager_treatment.pk)),
                 ("observation", str(self.manager_anomaly.pk)),
             },
+        )
+
+    def test_overdue_pending_validations_appear_before_other_pending_items(self):
+        self.manager_anomaly.observation_actions.update(
+            effectiveness_due_date=timezone.localdate(),
+            status="completed",
+            completed_at=timezone.localdate(),
+        )
+        self.manager_treatment.effectiveness_evaluation_date = timezone.localdate() - timedelta(days=1)
+        self.manager_treatment.save(update_fields=["effectiveness_evaluation_date", "updated_at"])
+        self.client.force_authenticate(user=self.manager)
+
+        response = self.client.get(self.endpoint)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [(item["source"], item["status"], item["is_overdue"]) for item in response.data["results"]],
+            [("treatment", "pending", True), ("observation", "pending", False)],
         )
 
     def test_future_validation_dates_block_both_origins_until_the_due_date(self):

@@ -431,6 +431,8 @@ export interface AnomalyAttachmentSummary {
   id: UUID;
   original_name: string;
   content_type: string;
+  observation_action?: UUID | null;
+  note?: string;
   file_url: string;
   uploaded_by?: UserSummary | null;
   created_at: string;
@@ -1093,6 +1095,16 @@ export interface AnomalyTreatmentLearnedLessonSummary {
   evidences: TreatmentLearnedLessonEvidence[];
 }
 
+export interface AnomalyTreatmentParticipation {
+  id: UUID;
+  code: string;
+  responsible?: UserSummary | null;
+  participants: Array<Pick<TreatmentParticipant, "id" | "user" | "role">>;
+  scheduled_for?: string | null;
+  convocation_confirmed_at?: string | null;
+  effectiveness_responsible?: UserSummary | null;
+}
+
 export interface AnomalyDetail extends AnomalyListItem {
   description: string;
   duplicate_of?: AnomalyListItem | null;
@@ -1126,6 +1138,7 @@ export interface AnomalyDetail extends AnomalyListItem {
   observation_actions: ObservationAction[];
   action_plans: ActionPlanSummary[];
   treatment_tasks: AnomalyTreatmentTaskSummary[];
+  treatments: AnomalyTreatmentParticipation[];
   learned_lessons: AnomalyTreatmentLearnedLessonSummary[];
   created_at: string;
   updated_at: string;

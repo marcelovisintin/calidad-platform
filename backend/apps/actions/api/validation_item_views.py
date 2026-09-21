@@ -213,6 +213,10 @@ class ValidationItemListAPIView(APIView):
             items = [item for item in items if item["status"] == status_value]
 
         items.sort(key=lambda item: (item["updated_at"], item["created_at"]), reverse=True)
+        status_order = {"pending": 1, "blocked": 2, "completed": 3}
+        items.sort(key=lambda item: (
+            0 if item["status"] == "pending" and item["is_overdue"] else status_order[item["status"]]
+        ))
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(items, request, view=self)
         serializer = ValidationItemSerializer(page, many=True)
