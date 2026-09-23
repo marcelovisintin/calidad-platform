@@ -8,6 +8,7 @@ from apps.actions.models import TreatmentCodeSequence
 from apps.anomalies.models import AnomalyCodeReservation
 from apps.audit.models import AuditEvent
 from apps.catalog.models import Area, Site
+from apps.indicators.models import IndicatorReport
 from apps.notifications.models import Notification, NotificationTemplate
 
 
@@ -36,6 +37,19 @@ class ClearOperationalDataCommandTests(TestCase):
             action="test.created",
             actor=self.user,
         )
+        self.configuration_audit = AuditEvent.objects.create(
+            entity_type="notifications.notificationtemplate",
+            entity_id=self.user.pk,
+            action="template.updated",
+            actor=self.user,
+        )
+        IndicatorReport.objects.create(
+            indicator_key="anomaly-summary",
+            period_from="2026-01-01",
+            period_to="2026-01-31",
+            created_by=self.user,
+            updated_by=self.user,
+        )
         AnomalyCodeReservation.objects.create(
             code="20260001",
             year=2026,
@@ -49,6 +63,7 @@ class ClearOperationalDataCommandTests(TestCase):
 
         self.assertTrue(Notification.objects.exists())
         self.assertTrue(AuditEvent.objects.exists())
+        self.assertTrue(IndicatorReport.objects.exists())
         self.assertTrue(AnomalyCodeReservation.objects.exists())
         self.assertTrue(TreatmentCodeSequence.objects.exists())
 
@@ -56,7 +71,9 @@ class ClearOperationalDataCommandTests(TestCase):
         call_command("clear_operational_data", "--confirm", stdout=StringIO())
 
         self.assertFalse(Notification.objects.exists())
-        self.assertFalse(AuditEvent.objects.exists())
+        self.assertFalse(AuditEvent.objects.filter(entity_type="anomalies.anomaly").exists())
+        self.assertTrue(AuditEvent.objects.filter(pk=self.configuration_audit.pk).exists())
+        self.assertFalse(IndicatorReport.objects.exists())
         self.assertFalse(AnomalyCodeReservation.objects.exists())
         self.assertFalse(TreatmentCodeSequence.objects.exists())
         self.assertTrue(User.objects.filter(pk=self.user.pk).exists())

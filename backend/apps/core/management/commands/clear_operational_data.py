@@ -5,6 +5,7 @@ from collections import OrderedDict
 from django.apps import apps
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.models import Q
 
 from apps.accounts.models import User
 from apps.actions.models import (
@@ -16,23 +17,38 @@ from apps.actions.models import (
     TreatmentLearnedLessonEvidence,
     TreatmentTaskEvidence,
 )
-from apps.anomalies.models import Anomaly, AnomalyAttachment, AnomalyCodeReservation
+from apps.anomalies.models import (
+    Anomaly,
+    AnomalyAttachment,
+    AnomalyCodeReservation,
+    AnomalyLearningEvidence,
+)
 from apps.audit.models import AuditEvent
+from apps.indicators.models import IndicatorReport
 from apps.notifications.models import Notification
 
 
 FILE_MODELS = (
     (AnomalyAttachment, "file"),
+    (AnomalyLearningEvidence, "file"),
     (ActionEvidence, "file"),
     (TreatmentEvidence, "file"),
     (TreatmentTaskEvidence, "file"),
     (TreatmentLearnedLessonEvidence, "file"),
+    (IndicatorReport, "report_file"),
+)
+
+OPERATIONAL_AUDIT_FILTER = (
+    Q(entity_type__startswith="anomalies.")
+    | Q(entity_type__startswith="actions.")
+    | Q(entity_type__startswith="indicators.")
+    | Q(entity_type="notifications.notification")
 )
 
 ROOT_MODELS = OrderedDict(
     (
-        ("eventos de auditoria", AuditEvent),
         ("notificaciones y pendientes", Notification),
+        ("informes de indicadores", IndicatorReport),
         ("tratamientos", Treatment),
         ("secuencias de tratamientos", TreatmentCodeSequence),
         ("planes de accion", ActionPlan),
@@ -57,7 +73,10 @@ def _protected_counts() -> dict[str, object]:
 
 
 def _operational_counts() -> dict[str, int]:
-    return {label: model.objects.count() for label, model in ROOT_MODELS.items()}
+    return {
+        "eventos de auditoria operativa": AuditEvent.objects.filter(OPERATIONAL_AUDIT_FILTER).count(),
+        **{label: model.objects.count() for label, model in ROOT_MODELS.items()},
+    }
 
 
 def _file_references() -> list[tuple[object, str]]:
@@ -118,6 +137,7 @@ class Command(BaseCommand):
             return
 
         with transaction.atomic():
+            AuditEvent.objects.filter(OPERATIONAL_AUDIT_FILTER).delete()
             for model in ROOT_MODELS.values():
                 model.objects.all().delete()
 
