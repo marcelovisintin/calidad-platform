@@ -18,6 +18,30 @@ type AffectedOrderFormRow = {
   quantity: string;
 };
 
+type SelectedEvidenceFileProps = {
+  file: File;
+  index: number;
+  onRemove: (index: number) => void;
+};
+
+function SelectedEvidenceFile({ file, index, onRemove }: SelectedEvidenceFileProps) {
+  const previewUrl = useMemo(() => URL.createObjectURL(file), [file]);
+
+  useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
+
+  return (
+    <div className="list-card compact evidence-file-row">
+      <a className="evidence-file-link" href={previewUrl} rel="noreferrer" target="_blank">
+        <strong>{file.name}</strong>
+        <small>{`${Math.max(1, Math.round(file.size / 1024))} KB`}</small>
+      </a>
+      <button className="button button-ghost" onClick={() => onRemove(index)} type="button">
+        Quitar
+      </button>
+    </div>
+  );
+}
+
 function createAffectedOrderRow(): AffectedOrderFormRow {
   return {
     id: typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `order-${Date.now()}-${Math.random()}`,
@@ -429,9 +453,15 @@ export function NewAnomalyPage() {
                 value={form.description}
               />
             </label>
-            <label className="field field-span-2" data-tour="anomaly-objective-evidence">
-              <span>Evidencia objetiva</span>
-              <input accept={EVIDENCE_ACCEPT} multiple onChange={handleEvidenceChange} type="file" />
+            <div className="field field-span-2" data-tour="anomaly-objective-evidence">
+              <label htmlFor="anomaly-objective-evidence-input">Evidencia objetiva</label>
+              <input
+                accept={EVIDENCE_ACCEPT}
+                id="anomaly-objective-evidence-input"
+                multiple
+                onChange={handleEvidenceChange}
+                type="file"
+              />
               <small className="muted-copy">
                 {evidenceFiles.length
                   ? `${evidenceFiles.length} archivo(s) listo(s) para adjuntar. Podes seleccionar mas de una vez para acumular archivos.`
@@ -440,22 +470,19 @@ export function NewAnomalyPage() {
               {evidenceFiles.length ? (
                 <div className="stack-list compact">
                   {evidenceFiles.map((file, index) => (
-                    <div className="list-card compact" key={`${file.name}-${file.size}-${file.lastModified}`}>
-                      <div>
-                        <strong>{file.name}</strong>
-                        <small>{`${Math.max(1, Math.round(file.size / 1024))} KB`}</small>
-                      </div>
-                      <button className="button button-ghost" onClick={() => handleRemoveEvidence(index)} type="button">
-                        Quitar
-                      </button>
-                    </div>
+                    <SelectedEvidenceFile
+                      file={file}
+                      index={index}
+                      key={`${file.name}-${file.size}-${file.lastModified}`}
+                      onRemove={handleRemoveEvidence}
+                    />
                   ))}
                   <button className="button button-secondary" onClick={handleClearEvidence} type="button">
                     Quitar todo
                   </button>
                 </div>
               ) : null}
-            </label>
+            </div>
           </div>
         </section>
 

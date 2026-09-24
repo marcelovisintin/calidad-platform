@@ -279,6 +279,32 @@ textarea {
   line-height: 1.2;
 }
 
+.evidence-file-row {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.evidence-file-link {
+  color: inherit;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  text-decoration: none;
+}
+
+.evidence-file-link strong {
+  color: var(--primary);
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+}
+
+.evidence-file-link:hover strong,
+.evidence-file-link:focus-visible strong {
+  color: var(--primary-dark);
+}
+
 .topbar-user {
   min-width: 0;
   min-height: 42px;
