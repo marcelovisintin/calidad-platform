@@ -9,6 +9,7 @@ import { PageHeader } from "../../../components/PageHeader";
 import { TreatmentStartDeadline } from "../../../components/TreatmentStartDeadline";
 import { PaginationControls } from "../../../components/PaginationControls";
 import { PublishedLessonSnapshot } from "../../../components/PublishedLessonSnapshot";
+import { SearchableSelect } from "../../../components/SearchableSelect";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
@@ -205,12 +206,7 @@ export function TreatmentTrackingPage() {
             label: "Usuario",
             active: Boolean(userFilter),
             content: (
-              <select aria-label="Usuario" onChange={handleFilterChange(setUserFilter)} value={userFilter}>
-                <option value="">Todos los usuarios</option>
-                {(usersData?.results ?? []).map((user) => (
-                  <option key={user.id} value={user.id}>{userLabel(user)}</option>
-                ))}
-              </select>
+              <SearchableSelect ariaLabel="Usuario" onChange={(value) => { setUserFilter(value); setPage(1); }} options={(usersData?.results ?? []).map((user) => ({ value: user.id, label: userLabel(user) }))} placeholder="Todos los usuarios" value={userFilter} />
             ),
           },
           {
@@ -218,12 +214,7 @@ export function TreatmentTrackingPage() {
             label: "Area",
             active: Boolean(processFilter),
             content: (
-              <select aria-label="Area" onChange={handleFilterChange(setProcessFilter)} value={processFilter}>
-                <option value="">Todas las areas</option>
-                {(catalogData?.areas ?? []).map((area) => (
-                  <option key={area.id} value={area.id}>{area.name}</option>
-                ))}
-              </select>
+              <SearchableSelect ariaLabel="Area" onChange={(value) => { setProcessFilter(value); setPage(1); }} options={(catalogData?.areas ?? []).map((area) => ({ value: area.id, label: area.name }))} placeholder="Todas las areas" value={processFilter} />
             ),
           },
         ]}

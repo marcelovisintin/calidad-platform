@@ -302,6 +302,13 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertTrue(second.data["code"].startswith(year_prefix))
         self.assertEqual(int(second.data["code"][-4:]), int(first.data["code"][-4:]) + 1)
         self.assertNotEqual(first.data["id"], second.data["id"])
+        self.assertFalse(
+            AnomalyCodeReservation.objects.filter(anomaly__isnull=True, consumed_at__isnull=True).exists()
+        )
+        self.assertEqual(
+            AnomalyCodeReservation.objects.filter(anomaly__isnull=False, consumed_at__isnull=False).count(),
+            2,
+        )
 
 
     def test_reserve_code_returns_current_year_format(self):

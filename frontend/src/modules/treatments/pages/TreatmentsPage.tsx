@@ -23,6 +23,7 @@ import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { TreatmentStartDeadline } from "../../../components/TreatmentStartDeadline";
 import { PaginationControls } from "../../../components/PaginationControls";
+import { SearchableSelect } from "../../../components/SearchableSelect";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
@@ -1013,27 +1014,8 @@ return (
                           </button>
                         </div>
                         <div className="form-grid">
-                          <label className="field">
-                            <span>Area</span>
-                            <select disabled={treatmentLocked || convocationConfirmed} onChange={(event) => setParticipantAreaId(event.target.value)} value={participantAreaId}>
-                              <option value="">Todas las areas</option>
-                              {participantAreaOptions.map((area) => (
-                                <option key={area.id} value={area.id}>
-                                  {area.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="field">
-                            <span>Usuario</span>
-                            <select disabled={treatmentLocked || convocationConfirmed} onChange={(event) => setParticipantUserId(event.target.value)} value={participantUserId}>
-                              {participantUserOptions.map((user) => (
-                                <option key={user.id} value={user.id}>
-                                  {buildUsersLabel(user)}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                          <SearchableSelect className="field" disabled={treatmentLocked || convocationConfirmed} label="Area" onChange={setParticipantAreaId} options={participantAreaOptions.map((area) => ({ value: area.id, label: area.name }))} placeholder="Todas las areas" value={participantAreaId} />
+                          <SearchableSelect className="field" clearable={false} disabled={treatmentLocked || convocationConfirmed} label="Usuario" onChange={setParticipantUserId} options={participantUserOptions.map((user) => ({ value: user.id, label: buildUsersLabel(user) }))} placeholder="Seleccionar usuario..." value={participantUserId} />
                           <div className="field">
                             <span>Participacion</span>
                             <strong>Convocado</strong>
@@ -1169,16 +1151,7 @@ return (
                         <div className="section-head compact">
                           <h3>Metodo y observaciones</h3>
                         </div>
-                        <label className="field">
-                          <span>Metodo usado</span>
-                          <select disabled={treatmentLocked} onChange={(event) => setMethodUsed(event.target.value)} value={methodUsed}>
-                            {METHOD_OPTIONS.map((method) => (
-                              <option key={method.value || "none"} value={method.value}>
-                                {method.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
+                        <SearchableSelect className="field" disabled={treatmentLocked} label="Metodo usado" onChange={setMethodUsed} options={METHOD_OPTIONS.filter((method) => method.value)} placeholder={METHOD_OPTIONS.find((method) => !method.value)?.label || "Seleccionar..."} value={methodUsed} />
                         <label className="field">
                           <span>Detalle de análisis</span>
                           <textarea disabled={treatmentLocked} onChange={(event) => setObservations(event.target.value)} rows={4} value={observations} />
@@ -1284,38 +1257,12 @@ return (
                             />
                           </label>
 
-                          <label className="field">
-                            <span>Estado</span>
-                            <select
-                              disabled
-                              onChange={(event) => handleTaskDraftChange("status", event.target.value)}
-                              value={taskDraft.status}
-                            >
-                              {TASK_STATUS_OPTIONS.map((status) => (
-                                <option key={status.value} value={status.value}>
-                                  {status.label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                          <SearchableSelect className="field" clearable={false} disabled label="Estado" onChange={(value) => handleTaskDraftChange("status", value)} options={TASK_STATUS_OPTIONS} placeholder="Seleccionar..." value={taskDraft.status} />
 
-                          <label className="field">
-                            <span>Responsable</span>
-                            <select
-                              disabled={treatmentLocked || !(supportData?.users.length)}
-                              onChange={(event) => handleTaskDraftChange("responsible", event.target.value)}
-                              required
-                              value={taskDraft.responsible}
-                            >
-                              <option value="">Seleccionar responsable...</option>
-                              {(supportData?.users ?? []).map((user) => (
-                                <option key={user.id} value={user.id}>
-                                  {user.full_name || user.username}
-                                </option>
-                              ))}
-                            </select>
+                          <div className="field">
+                            <SearchableSelect disabled={treatmentLocked || !(supportData?.users.length)} label="Responsable" onChange={(value) => handleTaskDraftChange("responsible", value)} options={(supportData?.users ?? []).map((user) => ({ value: user.id, label: user.full_name || user.username }))} placeholder="Seleccionar responsable..." required value={taskDraft.responsible} />
                             {!(supportData?.users.length) ? <small className="muted-copy">No hay usuarios activos disponibles.</small> : null}
-                          </label>
+                          </div>
 
                           <label className="field">
                             <span>Fecha límite de ejecución</span>
@@ -1445,23 +1392,7 @@ return (
                                 value={effectivenessEvaluationDate}
                               />
                             </label>
-                            <label className="field">
-                              <span>Responsable</span>
-                              <select
-                                onChange={(event) => setEffectivenessResponsibleId(event.target.value)}
-                                disabled={treatmentLocked}
-                                required
-                                value={effectivenessResponsibleId}
-                              >
-                                <option value="">Seleccionar responsable...</option>
-                                {effectivenessResponsibleOptions.map((user) => (
-                                  <option key={user.id} value={user.id}>
-                                    {user.full_name || user.username}
-                                    {user.isParticipant ? " - Convocado" : " - Mando medio"}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
+                            <SearchableSelect className="field" disabled={treatmentLocked} label="Responsable" onChange={setEffectivenessResponsibleId} options={effectivenessResponsibleOptions.map((user) => ({ value: user.id, label: `${user.full_name || user.username}${user.isParticipant ? " - Convocado" : " - Mando medio"}` }))} placeholder="Seleccionar responsable..." required value={effectivenessResponsibleId} />
                           </div>
                         )}
                         {hasTreatmentTasks ? (

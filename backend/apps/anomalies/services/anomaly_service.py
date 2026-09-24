@@ -483,7 +483,11 @@ def create_anomaly(*, user, data: dict, request_id: str = "") -> Anomaly:
     elif requested_code:
         code = requested_code
     else:
-        code = generate_anomaly_code()
+        # Allocate and consume the visible code inside this same transaction.
+        # This keeps concurrent registrations unique without holding a code
+        # while the user is completing the form.
+        reservation = reserve_anomaly_code(user=user)
+        code = reservation.code
 
     if Anomaly.objects.filter(code=code).exists():
         raise ValidationError({"code": "El codigo de anomalia ya existe. Solicite una nueva reserva."})

@@ -7,6 +7,7 @@ import { formatDate, formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
+import { SearchableSelect } from "../../../components/SearchableSelect";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
@@ -291,14 +292,7 @@ export function TreatmentValidationPage() {
                             <input disabled={!selectedItem.can_validate || busy} onChange={(event) => setVerifiedAt(event.target.value)} required type="datetime-local" value={verifiedAt} />
                           </label>
                         ) : null}
-                        <label className="field" data-tour="validation-result">
-                          <span>Resultado</span>
-                          <select disabled={!selectedItem.can_validate || busy} onChange={(event) => setValidationResult(event.target.value as ValidationResult)} required value={validationResult}>
-                            <option value="">Seleccionar...</option>
-                            <option value="effective">Eficaz</option>
-                            <option value="not_effective">No eficaz</option>
-                          </select>
-                        </label>
+                        <SearchableSelect className="field" dataTour="validation-result" disabled={!selectedItem.can_validate || busy} label="Resultado" onChange={(value) => setValidationResult(value as ValidationResult)} options={[{ value: "effective", label: "Eficaz" }, { value: "not_effective", label: "No eficaz" }]} placeholder="Seleccionar..." required value={validationResult} />
                         <label className="field field-span-2" data-tour="validation-reason">
                           <span>Fundamento de eficacia</span>
                           <textarea

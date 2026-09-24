@@ -16,6 +16,7 @@ import { formatDateTime, toOffsetIso } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
+import { SearchableSelect } from "../../../components/SearchableSelect";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
@@ -772,14 +773,16 @@ export function ImmediateActionsPage() {
                           />
                         </label>
 
-                        <label className="field">
-                          <span>Resultado</span>
-                          <select disabled={!canVerifyEffectiveness} onChange={(event) => setEffectivenessResult(event.target.value as "" | "effective" | "not_effective")} required value={effectivenessResult}>
-                            <option value="">Seleccionar...</option>
-                            <option value="effective">Eficaz</option>
-                            <option value="not_effective">No eficaz</option>
-                          </select>
-                        </label>
+                        <SearchableSelect
+                          className="field"
+                          disabled={!canVerifyEffectiveness}
+                          label="Resultado"
+                          onChange={(value) => setEffectivenessResult(value as "" | "effective" | "not_effective")}
+                          options={[{ value: "effective", label: "Eficaz" }, { value: "not_effective", label: "No eficaz" }]}
+                          placeholder="Seleccionar..."
+                          required
+                          value={effectivenessResult}
+                        />
 
                         <label className="field field-span-2" data-tour="observation-effectiveness-reason">
                           <span>Fundamento de eficacia</span>

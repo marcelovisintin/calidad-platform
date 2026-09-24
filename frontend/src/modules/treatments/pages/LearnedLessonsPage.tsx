@@ -8,6 +8,7 @@ import { formatDate, formatDateTime } from "../../../app/utils";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
+import { SearchableSelect } from "../../../components/SearchableSelect";
 import { PaginationControls } from "../../../components/PaginationControls";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { StatusBadge } from "../../../components/StatusBadge";
@@ -242,14 +243,7 @@ function LearnedLessonCard({
         {error ? <div className="panel danger compact-inline-panel">{error}</div> : null}
 
         <fieldset disabled={!canEdit || saving}>
-        <label className="field" data-tour="lesson-learning-choice">
-          <span>Hubo un aprendizaje?</span>
-          <select value={form.hasLearning} onChange={(event) => updateForm({ hasLearning: event.target.value as LessonFormState["hasLearning"] })}>
-            <option value="">Seleccionar...</option>
-            <option value="yes">Si</option>
-            <option value="no">No</option>
-          </select>
-        </label>
+        <SearchableSelect className="field" dataTour="lesson-learning-choice" label="Hubo un aprendizaje?" onChange={(value) => updateForm({ hasLearning: value as LessonFormState["hasLearning"] })} options={[{ value: "yes", label: "Si" }, { value: "no", label: "No" }]} placeholder="Seleccionar..." value={form.hasLearning} />
 
         {form.hasLearning === "yes" ? (
           <>
@@ -271,14 +265,7 @@ function LearnedLessonCard({
           </label>
         ) : null}
 
-        <label className="field" data-tour="lesson-procedure-choice">
-          <span>Modifica procedimiento?</span>
-          <select value={form.procedureModified} onChange={(event) => updateForm({ procedureModified: event.target.value as LessonFormState["procedureModified"] })}>
-            <option value="">Seleccionar...</option>
-            <option value="yes">Si</option>
-            <option value="no">No</option>
-          </select>
-        </label>
+        <SearchableSelect className="field" dataTour="lesson-procedure-choice" label="Modifica procedimiento?" onChange={(value) => updateForm({ procedureModified: value as LessonFormState["procedureModified"] })} options={[{ value: "yes", label: "Si" }, { value: "no", label: "No" }]} placeholder="Seleccionar..." value={form.procedureModified} />
 
         {form.procedureModified === "yes" ? (
           <label className="field" data-tour="lesson-procedure-detail">
@@ -324,7 +311,7 @@ function LearnedLessonCard({
           {error ? <div className="panel danger compact-inline-panel">{error}</div> : null}
           <label className="field"><span>Accion</span><input autoFocus value={actionForm.title} onChange={(event) => setActionForm((current) => ({ ...current, title: event.target.value }))} /></label>
           <label className="field"><span>Descripcion</span><textarea value={actionForm.description} onChange={(event) => setActionForm((current) => ({ ...current, description: event.target.value }))} /></label>
-          <label className="field"><span>Responsable</span><select value={actionForm.responsible} onChange={(event) => setActionForm((current) => ({ ...current, responsible: event.target.value }))}><option value="">Seleccionar...</option>{participantOptions.map((option) => <option value={option.id} key={option.id}>{option.full_name || option.username}</option>)}</select></label>
+          <SearchableSelect className="field" label="Responsable" onChange={(value) => setActionForm((current) => ({ ...current, responsible: value }))} options={participantOptions.map((option) => ({ value: option.id, label: option.full_name || option.username }))} placeholder="Seleccionar..." value={actionForm.responsible} />
           <label className="field"><span>Fecha limite de realizacion</span><input type="date" value={actionForm.execution_date} onChange={(event) => setActionForm((current) => ({ ...current, execution_date: event.target.value }))} /></label>
           <div className="form-actions">
             <button className="button button-secondary" onClick={() => window.dispatchEvent(new Event("calidad:open-context-help"))} type="button">Ayuda</button>
@@ -530,14 +517,7 @@ function ObservationLearnedLessonCard({
         {message ? <div className="panel info compact-inline-panel">{message}</div> : null}
         {error ? <div className="panel danger compact-inline-panel">{error}</div> : null}
 
-        <label className="field" data-tour="lesson-learning-choice">
-          <span>Hubo un aprendizaje?</span>
-          <select value={form.hasLearning} onChange={(event) => updateForm({ hasLearning: event.target.value as LessonFormState["hasLearning"] })}>
-            <option value="">Seleccionar...</option>
-            <option value="yes">Si</option>
-            <option value="no">No</option>
-          </select>
-        </label>
+        <SearchableSelect className="field" dataTour="lesson-learning-choice" label="Hubo un aprendizaje?" onChange={(value) => updateForm({ hasLearning: value as LessonFormState["hasLearning"] })} options={[{ value: "yes", label: "Si" }, { value: "no", label: "No" }]} placeholder="Seleccionar..." value={form.hasLearning} />
 
         {form.hasLearning === "yes" ? (
           <>
@@ -559,14 +539,7 @@ function ObservationLearnedLessonCard({
           </label>
         ) : null}
 
-        <label className="field" data-tour="lesson-procedure-choice">
-          <span>Modifica procedimiento?</span>
-          <select value={form.procedureModified} onChange={(event) => updateForm({ procedureModified: event.target.value as LessonFormState["procedureModified"] })}>
-            <option value="">Seleccionar...</option>
-            <option value="yes">Si</option>
-            <option value="no">No</option>
-          </select>
-        </label>
+        <SearchableSelect className="field" dataTour="lesson-procedure-choice" label="Modifica procedimiento?" onChange={(value) => updateForm({ procedureModified: value as LessonFormState["procedureModified"] })} options={[{ value: "yes", label: "Si" }, { value: "no", label: "No" }]} placeholder="Seleccionar..." value={form.procedureModified} />
 
         {form.procedureModified === "yes" ? (
           <label className="field" data-tour="lesson-procedure-detail">

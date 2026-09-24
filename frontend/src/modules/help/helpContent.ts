@@ -145,7 +145,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         title: "Antes de comenzar",
         paragraphs: [
-          "El sistema reserva automáticamente un código visible. Completa el registro mientras la reserva está vigente; si vence o falla, utiliza Reintentar reserva.",
+          "Puedes completar el formulario sin límite de tiempo mientras la sesión esté abierta. El sistema asigna el código consecutivo al confirmar el registro.",
         ],
       },
       {

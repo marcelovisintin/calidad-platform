@@ -6,6 +6,7 @@ import { isAdminUser } from "../../../app/access";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
+import { SearchableSelect } from "../../../components/SearchableSelect";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
 const importModeOptions: Array<{ value: UserImportMode; label: string }> = [
@@ -148,16 +149,7 @@ export function UserBulkImportPage() {
             <input accept=".csv,.xlsx" onChange={handleFileChange} required type="file" />
             <small>Columnas: legajo, nombre, apellido, e-mail, usuario, celular. Legajo y celular son opcionales.</small>
           </label>
-          <label className="field">
-            <span>Comportamiento</span>
-            <select onChange={(event) => setMode(event.target.value as UserImportMode)} value={mode}>
-              {importModeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SearchableSelect className="field" clearable={false} label="Comportamiento" onChange={(value) => setMode(value as UserImportMode)} options={importModeOptions} placeholder="Seleccionar..." value={mode} />
           <div className="field user-import-actions">
             <button className="button button-primary" disabled={loading || !file} type="submit">
               {loading ? "Analizando..." : "Analizar archivo"}

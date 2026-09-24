@@ -9,6 +9,7 @@ import { formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
+import { SearchableSelect } from "../../../components/SearchableSelect";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
@@ -435,25 +436,8 @@ export function UserManagementPage() {
                       : "Se mostrara en la etiqueta superior derecha."}
                 </small>
               </label>
-              <label className="field">
-                <span>Nivel de acceso</span>
-                <select name="access_level" onChange={handleInputChange} value={form.access_level}>
-                  {accessLevelOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Sector principal</span>
-                <select name="primary_sector" onChange={handleInputChange} value={form.primary_sector}>
-                  <option value="">Sin asignar</option>
-                  {areas.map((item) => (
-                    <option key={item.id} value={item.id}>{`${item.code} - ${item.name}`}</option>
-                  ))}
-                </select>
-              </label>
+              <SearchableSelect className="field" clearable={false} dataTour="user-access-level" label="Nivel de acceso" onChange={(value) => setForm((current) => ({ ...current, access_level: value }))} options={accessLevelOptions} placeholder="Seleccionar..." value={form.access_level} />
+              <SearchableSelect className="field" label="Sector principal" onChange={(value) => setForm((current) => ({ ...current, primary_sector: value }))} options={areas.map((item) => ({ value: item.id, label: `${item.code} - ${item.name}`, searchTerms: [item.code, item.name] }))} placeholder="Sin asignar" value={form.primary_sector} />
               <div className="field field-span-2 temporary-password-card">
                 <div className="section-head compact">
                   <div>

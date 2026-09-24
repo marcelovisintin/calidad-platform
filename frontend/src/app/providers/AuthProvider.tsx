@@ -7,6 +7,7 @@ import {
   writeStoredSession,
 } from "../../api/http";
 import type { CurrentUser } from "../../api/types";
+import { clearSessionDrafts } from "../sessionDrafts";
 
 type AuthStatus = "loading" | "authenticated" | "anonymous";
 
@@ -28,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setUnauthorizedHandler(() => {
       clearStoredSession();
+      clearSessionDrafts();
       setUser(null);
       setStatus("anonymous");
     });
@@ -72,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // noop
     } finally {
       clearStoredSession();
+      clearSessionDrafts();
       setUser(null);
       setStatus("anonymous");
     }

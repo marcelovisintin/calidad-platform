@@ -8,6 +8,7 @@ import { formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
+import { SearchableSelect } from "../../../components/SearchableSelect";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
@@ -301,9 +302,7 @@ export function CatalogManagementPage() {
               label: "Catalogo",
               active: false,
               content: (
-                <select aria-label="Catalogo" value={entity} onChange={(event) => changeEntity(event.target.value as CatalogEntity)}>
-                  {ENTITY_META.map((option) => <option key={option.key} value={option.key}>{option.title}</option>)}
-                </select>
+                <SearchableSelect ariaLabel="Catalogo" clearable={false} value={entity} onChange={(value) => changeEntity(value as CatalogEntity)} options={ENTITY_META.map((option) => ({ value: option.key, label: option.title }))} placeholder="Catalogo" />
               ),
             },
             {
@@ -360,15 +359,7 @@ export function CatalogManagementPage() {
               </label>
 
               {meta.parentKey ? (
-                <label className="field">
-                  <span>{meta.parentLabel}</span>
-                  <select name="parent_id" onChange={handleInputChange} required value={form.parent_id}>
-                    <option value="">Seleccionar...</option>
-                    {parentOptions.map((option) => (
-                      <option key={option.id} value={option.id}>{`${option.code} - ${option.name}`}</option>
-                    ))}
-                  </select>
-                </label>
+                <SearchableSelect className="field" label={meta.parentLabel} onChange={(value) => setForm((current) => ({ ...current, parent_id: value }))} options={parentOptions.map((option) => ({ value: option.id, label: `${option.code} - ${option.name}`, searchTerms: [option.code, option.name] }))} placeholder="Seleccionar..." required value={form.parent_id} />
               ) : (
                 <div className="field" />
               )}

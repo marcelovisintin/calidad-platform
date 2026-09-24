@@ -11,6 +11,7 @@ import { isAdminUser } from "../../../app/access";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
+import { SearchableSelect } from "../../../components/SearchableSelect";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
@@ -258,19 +259,7 @@ export function UserScopesPage() {
                 </dl>
 
                 <div className="form-grid">
-                  <label className="field">
-                    <span>Nivel de acceso</span>
-                    <select
-                      onChange={(event) => setDraft((current) => ({ ...current, access_level: event.target.value as ScopeDraft["access_level"] }))}
-                      value={draft.access_level}
-                    >
-                      {options.access_levels.map((item) => (
-                        <option key={item.value} value={item.value}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <SearchableSelect className="field" clearable={false} label="Nivel de acceso" onChange={(value) => setDraft((current) => ({ ...current, access_level: value as ScopeDraft["access_level"] }))} options={options.access_levels} placeholder="Seleccionar..." value={draft.access_level} />
                 </div>
 
                 <section className="form-section nested-form">

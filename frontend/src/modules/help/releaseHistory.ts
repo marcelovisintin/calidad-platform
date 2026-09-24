@@ -13,6 +13,15 @@ export type ReleaseHistoryEntry = {
 
 const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
   {
+    version: "1.0.0",
+    date: "2026-09-24",
+    status: "production",
+    statusLabel: "Despliegue autorizado del sistema",
+    summary: ["Despliegue autorizado del sistema el 24/09/2026."],
+    commit: "0919ca3",
+    responsible: "Marcelo",
+  },
+  {
     version: "release-2026-08-28.2",
     date: "2026-08-28",
     status: "versioned",

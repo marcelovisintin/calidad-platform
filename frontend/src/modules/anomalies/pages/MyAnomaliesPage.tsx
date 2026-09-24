@@ -11,6 +11,7 @@ import { formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
+import { SearchableSelect } from "../../../components/SearchableSelect";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
@@ -356,10 +357,7 @@ export function MyAnomaliesPage() {
             label: "Tipo de desvio",
             active: Boolean(anomalyType),
             content: (
-              <select aria-label="Buscar por tipo de desvio" onChange={(event) => { setAnomalyType(event.target.value); setPage(1); }} value={anomalyType}>
-                <option value="">Todos los tipos de desvio</option>
-                {anomalyTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
-              </select>
+              <SearchableSelect ariaLabel="Buscar por tipo de desvio" onChange={(value) => { setAnomalyType(value); setPage(1); }} options={anomalyTypes.map((type) => ({ value: type.id, label: type.name }))} placeholder="Todos los tipos de desvio" value={anomalyType} />
             ),
           },
         ]}
@@ -407,19 +405,18 @@ export function MyAnomaliesPage() {
                   {adminUser ? (
                     <div className="anomaly-classification-control">
                       <span>Revision de hallazgos</span>
-                      <select
-                        aria-label={`Revision de hallazgos de ${item.code}`}
+                      <SearchableSelect
+                        ariaLabel={`Revision de hallazgos de ${item.code}`}
                         disabled={disableClassificationSelect}
-                        onChange={(event) => handleClassificationChange(item.id, event.target.value, canModifyClassification)}
+                        onChange={(value) => handleClassificationChange(item.id, value, canModifyClassification)}
+                        options={criteria.map((criterion) => ({
+                          value: criterion.id,
+                          label: `${criterion.name}${criterionIsImprovementOpportunity(criterion) ? " (próximamente)" : ""}`,
+                          disabled: criterionIsImprovementOpportunity(criterion),
+                        }))}
+                        placeholder="Seleccionar..."
                         value={pendingForItem?.severityId || item.severity?.id || ""}
-                      >
-                        <option value="">Seleccionar...</option>
-                        {criteria.map((criterion) => (
-                          <option disabled={criterionIsImprovementOpportunity(criterion)} key={criterion.id} value={criterion.id}>
-                            {criterion.name}{criterionIsImprovementOpportunity(criterion) ? " (próximamente)" : ""}
-                          </option>
-                        ))}
-                      </select>
+                      />
 
                       {pendingForItem ? (
                         <form className="form-section compact" onSubmit={handleConfirmClassification}>
@@ -442,23 +439,15 @@ export function MyAnomaliesPage() {
                           ) : (
                             <>
                               {pendingForItem.requiresResponsible ? (
-                                <label className="field">
-                                  <span>Responsable único del tratamiento</span>
-                                  <select
-                                    onChange={(event) =>
-                                      setPendingClassification((current) => current && current.anomalyId === item.id ? { ...current, responsibleId: event.target.value } : current)
-                                    }
-                                    required
-                                    value={pendingForItem.responsibleId}
-                                  >
-                                    <option value="">Seleccionar responsable...</option>
-                                    {users.map((option) => (
-                                      <option key={option.id} value={option.id}>
-                                        {buildUserLabel(option)}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
+                                <SearchableSelect
+                                  className="field"
+                                  label="Responsable único del tratamiento"
+                                  onChange={(value) => setPendingClassification((current) => current && current.anomalyId === item.id ? { ...current, responsibleId: value } : current)}
+                                  options={users.map((option) => ({ value: option.id, label: buildUserLabel(option) }))}
+                                  placeholder="Seleccionar responsable..."
+                                  required
+                                  value={pendingForItem.responsibleId}
+                                />
                               ) : null}
 
                               {pendingForItem.isObservation ? (

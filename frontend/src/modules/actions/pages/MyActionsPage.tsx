@@ -9,6 +9,7 @@ import { formatDate, formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
+import { SearchableSelect } from "../../../components/SearchableSelect";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
@@ -442,14 +443,11 @@ export function MyActionsPage() {
             label: "Estado",
             active: Boolean(statusFilter),
             content: (
-              <select aria-label="Estado" onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }} value={statusFilter}>
-                <option value="">Todos los estados</option>
-                <option value="pending">Pendiente</option>
-                <option value="in_progress">En curso</option>
-                <option value="completed">Completada</option>
-                <option value="cancelled">Cancelada</option>
-                <option value="overdue">Vencida</option>
-              </select>
+              <SearchableSelect ariaLabel="Estado" onChange={(value) => { setStatusFilter(value); setPage(1); }} options={[
+                { value: "pending", label: "Pendiente" }, { value: "in_progress", label: "En curso" },
+                { value: "completed", label: "Completada" }, { value: "cancelled", label: "Cancelada" },
+                { value: "overdue", label: "Vencida" },
+              ]} placeholder="Todos los estados" value={statusFilter} />
             ),
           },
           { id: "completed", label: "Fecha terminada", active: Boolean(completedOn), content: <input aria-label="Fecha terminada" onChange={(event) => { setCompletedOn(event.target.value); setPage(1); }} type="date" value={completedOn} /> },
@@ -458,10 +456,7 @@ export function MyActionsPage() {
             label: "Responsable",
             active: Boolean(responsibleFilter),
             content: (
-              <select aria-label="Responsable" onChange={(event) => { setResponsibleFilter(event.target.value); setPage(1); }} value={responsibleFilter}>
-                <option value="">Todos</option>
-                {(usersData?.results ?? []).map((item) => <option key={item.id} value={item.id}>{getUserLabel(item)}</option>)}
-              </select>
+              <SearchableSelect ariaLabel="Responsable" onChange={(value) => { setResponsibleFilter(value); setPage(1); }} options={(usersData?.results ?? []).map((item) => ({ value: item.id, label: getUserLabel(item) }))} placeholder="Todos" value={responsibleFilter} />
             ),
           },
         ]}
@@ -540,8 +535,8 @@ export function MyActionsPage() {
                 <div className="section-head compact"><h3>Datos de la acción</h3><div className="task-save-controls">{statusEvidenceError ? <span className="inline-form-alert" role="alert">{statusEvidenceError}</span> : null}<button className="button button-primary" disabled={busy || !selectedWorkItem.can_update_status} type="submit">Guardar acción</button></div></div>
                 <div className="form-grid">
                   <label className="field"><span>Acción</span><input disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("title", event.target.value)} required type="text" value={taskDraft.title} /></label>
-                  <label className="field" data-tour="action-state"><span>Estado</span><select disabled={!selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("status", event.target.value as TaskDraft["status"])} value={taskDraft.status}>{getAvailableTaskStatusOptions(selectedWorkItem).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-                  <label className="field"><span>Responsable</span><select disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("responsible", event.target.value)} value={taskDraft.responsible}><option value="">Sin asignar</option>{(usersData?.results ?? []).map((user) => <option key={user.id} value={user.id}>{getUserLabel(user)}</option>)}</select></label>
+                  <SearchableSelect className="field" clearable={false} dataTour="action-state" disabled={!selectedWorkItem.can_update_status} label="Estado" onChange={(value) => handleTaskDraftChange("status", value as TaskDraft["status"])} options={getAvailableTaskStatusOptions(selectedWorkItem)} placeholder="Seleccionar..." value={taskDraft.status} />
+                  <SearchableSelect className="field" disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} label="Responsable" onChange={(value) => handleTaskDraftChange("responsible", value)} options={(usersData?.results ?? []).map((user) => ({ value: user.id, label: getUserLabel(user) }))} placeholder="Sin asignar" value={taskDraft.responsible} />
                   <label className="field"><span>Fecha límite de ejecución</span><input disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("execution_date", event.target.value)} type="date" value={taskDraft.execution_date} /></label>
                 </div>
                 <label className="field"><span>Descripcion</span><textarea disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("description", event.target.value)} rows={3} value={taskDraft.description} /></label>

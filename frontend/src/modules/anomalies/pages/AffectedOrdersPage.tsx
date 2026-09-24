@@ -10,6 +10,7 @@ import { formatDateTime, humanizeToken } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
+import { SearchableSelect } from "../../../components/SearchableSelect";
 import { StatCard } from "../../../components/StatCard";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
@@ -92,19 +93,22 @@ export function AffectedOrdersPage() {
       <TabbedFilters
         actions={(
           <div className="form-actions">
-            <select
-              aria-label="Ordenar listado"
-              data-tour="affected-orders-sort"
-              onChange={(event) => setFilter("ordering", event.target.value)}
+            <SearchableSelect
+              ariaLabel="Ordenar listado"
+              clearable={false}
+              dataTour="affected-orders-sort"
+              onChange={(value) => setFilter("ordering", value)}
+              options={[
+                { value: "-detected_at", label: "Mas recientes" },
+                { value: "detected_at", label: "Mas antiguas" },
+                { value: "type", label: "Tipo de orden" },
+                { value: "number", label: "Numero ascendente" },
+                { value: "-quantity", label: "Mayor cantidad" },
+                { value: "process", label: "Proceso" },
+              ]}
+              placeholder="Ordenar listado"
               value={filters.ordering}
-            >
-              <option value="-detected_at">Mas recientes</option>
-              <option value="detected_at">Mas antiguas</option>
-              <option value="type">Tipo de orden</option>
-              <option value="number">Numero ascendente</option>
-              <option value="-quantity">Mayor cantidad</option>
-              <option value="process">Proceso</option>
-            </select>
+            />
             <button className="button button-secondary" data-tour="affected-orders-export" disabled={exporting} onClick={() => void handleExport()} type="button">
               {exporting ? "Exportando..." : "Exportar CSV"}
             </button>
@@ -124,10 +128,7 @@ export function AffectedOrdersPage() {
             label: "Tipo de orden",
             active: Boolean(filters.orderType),
             content: (
-              <select aria-label="Tipo de orden" onChange={(event) => setFilter("orderType", event.target.value)} value={filters.orderType}>
-                <option value="">Todos</option>
-                {catalogs?.orderTypes.map((item) => <option key={item.id} value={item.id}>{`${item.code} - ${item.name}`}</option>)}
-              </select>
+              <SearchableSelect ariaLabel="Tipo de orden" onChange={(value) => setFilter("orderType", value)} options={(catalogs?.orderTypes ?? []).map((item) => ({ value: item.id, label: `${item.code} - ${item.name}`, searchTerms: [item.code, item.name] }))} placeholder="Todos" value={filters.orderType} />
             ),
           },
           {
@@ -147,10 +148,7 @@ export function AffectedOrdersPage() {
             label: "Proceso",
             active: Boolean(filters.area),
             content: (
-              <select aria-label="Proceso" onChange={(event) => setFilter("area", event.target.value)} value={filters.area}>
-                <option value="">Todos</option>
-                {catalogs?.areas.map((item) => <option key={item.id} value={item.id}>{`${item.code} - ${item.name}`}</option>)}
-              </select>
+              <SearchableSelect ariaLabel="Proceso" onChange={(value) => setFilter("area", value)} options={(catalogs?.areas ?? []).map((item) => ({ value: item.id, label: `${item.code} - ${item.name}`, searchTerms: [item.code, item.name] }))} placeholder="Todos" value={filters.area} />
             ),
           },
           {
@@ -169,10 +167,7 @@ export function AffectedOrdersPage() {
             label: "Estado",
             active: Boolean(filters.status),
             content: (
-              <select aria-label="Estado de anomalia" onChange={(event) => setFilter("status", event.target.value)} value={filters.status}>
-                <option value="">Todos</option>
-                {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{humanizeToken(status)}</option>)}
-              </select>
+              <SearchableSelect ariaLabel="Estado de anomalia" onChange={(value) => setFilter("status", value)} options={STATUS_OPTIONS.map((status) => ({ value: status, label: humanizeToken(status) }))} placeholder="Todos" value={filters.status} />
             ),
           },
           {

@@ -9,6 +9,7 @@ import { formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
+import { SearchableSelect } from "../../../components/SearchableSelect";
 import { StatCard } from "../../../components/StatCard";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
@@ -248,10 +249,7 @@ export function IndicatorDashboardPage() {
             label: "Proceso",
             active: Boolean(filters.area),
             content: (
-              <select aria-label="Proceso" onChange={(event) => setFilter("area", event.target.value)} value={filters.area}>
-                <option value="">Todos los procesos</option>
-                {catalogs?.areas.map((area) => <option key={area.id} value={area.id}>{`${area.code} - ${area.name}`}</option>)}
-              </select>
+              <SearchableSelect ariaLabel="Proceso" onChange={(value) => setFilter("area", value)} options={(catalogs?.areas ?? []).map((area) => ({ value: area.id, label: `${area.code} - ${area.name}`, searchTerms: [area.code, area.name] }))} placeholder="Todos los procesos" value={filters.area} />
             ),
           },
           ...(indicatorKey === "repetition-pareto" ? [{
@@ -259,14 +257,11 @@ export function IndicatorDashboardPage() {
             label: "Agrupacion",
             active: filters.groupBy !== "process_type",
             content: (
-              <select aria-label="Agrupacion de Pareto" onChange={(event) => setFilter("groupBy", event.target.value)} value={filters.groupBy}>
-                <option value="process_type">Proceso y tipo</option>
-                <option value="process">Proceso</option>
-                <option value="type">Tipo de anomalia</option>
-                <option value="origin">Origen / imputacion</option>
-                <option value="classification">Clasificacion</option>
-                <option value="order">Orden afectada</option>
-              </select>
+              <SearchableSelect ariaLabel="Agrupacion de Pareto" clearable={false} dataTour="indicator-grouping" onChange={(value) => setFilter("groupBy", value)} options={[
+                { value: "process_type", label: "Proceso y tipo" }, { value: "process", label: "Proceso" },
+                { value: "type", label: "Tipo de anomalia" }, { value: "origin", label: "Origen / imputacion" },
+                { value: "classification", label: "Clasificacion" }, { value: "order", label: "Orden afectada" },
+              ]} placeholder="Agrupacion" value={filters.groupBy} />
             ),
           }] : []),
         ]}

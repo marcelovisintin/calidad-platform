@@ -1,9 +1,12 @@
 ﻿import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createAnomaly, reserveAnomalyCode, uploadAnomalyAttachment } from "../../../api/anomalies";
+import { createAnomaly, uploadAnomalyAttachment } from "../../../api/anomalies";
 import { fetchCatalogBootstrap } from "../../../api/catalog";
-import type { AffectedOrderInput, AnomalyCodeReservation, CatalogBootstrap } from "../../../api/types";
+import type { AffectedOrderInput, CatalogBootstrap } from "../../../api/types";
+import { newAnomalyDraftKey } from "../../../app/sessionDrafts";
+import { useAuth } from "../../../app/providers/AuthProvider";
 import { toOffsetIso } from "../../../app/utils";
+import { SearchableSelect } from "../../../components/SearchableSelect";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
@@ -16,6 +19,23 @@ type AffectedOrderFormRow = {
   order_type: string;
   number: string;
   quantity: string;
+};
+
+type NewAnomalyFormState = {
+  title: string;
+  description: string;
+  site: string;
+  area: string;
+  imputed_area: string;
+  anomaly_type: string;
+  anomaly_origin: string;
+  priority: string;
+  detected_at: string;
+};
+
+type NewAnomalyDraft = {
+  form: NewAnomalyFormState;
+  affectedOrders: AffectedOrderFormRow[];
 };
 
 type SelectedEvidenceFileProps = {
@@ -62,31 +82,72 @@ function nowAsLocalDateTime() {
   return `${year}-${month}-${day}T${hh}:${mm}`;
 }
 
-export function NewAnomalyPage() {
-  usePageTitle("Nueva anomalia");
-  const navigate = useNavigate();
-  const { data: bootstrap, loading, error, reload } = useAsyncTask<CatalogBootstrap>(fetchCatalogBootstrap, []);
-  const {
-    data: codeReservation,
-    loading: codeReservationLoading,
-    error: codeReservationError,
-    reload: reloadCodeReservation,
-  } = useAsyncTask<AnomalyCodeReservation>(reserveAnomalyCode, []);
-  const [form, setForm] = useState({
+function createInitialForm(bootstrap?: CatalogBootstrap | null): NewAnomalyFormState {
+  return {
     title: "",
     description: "",
     site: "",
     area: "",
     imputed_area: "",
     anomaly_type: "",
-    anomaly_origin: "",
-    priority: "",
+    anomaly_origin: bootstrap?.anomalyOrigins[0]?.id || "",
+    priority: bootstrap?.priorities[0]?.id || "",
     detected_at: nowAsLocalDateTime(),
-  });
+  };
+}
+
+function readNewAnomalyDraft(userId: string): NewAnomalyDraft | null {
+  try {
+    const raw = window.sessionStorage.getItem(newAnomalyDraftKey(userId));
+    if (!raw) {
+      return null;
+    }
+    const candidate = JSON.parse(raw) as Partial<NewAnomalyDraft>;
+    const form = candidate.form;
+    const affectedOrders = candidate.affectedOrders;
+    if (
+      !form
+      || Object.values(form).some((value) => typeof value !== "string")
+      || !Array.isArray(affectedOrders)
+      || affectedOrders.some((row) =>
+        !row
+        || typeof row.id !== "string"
+        || typeof row.order_type !== "string"
+        || typeof row.number !== "string"
+        || typeof row.quantity !== "string"
+      )
+    ) {
+      window.sessionStorage.removeItem(newAnomalyDraftKey(userId));
+      return null;
+    }
+    return { form: form as NewAnomalyFormState, affectedOrders };
+  } catch {
+    window.sessionStorage.removeItem(newAnomalyDraftKey(userId));
+    return null;
+  }
+}
+
+export function NewAnomalyPage() {
+  usePageTitle("Nueva anomalia");
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { data: bootstrap, loading, error, reload } = useAsyncTask<CatalogBootstrap>(fetchCatalogBootstrap, []);
+  const initialDraft = useMemo(() => (user ? readNewAnomalyDraft(user.id) : null), [user?.id]);
+  const [form, setForm] = useState<NewAnomalyFormState>(() => initialDraft?.form ?? createInitialForm());
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
-  const [affectedOrders, setAffectedOrders] = useState<AffectedOrderFormRow[]>([createAffectedOrderRow()]);
+  const [affectedOrders, setAffectedOrders] = useState<AffectedOrderFormRow[]>(
+    () => initialDraft?.affectedOrders.length ? initialDraft.affectedOrders : [createAffectedOrderRow()],
+  );
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+    const draft: NewAnomalyDraft = { form, affectedOrders };
+    window.sessionStorage.setItem(newAnomalyDraftKey(user.id), JSON.stringify(draft));
+  }, [affectedOrders, form, user?.id]);
 
   useEffect(() => {
     if (!bootstrap) {
@@ -135,6 +196,10 @@ export function NewAnomalyPage() {
 
   const handleChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = event.target;
+    handleFieldValueChange(name as keyof NewAnomalyFormState, value);
+  };
+
+  const handleFieldValueChange = (name: keyof NewAnomalyFormState, value: string) => {
     setForm((current) => {
       if (name === "area") {
         const selectedArea = availableAreas.find((item) => item.id === value);
@@ -169,6 +234,19 @@ export function NewAnomalyPage() {
 
   const handleClearEvidence = () => {
     setEvidenceFiles([]);
+  };
+
+  const handleDiscardDraft = () => {
+    if (!window.confirm("Se eliminaran los datos y archivos cargados en este formulario.")) {
+      return;
+    }
+    if (user) {
+      window.sessionStorage.removeItem(newAnomalyDraftKey(user.id));
+    }
+    setForm(createInitialForm(bootstrap));
+    setAffectedOrders([createAffectedOrderRow()]);
+    setEvidenceFiles([]);
+    setSubmitError(null);
   };
 
   const handleAffectedOrderChange = (rowId: string, field: "order_type" | "number" | "quantity", value: string) => {
@@ -232,7 +310,6 @@ export function NewAnomalyPage() {
         priority: form.priority || undefined,
         detected_at: toOffsetIso(form.detected_at),
         affected_orders: affectedOrdersPayload,
-        code_reservation_id: codeReservation?.id,
       });
 
       let attachmentWarning: string | null = null;
@@ -254,6 +331,9 @@ export function NewAnomalyPage() {
         }
       }
 
+      if (user) {
+        window.sessionStorage.removeItem(newAnomalyDraftKey(user.id));
+      }
       window.sessionStorage.setItem(CREATED_ANOMALY_KEY, JSON.stringify(response));
       navigate("/anomalies/created", { state: { anomaly: response, attachmentWarning } });
     } catch (err) {
@@ -273,12 +353,8 @@ export function NewAnomalyPage() {
         </div>
         <div className="form-hero-card">
           <span className="stat-label">Codigo visible</span>
-          <strong>{codeReservationLoading ? "Reservando..." : codeReservation?.code || "Sin reserva"}</strong>
-          <p>
-            {codeReservation
-              ? "Codigo reservado para esta carga. No se comparte con otros usuarios mientras completas el registro."
-              : "No se pudo reservar el codigo automaticamente. Reintenta para continuar."}
-          </p>
+          <strong>Se asignara al registrar</strong>
+          <p>Podes completar la carga sin limite de tiempo. Los campos quedan guardados en esta pestaña mientras la sesion este abierta.</p>
         </div>
       </header>
 
@@ -299,16 +375,6 @@ export function NewAnomalyPage() {
         </div>
       ) : null}
 
-      {codeReservationError ? (
-        <div className="panel warning">
-          <strong>No se pudo reservar el codigo visible.</strong>
-          <p>{codeReservationError}</p>
-          <button className="button button-secondary" onClick={() => void reloadCodeReservation()} type="button">
-            Reintentar reserva
-          </button>
-        </div>
-      ) : null}
-
       <form className="panel form-grid anomaly-form anomaly-form-compact" onSubmit={handleSubmit}>
         <section className="form-section field-span-2">
           <div className="section-head compact">
@@ -320,37 +386,41 @@ export function NewAnomalyPage() {
           </div>
 
           <div className="form-grid compact-form-grid">
-            <label className="field">
-              <span>Elaborado por:</span>
-              <select autoFocus disabled={!catalogsReady} name="area" onChange={handleChange} required value={form.area}>
-                <option value="">Seleccionar</option>
-                {availableAreas.map((item) => (
-                  <option key={`affected-area-${item.id}`} value={item.id}>{`${item.code} - ${item.name}`}</option>
-                ))}
-              </select>
-            </label>
+            <SearchableSelect
+              autoFocus
+              className="field"
+              disabled={!catalogsReady}
+              dataTour="anomaly-area"
+              label="Elaborado por:"
+              onChange={(value) => handleFieldValueChange("area", value)}
+              options={availableAreas.map((item) => ({ value: item.id, label: `${item.code} - ${item.name}`, searchTerms: [item.code, item.name] }))}
+              required
+              value={form.area}
+            />
             <label className="field">
               <span>Fecha y hora</span>
               <input name="detected_at" onChange={handleChange} required type="datetime-local" value={form.detected_at} />
             </label>
-            <label className="field">
-              <span>Asignado a</span>
-              <select disabled={!catalogsReady} name="imputed_area" onChange={handleChange} required value={form.imputed_area}>
-                <option value="">Seleccionar</option>
-                {availableAreas.map((item) => (
-                  <option key={`imputed-area-${item.id}`} value={item.id}>{`${item.code} - ${item.name}`}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Tipo de desvio</span>
-              <select disabled={!catalogsReady} name="anomaly_type" onChange={handleChange} required value={form.anomaly_type}>
-                <option value="">Seleccionar</option>
-                {bootstrap?.anomalyTypes.map((item) => (
-                  <option key={item.id} value={item.id}>{item.name}</option>
-                ))}
-              </select>
-            </label>
+            <SearchableSelect
+              className="field"
+              disabled={!catalogsReady}
+              dataTour="anomaly-imputed-area"
+              label="Asignado a"
+              onChange={(value) => handleFieldValueChange("imputed_area", value)}
+              options={availableAreas.map((item) => ({ value: item.id, label: `${item.code} - ${item.name}`, searchTerms: [item.code, item.name] }))}
+              required
+              value={form.imputed_area}
+            />
+            <SearchableSelect
+              className="field"
+              disabled={!catalogsReady}
+              dataTour="anomaly-type"
+              label="Tipo de desvio"
+              onChange={(value) => handleFieldValueChange("anomaly_type", value)}
+              options={(bootstrap?.anomalyTypes ?? []).map((item) => ({ value: item.id, label: item.name }))}
+              required
+              value={form.anomaly_type}
+            />
           </div>
         </section>
 
@@ -391,21 +461,17 @@ export function NewAnomalyPage() {
                   const rowActive = Boolean(row.order_type || row.number.trim() || row.quantity);
                   return (
                     <div className="affected-order-form-row" key={row.id}>
-                      <label className="field">
-                        <span>Tipo de orden</span>
-                        <select
-                          aria-label={`Tipo de orden ${index + 1}`}
-                          disabled={!bootstrap?.orderTypes.length}
-                          onChange={(event) => handleAffectedOrderChange(row.id, "order_type", event.target.value)}
-                          required={rowActive}
-                          value={row.order_type}
-                        >
-                          <option value="">No aplica / Sin orden</option>
-                          {bootstrap?.orderTypes.map((item) => (
-                            <option key={item.id} value={item.id}>{`${item.code} - ${item.name}`}</option>
-                          ))}
-                        </select>
-                      </label>
+                      <SearchableSelect
+                        ariaLabel={`Tipo de orden ${index + 1}`}
+                        className="field"
+                        disabled={!bootstrap?.orderTypes.length}
+                        label="Tipo de orden"
+                        onChange={(value) => handleAffectedOrderChange(row.id, "order_type", value)}
+                        options={(bootstrap?.orderTypes ?? []).map((item) => ({ value: item.id, label: `${item.code} - ${item.name}`, searchTerms: [item.code, item.name] }))}
+                        placeholder="No aplica / Sin orden"
+                        required={rowActive}
+                        value={row.order_type}
+                      />
                       <label className="field">
                         <span>{selectedType ? `Nro. de ${selectedType.code}` : "Nro. de orden"}</span>
                         <input
@@ -467,6 +533,7 @@ export function NewAnomalyPage() {
                   ? `${evidenceFiles.length} archivo(s) listo(s) para adjuntar. Podes seleccionar mas de una vez para acumular archivos.`
                   : "Opcional: imagenes, PDF, Word, Excel o texto."}
               </small>
+              <small className="muted-copy">Los archivos seleccionados permanecen mientras no recargues ni cierres esta pantalla.</small>
               {evidenceFiles.length ? (
                 <div className="stack-list compact">
                   {evidenceFiles.map((file, index) => (
@@ -494,7 +561,10 @@ export function NewAnomalyPage() {
             <span>Se guardara con codigo, estado inicial y confirmacion inmediata.</span>
           </div>
           <div className="form-actions">
-            <button className="button button-primary button-large" disabled={submitting || !catalogsReady || codeReservationLoading || !codeReservation} type="submit">
+            <button className="button button-secondary" disabled={submitting} onClick={handleDiscardDraft} type="button">
+              Descartar carga
+            </button>
+            <button className="button button-primary button-large" disabled={submitting || !catalogsReady} type="submit">
               {submitting ? "Registrando..." : "Registrar anomalia"}
             </button>
           </div>
