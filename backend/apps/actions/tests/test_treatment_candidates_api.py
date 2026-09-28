@@ -898,6 +898,29 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.treatment_one.refresh_from_db()
         self.assertIsNone(self.treatment_one.convocation_confirmed_at)
 
+    def test_convocation_rejects_a_date_before_today(self):
+        TreatmentParticipant.objects.create(
+            treatment=self.treatment_one,
+            user=self.reporter_two,
+            role="convoked",
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+
+        response = self.client.post(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/confirm-convocation/",
+            {
+                "scheduled_for": (timezone.now() - timedelta(days=1)).isoformat(),
+                "treatment_location": "Sala de Calidad",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("scheduled_for", response.data)
+        self.treatment_one.refresh_from_db()
+        self.assertIsNone(self.treatment_one.convocation_confirmed_at)
+
     def test_convocation_requires_scheduled_date_and_time(self):
         TreatmentParticipant.objects.create(
             treatment=self.treatment_one,

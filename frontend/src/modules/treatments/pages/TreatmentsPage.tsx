@@ -385,6 +385,7 @@ export function TreatmentsPage() {
   const treatmentClosed = Boolean(selectedTreatment?.is_locked);
   const treatmentLocked = treatmentClosed || !selectedTreatment?.can_manage;
   const convocationConfirmed = Boolean(selectedTreatment?.convocation_confirmed_at);
+  const minimumScheduledFor = `${toDateTimeLocalValue(new Date().toISOString()).slice(0, 10)}T00:00`;
   const canAddLateParticipant = Boolean(
     convocationConfirmed
       && selectedTreatment?.can_add_late_participant
@@ -529,6 +530,10 @@ export function TreatmentsPage() {
     }
     if (!scheduledFor) {
       setFormError("Debe indicar la fecha y hora programada.");
+      return;
+    }
+    if (scheduledFor.slice(0, 10) < minimumScheduledFor.slice(0, 10)) {
+      setFormError("La fecha del tratamiento no puede ser anterior a la fecha actual.");
       return;
     }
     if (!treatmentLocation.trim()) {
@@ -1125,6 +1130,7 @@ return (
                           <input
                             name="scheduled_for"
                             disabled={agendaFieldsDisabled}
+                            min={minimumScheduledFor}
                             onChange={(event) => setScheduledFor(event.target.value)}
                             type="datetime-local"
                             required

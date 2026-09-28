@@ -341,7 +341,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         steps: [
           "Revisa primero el alcance: la anomalía de origen y las anomalías asociadas al tratamiento.",
           "Consulta la fecha límite y el comentario definidos al crear el tratamiento.",
-          "Define fecha y hora programada y, si corresponde, el lugar.",
+          "Define fecha y hora programada y, si corresponde, el lugar. La fecha no puede ser anterior a la fecha actual.",
           "Agrega todos los usuarios convocados necesarios.",
           "Pulsa Guardar agenda y confirma la pregunta de seguridad.",
         ],

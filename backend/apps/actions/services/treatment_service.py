@@ -1867,6 +1867,15 @@ def confirm_treatment_convocation(
         )
     if not scheduled_for:
         raise ValidationError({"scheduled_for": "Debe indicar la fecha y hora programada."})
+    scheduled_date = (
+        timezone.localtime(scheduled_for).date()
+        if timezone.is_aware(scheduled_for)
+        else scheduled_for.date()
+    )
+    if scheduled_date < timezone.localdate():
+        raise ValidationError(
+            {"scheduled_for": "La fecha del tratamiento no puede ser anterior a la fecha actual."}
+        )
     normalized_treatment_location = (treatment_location or "").strip()
     if not normalized_treatment_location:
         raise ValidationError({"treatment_location": "Debe indicar el lugar de tratamiento."})
