@@ -345,7 +345,7 @@ export const HELP_TOPICS: HelpTopic[] = [
           "Agrega todos los usuarios convocados necesarios.",
           "Pulsa Guardar agenda y confirma la pregunta de seguridad.",
         ],
-        note: "La composición es informativa y no se modifica desde Tratamientos. Las asociaciones se realizan exclusivamente desde Seguimiento de anomalías por Administrador o Desarrollador. Después de confirmar la convocatoria se bloquean la agenda y los convocados, y se generan los avisos.",
+        note: "La composición es informativa y no se modifica desde Tratamientos. Las asociaciones se realizan exclusivamente desde Seguimiento de anomalías por Administrador o Desarrollador. Después de confirmar la convocatoria se bloquean la agenda y los convocados iniciales, y se generan los avisos. El responsable del tratamiento puede incorporar posteriormente un asistente con motivo registrado.",
       },
       {
         title: "Vista 2 — Análisis",

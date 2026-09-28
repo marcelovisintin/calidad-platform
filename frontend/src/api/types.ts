@@ -460,6 +460,7 @@ export interface TreatmentParticipant {
   user?: UserSummary | null;
   role: string;
   note?: string;
+  added_after_convocation: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -713,6 +714,7 @@ export interface TreatmentSummary {
   };
   is_locked?: boolean;
   can_manage: boolean;
+  can_add_late_participant: boolean;
   can_validate_effectiveness: boolean;
   learned_lesson?: TreatmentLearnedLesson | null;
   primary_anomaly: TreatmentAnomalySummary;

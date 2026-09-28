@@ -1,6 +1,7 @@
 import { ChangeEvent, FormEvent, MouseEvent, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
+  addLateTreatmentParticipant,
   addTreatmentParticipant,
   addTreatmentRootCause,
   addTreatmentTask,
@@ -186,6 +187,9 @@ export function TreatmentsPage() {
   const [participantUserId, setParticipantUserId] = useState("");
   const [participantAreaId, setParticipantAreaId] = useState("");
   const [participantNote, setParticipantNote] = useState("");
+  const [lateParticipantUserId, setLateParticipantUserId] = useState("");
+  const [lateParticipantAreaId, setLateParticipantAreaId] = useState("");
+  const [lateParticipantReason, setLateParticipantReason] = useState("");
 
   const [rootCauseDescription, setRootCauseDescription] = useState("");
 
@@ -273,6 +277,9 @@ export function TreatmentsPage() {
       setTreatmentEvidenceNote("");
       setTaskEvidenceFile(null);
       setTaskEvidenceNote("");
+      setLateParticipantUserId("");
+      setLateParticipantAreaId("");
+      setLateParticipantReason("");
       setTreatmentEvidenceInputKey((current) => current + 1);
       setTaskEvidenceInputKey((current) => current + 1);
       return;
@@ -324,6 +331,13 @@ export function TreatmentsPage() {
     }
     return users.filter((user) => user.sector?.id === participantAreaId);
   }, [participantAreaId, supportData?.users]);
+  const lateParticipantUserOptions = useMemo(() => {
+    const users = supportData?.users ?? [];
+    if (!lateParticipantAreaId) {
+      return users;
+    }
+    return users.filter((user) => user.sector?.id === lateParticipantAreaId);
+  }, [lateParticipantAreaId, supportData?.users]);
 
   useEffect(() => {
     if (!participantUserOptions.length) {
@@ -337,6 +351,17 @@ export function TreatmentsPage() {
 
     setParticipantUserId(participantUserOptions[0].id);
   }, [participantUserId, participantUserOptions]);
+
+  useEffect(() => {
+    if (!lateParticipantUserOptions.length) {
+      setLateParticipantUserId("");
+      return;
+    }
+    if (lateParticipantUserId && lateParticipantUserOptions.some((user) => user.id === lateParticipantUserId)) {
+      return;
+    }
+    setLateParticipantUserId(lateParticipantUserOptions[0].id);
+  }, [lateParticipantUserId, lateParticipantUserOptions]);
 
   const hasEffectivenessAssignment = Boolean(effectivenessEvaluationDate) && Boolean(effectivenessResponsibleId);
   const savedEffectivenessDate = selectedTreatment?.effectiveness_evaluation_date || "";
@@ -360,6 +385,11 @@ export function TreatmentsPage() {
   const treatmentClosed = Boolean(selectedTreatment?.is_locked);
   const treatmentLocked = treatmentClosed || !selectedTreatment?.can_manage;
   const convocationConfirmed = Boolean(selectedTreatment?.convocation_confirmed_at);
+  const canAddLateParticipant = Boolean(
+    convocationConfirmed
+      && selectedTreatment?.can_add_late_participant
+      && ["scheduled", "in_progress"].includes(selectedTreatment.status),
+  );
   const hasConvokedUsers = Boolean(
     selectedTreatment?.participants.some((participant) => participant.role !== "owner"),
   );
@@ -555,6 +585,28 @@ export function TreatmentsPage() {
     await runMutation(async () => {
       await removeTreatmentParticipant(selectedTreatment.id, participantId);
     }, "Usuario eliminado de la convocatoria.");
+  };
+
+  const handleAddLateParticipant = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedTreatment || !lateParticipantUserId) {
+      return;
+    }
+    if (!canAddLateParticipant) {
+      setFormError("Solo el responsable asignado puede incorporar asistentes posteriores en un tratamiento programado o en curso.");
+      return;
+    }
+    if (!lateParticipantReason.trim()) {
+      setFormError("Debe indicar el motivo de incorporacion posterior.");
+      return;
+    }
+    await runMutation(async () => {
+      await addLateTreatmentParticipant(selectedTreatment.id, {
+        user: lateParticipantUserId,
+        reason: lateParticipantReason.trim(),
+      });
+      setLateParticipantReason("");
+    }, "Asistente incorporado y notificado con la agenda confirmada.");
   };
 
   const handleSaveAnalysis = async (event: FormEvent<HTMLFormElement>) => {
@@ -1033,7 +1085,7 @@ return (
                         </label>
 
                         <div className="stack-list compact">
-                          {selectedTreatment.participants.map((participant) => (
+                          {selectedTreatment.participants.filter((participant) => !participant.added_after_convocation).map((participant) => (
                             <div className="list-card compact" key={participant.id}>
                               <div>
                                 <strong>{participant.user?.full_name || participant.user?.username || "Usuario"}</strong>
@@ -1108,6 +1160,48 @@ return (
                           </div>
                         ) : null}
                       </form>
+
+                      {convocationConfirmed ? (
+                        <form className="form-section" data-tour="treatment-late-participants" onSubmit={handleAddLateParticipant}>
+                          <div className="section-head compact">
+                            <div>
+                              <h3>Incorporar asistente posterior</h3>
+                              <small>El responsable del tratamiento puede sumar un asistente con motivo registrado.</small>
+                            </div>
+                            <button className="button button-primary" disabled={busy || !canAddLateParticipant || !lateParticipantUserId || !lateParticipantReason.trim()} type="submit">
+                              Incorporar asistente
+                            </button>
+                          </div>
+                          {canAddLateParticipant ? (
+                            <>
+                              <div className="form-grid">
+                                <SearchableSelect className="field" label="Area" onChange={setLateParticipantAreaId} options={participantAreaOptions.map((area) => ({ value: area.id, label: area.name }))} placeholder="Todas las areas" value={lateParticipantAreaId} />
+                                <SearchableSelect className="field" clearable={false} label="Usuario" onChange={setLateParticipantUserId} options={lateParticipantUserOptions.map((user) => ({ value: user.id, label: buildUsersLabel(user) }))} placeholder="Seleccionar usuario..." value={lateParticipantUserId} />
+                              </div>
+                              <label className="field">
+                                <span>Motivo de incorporacion posterior</span>
+                                <textarea name="late_participant_reason" onChange={(event) => setLateParticipantReason(event.target.value)} required rows={3} value={lateParticipantReason} />
+                              </label>
+                            </>
+                          ) : (
+                            <div className="panel info compact-inline-panel">
+                              <p>Solo el responsable asignado puede incorporar asistentes posteriores. Esta accion esta disponible mientras el tratamiento este programado o en curso.</p>
+                            </div>
+                          )}
+                          <div className="stack-list compact">
+                            {selectedTreatment.participants.filter((participant) => participant.added_after_convocation).map((participant) => (
+                              <div className="list-card compact" key={participant.id}>
+                                <div>
+                                  <strong>{participant.user?.full_name || participant.user?.username || "Usuario"}</strong>
+                                  <p>Motivo: {participant.note || "Sin motivo registrado"}</p>
+                                </div>
+                                <StatusBadge compact value="Incorporado posteriormente" />
+                              </div>
+                            ))}
+                            {!selectedTreatment.participants.some((participant) => participant.added_after_convocation) ? <p className="muted-copy">Todavia no hay asistentes incorporados posteriormente.</p> : null}
+                          </div>
+                        </form>
+                      ) : null}
 
                       <section className="form-section" data-tour="treatment-anomaly-evidence">
                         <div className="section-head compact">

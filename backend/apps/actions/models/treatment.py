@@ -157,6 +157,7 @@ class TreatmentParticipant(AuditBaseModel):
     user = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="treatment_participations")
     role = models.CharField(max_length=20, choices=TreatmentParticipantRole.choices, default=TreatmentParticipantRole.CONVOKED)
     note = models.TextField(blank=True)
+    added_after_convocation = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "Participante de tratamiento"

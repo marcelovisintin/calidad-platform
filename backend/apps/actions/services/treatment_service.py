@@ -98,6 +98,14 @@ def can_manage_treatment(user, treatment: Treatment) -> bool:
     return responsible_id == user_id
 
 
+def can_add_late_treatment_participant(user, treatment: Treatment) -> bool:
+    """Only the explicitly assigned treatment responsible may add a late attendee."""
+    return bool(
+        treatment.responsible_id
+        and treatment.responsible_id == getattr(user, "id", None)
+    )
+
+
 def can_update_treatment_task(user, treatment_task: TreatmentTask) -> bool:
     if can_execute_assignment(user, treatment_task.responsible_id):
         return True
@@ -1943,6 +1951,68 @@ def add_treatment_participant(*, treatment: Treatment, participant_user, role: s
             f"Se agrega al usuario {participant_user.username} a la convocatoria de {locked_treatment.code}."
             if created
             else f"Se actualiza la convocatoria de {participant_user.username} en {locked_treatment.code}."
+        ),
+    )
+    return participant
+
+
+@transaction.atomic
+def add_late_treatment_participant(
+    *, treatment: Treatment, participant_user, reason: str, user, request_id: str = ""
+) -> TreatmentParticipant:
+    locked_treatment = Treatment.objects.select_for_update().get(pk=treatment.pk)
+    if not can_add_late_treatment_participant(user, locked_treatment):
+        raise PermissionDenied(
+            "Solo el responsable asignado del tratamiento puede incorporar un asistente posterior."
+        )
+    ensure_treatment_is_editable(locked_treatment)
+    if not locked_treatment.convocation_confirmed_at:
+        raise ValidationError({"convocation": "Primero debe confirmar la convocatoria original."})
+    if locked_treatment.status not in {TreatmentStatus.SCHEDULED, TreatmentStatus.IN_PROGRESS}:
+        raise ValidationError(
+            {"participant": "Solo puede incorporar asistentes posteriores en tratamientos programados o en curso."}
+        )
+
+    normalized_reason = (reason or "").strip()
+    if not normalized_reason:
+        raise ValidationError({"reason": "Debe indicar el motivo de incorporacion posterior."})
+    if TreatmentParticipant.objects.filter(treatment=locked_treatment, user=participant_user).exists():
+        raise ValidationError({"user": "El usuario ya forma parte de la convocatoria del tratamiento."})
+
+    participant = TreatmentParticipant.objects.create(
+        treatment=locked_treatment,
+        user=participant_user,
+        role=TreatmentParticipantRole.CONVOKED,
+        note=normalized_reason,
+        added_after_convocation=True,
+        created_by=user,
+        updated_by=user,
+    )
+    notify_treatment_participant_invited(
+        treatment=locked_treatment,
+        participant=participant,
+        actor=user,
+        request_id=request_id,
+    )
+    record_audit_event(
+        entity=locked_treatment,
+        action="treatment.late_participant_added",
+        actor=user,
+        after_data={
+            "participant_id": str(participant.pk),
+            "user_id": str(participant_user.pk),
+            "reason": normalized_reason,
+            "scheduled_for": locked_treatment.scheduled_for.isoformat() if locked_treatment.scheduled_for else "",
+            "treatment_location": locked_treatment.treatment_location,
+        },
+        request_id=_request_id(request_id),
+    )
+    _register_history_for_treatment(
+        treatment=locked_treatment,
+        user=user,
+        comment=(
+            f"El responsable incorpora posteriormente a {participant_user.username} a la convocatoria "
+            f"de {locked_treatment.code}. Motivo: {normalized_reason}"
         ),
     )
     return participant

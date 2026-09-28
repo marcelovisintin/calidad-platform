@@ -823,6 +823,36 @@ class TreatmentCandidatesApiTests(APITestCase):
             ).exists()
         )
 
+        late_response = self.client.post(
+            f"/api/v1/actions/treatments/{treatment_id}/late-participants/",
+            {
+                "user": str(self.other_task_user.pk),
+                "reason": "Se requiere su conocimiento tecnico al iniciar el tratamiento.",
+            },
+            format="json",
+        )
+        self.assertEqual(late_response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(late_response.data["added_after_convocation"])
+        self.assertTrue(
+            TreatmentParticipant.objects.filter(
+                treatment_id=treatment_id,
+                user=self.other_task_user,
+                added_after_convocation=True,
+                note="Se requiere su conocimiento tecnico al iniciar el tratamiento.",
+            ).exists()
+        )
+
+        self.client.force_authenticate(user=self.admin)
+        unauthorized_response = self.client.post(
+            f"/api/v1/actions/treatments/{treatment_id}/late-participants/",
+            {
+                "user": str(self.reporter_one.pk),
+                "reason": "Intento de un administrador que no es responsable.",
+            },
+            format="json",
+        )
+        self.assertEqual(unauthorized_response.status_code, status.HTTP_403_FORBIDDEN)
+
         agenda_change = self.client.patch(
             f"/api/v1/actions/treatments/{treatment_id}/",
             {"scheduled_for": (scheduled_for + timedelta(days=1)).isoformat()},

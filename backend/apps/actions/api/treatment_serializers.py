@@ -343,7 +343,7 @@ class TreatmentParticipantSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TreatmentParticipant
-        fields = ("id", "user", "role", "note", "created_at", "updated_at")
+        fields = ("id", "user", "role", "note", "added_after_convocation", "created_at", "updated_at")
 
 
 class TreatmentAnomalyLinkSerializer(serializers.ModelSerializer):
@@ -453,6 +453,7 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
     audit_events = serializers.SerializerMethodField()
     learned_lesson = TreatmentLearnedLessonSerializer(read_only=True)
     can_manage = serializers.SerializerMethodField()
+    can_add_late_participant = serializers.SerializerMethodField()
     can_validate_effectiveness = serializers.SerializerMethodField()
 
     class Meta:
@@ -490,6 +491,7 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
             "audit_events",
             "learned_lesson",
             "can_manage",
+            "can_add_late_participant",
             "can_validate_effectiveness",
             "created_at",
             "updated_at",
@@ -511,6 +513,12 @@ class TreatmentDetailSerializer(serializers.ModelSerializer):
 
         request = self.context.get("request")
         return can_manage_treatment(getattr(request, "user", None), obj)
+
+    def get_can_add_late_participant(self, obj):
+        from apps.actions.services.treatment_service import can_add_late_treatment_participant
+
+        request = self.context.get("request")
+        return can_add_late_treatment_participant(getattr(request, "user", None), obj)
 
     def get_can_validate_effectiveness(self, obj):
         from apps.actions.services.treatment_service import can_validate_treatment_effectiveness
@@ -578,6 +586,11 @@ class TreatmentAddParticipantSerializer(serializers.Serializer):
         default=TreatmentParticipantRole.CONVOKED,
     )
     note = serializers.CharField(required=False, allow_blank=True)
+
+
+class TreatmentAddLateParticipantSerializer(serializers.Serializer):
+    user = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True))
+    reason = serializers.CharField(required=True, allow_blank=False, trim_whitespace=True)
 
 
 class TreatmentAddRootCauseSerializer(serializers.Serializer):

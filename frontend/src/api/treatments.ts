@@ -195,6 +195,16 @@ export function addTreatmentParticipant(
   });
 }
 
+export function addLateTreatmentParticipant(
+  treatmentId: string,
+  payload: { user: string; reason: string },
+) {
+  return apiRequest<TreatmentParticipant>(`/actions/treatments/${treatmentId}/late-participants/`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export function removeTreatmentParticipant(treatmentId: string, participantId: string) {
   return apiRequest<void>(`/actions/treatments/${treatmentId}/participants/${participantId}/remove/`, {
     method: "POST",

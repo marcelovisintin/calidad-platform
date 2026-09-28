@@ -16,6 +16,7 @@ from apps.accounts.models import User
 from apps.actions.api.treatment_serializers import (
     TreatmentAddAnomalySerializer,
     TreatmentAddParticipantSerializer,
+    TreatmentAddLateParticipantSerializer,
     TreatmentAddRootCauseSerializer,
     TreatmentAddTaskSerializer,
     TreatmentCandidateSerializer,
@@ -57,6 +58,7 @@ from apps.actions.services import (
     add_root_cause,
     add_treatment_evidence,
     add_treatment_participant,
+    add_late_treatment_participant,
     add_treatment_task,
     add_treatment_task_evidence,
     can_update_treatment_task,
@@ -355,6 +357,8 @@ class TreatmentViewSet(viewsets.ModelViewSet):
             return TreatmentConfirmConvocationSerializer
         if self.action == "add_participant":
             return TreatmentAddParticipantSerializer
+        if self.action == "add_late_participant":
+            return TreatmentAddLateParticipantSerializer
         if self.action == "add_root_cause":
             return TreatmentAddRootCauseSerializer
         if self.action == "add_task":
@@ -672,6 +676,21 @@ class TreatmentViewSet(viewsets.ModelViewSet):
             participant_user=serializer.validated_data["user"],
             role=serializer.validated_data.get("role") or "convoked",
             note=serializer.validated_data.get("note", ""),
+            user=request.user,
+            request_id=self._request_id(),
+        )
+        output = TreatmentParticipantSerializer(participant, context=self.get_serializer_context())
+        return Response(output.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="late-participants")
+    def add_late_participant(self, request, pk=None):
+        treatment = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        participant = add_late_treatment_participant(
+            treatment=treatment,
+            participant_user=serializer.validated_data["user"],
+            reason=serializer.validated_data["reason"],
             user=request.user,
             request_id=self._request_id(),
         )
