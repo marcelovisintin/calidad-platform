@@ -13,6 +13,7 @@ import { SearchableSelect } from "../../../components/SearchableSelect";
 import { StatusBadge } from "../../../components/StatusBadge";
 import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
+import { useAuth } from "../../../app/providers/AuthProvider";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 import { resolveTreatmentHelpWorkContext, usePublishHelpWorkContext } from "../../help/workContext";
 import { SHOW_TREATMENT_EVIDENCE } from "../visibility";
@@ -31,8 +32,19 @@ function treatmentDisplayStatus(treatment?: TreatmentSummary | TreatmentDetail |
 }
 
 function relevantDate(treatment: TreatmentSummary) {
-  return treatment.effectiveness_validated_at || treatment.scheduled_for || treatment.created_at;
+  return treatment.deleted_at || treatment.effectiveness_validated_at || treatment.scheduled_for || treatment.created_at;
 }
+
+const TRACKING_STATUS_OPTIONS = [
+  { value: "pending", label: "Pendiente" },
+  { value: "scheduled", label: "Programado" },
+  { value: "in_progress", label: "En tratamiento" },
+  { value: "validated_effective", label: "Validado eficaz" },
+  { value: "not_effective", label: "No eficaz" },
+  { value: "completed", label: "Completado" },
+  { value: "cancelled", label: "Cancelado" },
+  { value: "deleted", label: "Eliminado" },
+];
 
 function userLabel(user: { full_name?: string; username: string }) {
   return user.full_name?.trim() || user.username;
@@ -74,6 +86,7 @@ const TREATMENT_AUDIT_ACTION_LABELS: Record<string, string> = {
   "treatment.learned_lesson.saved": "Leccion aprendida guardada",
   "treatment.learned_lesson.ready": "Leccion aprendida enviada para publicacion",
   "treatment.learned_lesson.published": "Leccion aprendida publicada y cierre formal",
+  "treatment.deleted": "Tratamiento eliminado",
 };
 
 function treatmentAuditActionLabel(action: string) {
@@ -92,10 +105,13 @@ function yesNo(value: boolean | null) {
 
 export function TreatmentTrackingPage() {
   usePageTitle("Seguimiento de tratamientos");
+  const { user } = useAuth();
+  const canViewDeleted = user?.access_level === "administrador" || user?.access_level === "desarrollador";
   const [page, setPage] = useState(1);
   const [codeFilter, setCodeFilter] = useState("");
   const [userFilter, setUserFilter] = useState("");
   const [processFilter, setProcessFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [selectedTreatmentId, setSelectedTreatmentId] = useState("");
   const deferredCode = useDeferredValue(codeFilter);
 
@@ -109,8 +125,9 @@ export function TreatmentTrackingPage() {
         code: deferredCode,
         user: userFilter,
         process: processFilter,
+        status: statusFilter,
       }),
-    [page, deferredCode, userFilter, processFilter],
+    [page, deferredCode, userFilter, processFilter, statusFilter],
   );
 
   const treatments = data?.results ?? [];
@@ -173,6 +190,7 @@ export function TreatmentTrackingPage() {
     setCodeFilter("");
     setUserFilter("");
     setProcessFilter("");
+    setStatusFilter("");
     setPage(1);
   };
 
@@ -217,6 +235,20 @@ export function TreatmentTrackingPage() {
               <SearchableSelect ariaLabel="Area" onChange={(value) => { setProcessFilter(value); setPage(1); }} options={(catalogData?.areas ?? []).map((area) => ({ value: area.id, label: area.name }))} placeholder="Todas las areas" value={processFilter} />
             ),
           },
+          {
+            id: "status",
+            label: "Estado",
+            active: Boolean(statusFilter),
+            content: (
+              <SearchableSelect
+                ariaLabel="Estado"
+                onChange={(value) => { setStatusFilter(value); setPage(1); }}
+                options={TRACKING_STATUS_OPTIONS.filter((option) => option.value !== "deleted" || canViewDeleted)}
+                placeholder="Todos los estados"
+                value={statusFilter}
+              />
+            ),
+          },
         ]}
       />
 
@@ -250,7 +282,9 @@ export function TreatmentTrackingPage() {
                   </div>
                   <p className="treatment-title">{treatment.primary_anomaly.title}</p>
                   <small>
-                    Usuario: {treatment.effectiveness_responsible?.full_name || treatment.primary_anomaly.reporter?.full_name || treatment.primary_anomaly.reporter?.username || "-"}
+                    {treatment.is_deleted ? "Eliminado por" : "Usuario"}: {treatment.is_deleted
+                      ? treatment.deleted_by?.full_name || treatment.deleted_by?.username || "-"
+                      : treatment.effectiveness_responsible?.full_name || treatment.primary_anomaly.reporter?.full_name || treatment.primary_anomaly.reporter?.username || "-"}
                   </small>
                   <small>
                     Area: {treatment.primary_anomaly.area?.name || "-"} | Fecha: {formatDate(relevantDate(treatment))}
@@ -280,6 +314,20 @@ export function TreatmentTrackingPage() {
                     <p>Vista de auditoria. Esta pantalla es solo lectura y no modifica tratamientos, acciones ni historial.</p>
                   </div>
 
+                  {detail.is_deleted ? (
+                    <div className="panel danger treatment-deletion-summary">
+                      <div>
+                        <strong>Tratamiento eliminado</strong>
+                        <p>{detail.deletion_reason || "Sin fundamento registrado."}</p>
+                      </div>
+                      <dl className="key-grid compact">
+                        <div><dt>Estado anterior</dt><dd>{humanizeToken(detail.previous_status || "-")}</dd></div>
+                        <div><dt>Eliminado por</dt><dd>{detail.deleted_by?.full_name || detail.deleted_by?.username || "-"}</dd></div>
+                        <div><dt>Fecha de eliminación</dt><dd>{formatDateTime(detail.deleted_at)}</dd></div>
+                      </dl>
+                    </div>
+                  ) : null}
+
                   <section className="form-section">
                     <div className="section-head compact"><h3>Datos generales</h3></div>
                     <dl className="key-grid compact">
@@ -290,6 +338,7 @@ export function TreatmentTrackingPage() {
                       <div><dt>Programado</dt><dd>{formatDateTime(detail.scheduled_for)}</dd></div>
                       <div><dt>Creado</dt><dd>{formatDateTime(detail.created_at)}</dd></div>
                       <div><dt>Actualizado</dt><dd>{formatDateTime(detail.updated_at)}</dd></div>
+                      {detail.is_deleted ? <div><dt>Estado</dt><dd>Eliminado</dd></div> : null}
                     </dl>
                     <div className="readonly-block">
                       <strong>Comentario de creación</strong>

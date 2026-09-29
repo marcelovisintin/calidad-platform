@@ -32,6 +32,7 @@ export function fetchTreatmentTracking(filters: {
   code?: string;
   user?: string;
   process?: string;
+  status?: string;
 } = {}) {
   const params = new URLSearchParams({
     page: String(filters.page ?? 1),
@@ -45,6 +46,9 @@ export function fetchTreatmentTracking(filters: {
   }
   if (filters.process?.trim()) {
     params.set("process", filters.process.trim());
+  }
+  if (filters.status?.trim()) {
+    params.set("status", filters.status.trim());
   }
   return apiRequest<PagedResponse<TreatmentSummary>>(`/actions/treatment-tracking/?${params.toString()}`);
 }
@@ -148,10 +152,10 @@ export function updateTreatment(treatmentId: string, payload: TreatmentUpdatePay
   });
 }
 
-export function deleteEmptyTreatment(code: string) {
+export function deleteEmptyTreatment(code: string, reason: string) {
   return apiRequest<{ code: string }>("/actions/treatments/delete-empty/", {
     method: "POST",
-    body: { code },
+    body: { code, reason },
   });
 }
 

@@ -504,7 +504,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         title: "Filtros",
-        bullets: ["Código de tratamiento.", "Usuario relacionado.", "Proceso o área.", "Otros criterios disponibles en la pantalla."],
+        bullets: ["Código de tratamiento.", "Usuario relacionado.", "Proceso o área.", "Estado del tratamiento, incluido Eliminado para Administrador y Desarrollador."],
       },
       {
         title: "Información consultable",
@@ -514,6 +514,7 @@ export const HELP_TOPICS: HelpTopic[] = [
           "Causas raíz y acciones.",
           "Evaluación de eficacia y evidencias.",
           "Historial y eventos de trazabilidad mostrados.",
+          "Los tratamientos eliminados aparecen al final del listado para Administrador y Desarrollador, con fundamento, autor, fecha y estado anterior.",
         ],
       },
     ],

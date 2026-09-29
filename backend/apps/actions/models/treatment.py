@@ -139,6 +139,51 @@ class TreatmentCodeSequence(models.Model):
         verbose_name_plural = "Secuencias de codigos de tratamiento"
 
 
+class TreatmentDeletionRecord(AuditBaseModel):
+    original_treatment_id = models.UUIDField(unique=True)
+    code = models.CharField(max_length=40, db_index=True)
+    primary_anomaly = models.ForeignKey(
+        "anomalies.Anomaly",
+        on_delete=models.SET_NULL,
+        related_name="deleted_treatment_records",
+        null=True,
+        blank=True,
+    )
+    responsible = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        related_name="deleted_responsible_treatment_records",
+        null=True,
+        blank=True,
+    )
+    previous_status = models.CharField(max_length=20, choices=TreatmentStatus.choices)
+    deadline = models.DateField(null=True, blank=True)
+    creation_comment = models.TextField(blank=True, default="")
+    scheduled_for = models.DateTimeField(null=True, blank=True)
+    treatment_location = models.CharField(max_length=200, blank=True, default="")
+    convocation_confirmed_at = models.DateTimeField(null=True, blank=True)
+    treatment_created_at = models.DateTimeField()
+    treatment_updated_at = models.DateTimeField()
+    deleted_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="deleted_treatment_records",
+    )
+    deletion_reason = models.TextField()
+    deleted_at = models.DateTimeField(default=timezone.now)
+    participants_snapshot = models.JSONField(default=list, blank=True)
+    anomalies_snapshot = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        ordering = ("-deleted_at",)
+        verbose_name = "Registro de tratamiento eliminado"
+        verbose_name_plural = "Registros de tratamientos eliminados"
+        indexes = [models.Index(fields=["deleted_at"], name="trt_del_deleted_idx")]
+
+    def __str__(self) -> str:
+        return f"{self.code} - Eliminado"
+
+
 class TreatmentAnomaly(AuditBaseModel):
     treatment = models.ForeignKey("actions.Treatment", on_delete=models.CASCADE, related_name="anomaly_links")
     anomaly = models.ForeignKey("anomalies.Anomaly", on_delete=models.PROTECT, related_name="treatment_links")

@@ -22,6 +22,7 @@ const toneMap: Record<string, string> = {
   in_progress: "info",
   overdue: "danger",
   completed: "success",
+  deleted: "danger",
   validated_effective: "success",
   not_effective: "warning",
   active: "success",
@@ -52,6 +53,7 @@ const labelMap: Record<string, string> = {
   classification: "Revisión de hallazgos",
   validated_effective: "Validado eficaz",
   not_effective: "No eficaz",
+  deleted: "Eliminado",
   email_notifications_enabled: "Correo activado",
   email_notifications_disabled: "Correo desactivado",
 };

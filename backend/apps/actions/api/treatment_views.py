@@ -22,6 +22,7 @@ from apps.actions.api.treatment_serializers import (
     TreatmentCandidateSerializer,
     TreatmentConfirmConvocationSerializer,
     TreatmentCreateSerializer,
+    DeletedTreatmentSerializer,
     TreatmentDeleteEmptySerializer,
     TreatmentDetailSerializer,
     TreatmentEvidenceSerializer,
@@ -42,6 +43,7 @@ from apps.actions.api.treatment_serializers import (
 )
 from apps.actions.models import (
     Treatment,
+    TreatmentDeletionRecord,
     TreatmentAnomaly,
     TreatmentEffectivenessValidationResult,
     TreatmentEvidence,
@@ -406,6 +408,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         deleted_code = delete_empty_treatment(
             treatment=treatment,
             user=request.user,
+            reason=serializer.validated_data["reason"],
             request_id=self._request_id(),
         )
         return Response({"code": deleted_code}, status=status.HTTP_200_OK)
@@ -875,6 +878,93 @@ class TreatmentTrackingViewSet(viewsets.ReadOnlyModelViewSet):
             return TreatmentListSerializer
         return TreatmentDetailSerializer
 
+    def _deleted_queryset(self):
+        if not _is_admin_access(self.request.user):
+            return TreatmentDeletionRecord.objects.none()
+
+        queryset = TreatmentDeletionRecord.objects.select_related(
+            "primary_anomaly",
+            "primary_anomaly__reporter",
+            "primary_anomaly__area",
+            "primary_anomaly__imputed_area",
+            "primary_anomaly__anomaly_origin",
+            "responsible",
+            "deleted_by",
+        )
+
+        if code := (self.request.query_params.get("code") or "").strip():
+            queryset = queryset.filter(
+                Q(code__icontains=code) | Q(primary_anomaly__code__icontains=code)
+            )
+
+        if user_value := (self.request.query_params.get("user") or "").strip():
+            try:
+                user_uuid = UUID(user_value)
+                queryset = queryset.filter(
+                    Q(responsible_id=user_uuid)
+                    | Q(deleted_by_id=user_uuid)
+                    | Q(primary_anomaly__reporter_id=user_uuid)
+                )
+            except ValueError:
+                queryset = queryset.filter(
+                    Q(responsible__username__icontains=user_value)
+                    | Q(responsible__first_name__icontains=user_value)
+                    | Q(responsible__last_name__icontains=user_value)
+                    | Q(deleted_by__username__icontains=user_value)
+                    | Q(deleted_by__first_name__icontains=user_value)
+                    | Q(deleted_by__last_name__icontains=user_value)
+                    | Q(primary_anomaly__reporter__username__icontains=user_value)
+                    | Q(primary_anomaly__reporter__first_name__icontains=user_value)
+                    | Q(primary_anomaly__reporter__last_name__icontains=user_value)
+                )
+
+        if process := (self.request.query_params.get("process") or "").strip():
+            try:
+                process_uuid = UUID(process)
+                queryset = queryset.filter(primary_anomaly__area_id=process_uuid)
+            except ValueError:
+                queryset = queryset.filter(
+                    Q(primary_anomaly__area__code__icontains=process)
+                    | Q(primary_anomaly__area__name__icontains=process)
+                    | Q(primary_anomaly__anomaly_origin__code__icontains=process)
+                    | Q(primary_anomaly__anomaly_origin__name__icontains=process)
+                )
+
+        return queryset.order_by("-deleted_at")
+
+    def list(self, request, *args, **kwargs):
+        status_filter = (request.query_params.get("status") or "").strip()
+        live_queryset = self.get_queryset()
+        live_items = TreatmentListSerializer(
+            live_queryset,
+            many=True,
+            context=self.get_serializer_context(),
+        ).data
+        deleted_items = []
+        if status_filter in {"", "deleted"}:
+            deleted_items = DeletedTreatmentSerializer(
+                self._deleted_queryset(),
+                many=True,
+                context=self.get_serializer_context(),
+            ).data
+
+        combined = [*live_items, *deleted_items]
+        page = self.paginate_queryset(combined)
+        if page is not None:
+            return self.get_paginated_response(page)
+        return Response(combined)
+
+    def retrieve(self, request, *args, **kwargs):
+        record_id = kwargs.get(self.lookup_field or "pk") or kwargs.get("pk")
+        treatment = self.get_queryset().filter(pk=record_id).first()
+        if treatment:
+            serializer = TreatmentDetailSerializer(treatment, context=self.get_serializer_context())
+            return Response(serializer.data)
+
+        deleted_record = get_object_or_404(self._deleted_queryset(), pk=record_id)
+        serializer = DeletedTreatmentSerializer(deleted_record, context=self.get_serializer_context())
+        return Response(serializer.data)
+
     def get_queryset(self):
         anomaly_attachment_prefetch = Prefetch(
             "anomaly__attachments",
@@ -994,6 +1084,16 @@ class TreatmentTrackingViewSet(viewsets.ReadOnlyModelViewSet):
                     | Q(anomaly_links__anomaly__anomaly_origin__code__icontains=process)
                     | Q(anomaly_links__anomaly__anomaly_origin__name__icontains=process)
                 )
+
+        status_filter = (self.request.query_params.get("status") or "").strip()
+        if status_filter == "deleted":
+            queryset = queryset.none()
+        elif status_filter == "validated_effective":
+            queryset = queryset.filter(effectiveness_validation_result="effective")
+        elif status_filter == "not_effective":
+            queryset = queryset.filter(effectiveness_validation_result="not_effective")
+        elif status_filter:
+            queryset = queryset.filter(status=status_filter)
 
         return queryset.distinct().order_by("-updated_at", "-created_at")
 

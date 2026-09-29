@@ -176,6 +176,7 @@ export function TreatmentsPage() {
   const [busy, setBusy] = useState(false);
   const [deletePanelOpen, setDeletePanelOpen] = useState(false);
   const [deleteTreatmentCode, setDeleteTreatmentCode] = useState("");
+  const [deleteTreatmentReason, setDeleteTreatmentReason] = useState("");
 
   const [scheduledFor, setScheduledFor] = useState("");
   const [treatmentLocation, setTreatmentLocation] = useState("");
@@ -842,11 +843,16 @@ export function TreatmentsPage() {
   const handleDeleteTreatment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const code = deleteTreatmentCode.trim().toUpperCase();
+    const reason = deleteTreatmentReason.trim();
     if (!code) {
-      setFormError("Debe ingresar el numero de tratamiento a eliminar.");
+      setFormError("Debe ingresar el número de tratamiento a eliminar.");
       return;
     }
-    if (!window.confirm(`¿Está seguro de eliminar el tratamiento ${code}?`)) {
+    if (!reason) {
+      setFormError("Debe escribir el fundamento de la eliminación.");
+      return;
+    }
+    if (!window.confirm(`¿Confirma la eliminación permanente del tratamiento ${code}?`)) {
       return;
     }
 
@@ -854,11 +860,12 @@ export function TreatmentsPage() {
     setFormError(null);
     setMessage(null);
     try {
-      const result = await deleteEmptyTreatment(code);
+      const result = await deleteEmptyTreatment(code, reason);
       if (selectedTreatment?.code.toUpperCase() === result.code.toUpperCase()) {
         setSelectedTreatmentId("");
       }
       setDeleteTreatmentCode("");
+      setDeleteTreatmentReason("");
       setDeletePanelOpen(false);
       await reloadSupport();
       setMessage(`Tratamiento ${result.code} eliminado correctamente.`);
@@ -882,7 +889,7 @@ return (
             onClick={() => setDeletePanelOpen((current) => !current)}
             type="button"
           >
-            ELIMINAR
+            Eliminar tratamiento vacío
           </button>
         </div>
       ) : null}
@@ -891,8 +898,8 @@ return (
         <form className="panel form-section compact" onSubmit={handleDeleteTreatment}>
           <div className="section-head compact">
             <div>
-              <p className="eyebrow">Eliminar tratamiento</p>
-              <h2>Ingrese el número de tratamiento</h2>
+              <p className="eyebrow">Administración</p>
+              <h2>Eliminar tratamiento vacío</h2>
             </div>
           </div>
           <label className="field">
@@ -906,9 +913,29 @@ return (
               value={deleteTreatmentCode}
             />
           </label>
-          <p className="muted-copy">
-            Sólo pueden eliminarse tratamientos que no tengan datos agregados ni modificados en las vistas 1 o 2.
-          </p>
+          <label className="field">
+            <span>Fundamento de la eliminación</span>
+            <textarea
+              maxLength={1000}
+              onChange={(event) => setDeleteTreatmentReason(event.target.value)}
+              placeholder="Explique por qué corresponde eliminar este tratamiento."
+              required
+              rows={4}
+              value={deleteTreatmentReason}
+            />
+          </label>
+          <div className="panel warning treatment-delete-guidance">
+            <strong>Antes de confirmar</strong>
+            <ul>
+              <li>Puede eliminarse mientras esté Pendiente o Programado, incluso con agenda confirmada y convocados.</li>
+              <li>Si comenzó el análisis de la vista 2, cargó acciones, evidencias, eficacia o aprendizaje, la eliminación será rechazada.</li>
+              <li>Las anomalías vinculadas volverán a Clasificación / En evaluación.</li>
+              <li>Las convocatorias pendientes se descartarán. Los correos ya enviados no pueden retirarse.</li>
+              <li>La eliminación es permanente y el número del tratamiento no se reutilizará.</li>
+              <li>El administrador y este fundamento quedarán registrados en auditoría y en el historial de las anomalías.</li>
+            </ul>
+            <p>Verifique el código y las anomalías afectadas antes de continuar.</p>
+          </div>
           <div className="form-actions">
             <button className="button button-danger" disabled={busy} type="submit">
               {busy ? "Eliminando..." : "Confirmar eliminación"}

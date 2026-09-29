@@ -4,6 +4,7 @@ from rest_framework import serializers
 from apps.accounts.models import User
 from apps.actions.models import (
     Treatment,
+    TreatmentDeletionRecord,
     TreatmentAnomaly,
     TreatmentEffectivenessValidationResult,
     TreatmentEvidence,
@@ -435,6 +436,170 @@ class TreatmentListSerializer(serializers.ModelSerializer):
         return sum(task.status == TreatmentTaskStatus.COMPLETED for task in obj.tasks.all())
 
 
+class DeletedTreatmentSerializer(serializers.ModelSerializer):
+    status = serializers.SerializerMethodField()
+    previous_status = serializers.CharField(read_only=True)
+    primary_anomaly = TreatmentAnomalySummarySerializer(read_only=True)
+    responsible = UserSummarySerializer(read_only=True)
+    deleted_by = UserSummarySerializer(read_only=True)
+    created_at = serializers.DateTimeField(source="treatment_created_at", read_only=True)
+    updated_at = serializers.DateTimeField(source="deleted_at", read_only=True)
+    is_deleted = serializers.SerializerMethodField()
+    is_overdue = serializers.SerializerMethodField()
+    effectiveness_is_overdue = serializers.SerializerMethodField()
+    can_manage = serializers.SerializerMethodField()
+    can_add_late_participant = serializers.SerializerMethodField()
+    can_validate_effectiveness = serializers.SerializerMethodField()
+    participants = serializers.JSONField(source="participants_snapshot", read_only=True)
+    anomalies = serializers.JSONField(source="anomalies_snapshot", read_only=True)
+    anomaly_links = serializers.SerializerMethodField()
+    root_causes = serializers.SerializerMethodField()
+    tasks = serializers.SerializerMethodField()
+    evidences = serializers.SerializerMethodField()
+    audit_events = serializers.SerializerMethodField()
+    learned_lesson = serializers.SerializerMethodField()
+    validation_state = serializers.SerializerMethodField()
+    formally_closed_at = serializers.SerializerMethodField()
+    effectiveness_evaluation_date = serializers.SerializerMethodField()
+    effectiveness_responsible = serializers.SerializerMethodField()
+    effectiveness_validation_result = serializers.SerializerMethodField()
+    effectiveness_validated_at = serializers.SerializerMethodField()
+    effectiveness_validated_by = serializers.SerializerMethodField()
+    effectiveness_validation_comment = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TreatmentDeletionRecord
+        fields = (
+            "id",
+            "original_treatment_id",
+            "code",
+            "status",
+            "previous_status",
+            "primary_anomaly",
+            "responsible",
+            "deadline",
+            "creation_comment",
+            "scheduled_for",
+            "treatment_location",
+            "convocation_confirmed_at",
+            "deleted_by",
+            "deletion_reason",
+            "deleted_at",
+            "created_at",
+            "updated_at",
+            "is_deleted",
+            "is_overdue",
+            "effectiveness_is_overdue",
+            "can_manage",
+            "can_add_late_participant",
+            "can_validate_effectiveness",
+            "participants",
+            "anomalies",
+            "anomaly_links",
+            "root_causes",
+            "tasks",
+            "evidences",
+            "audit_events",
+            "learned_lesson",
+            "validation_state",
+            "formally_closed_at",
+            "effectiveness_evaluation_date",
+            "effectiveness_responsible",
+            "effectiveness_validation_result",
+            "effectiveness_validated_at",
+            "effectiveness_validated_by",
+            "effectiveness_validation_comment",
+            "row_version",
+        )
+
+    def get_status(self, obj):
+        return "deleted"
+
+    def get_is_deleted(self, obj):
+        return True
+
+    def get_is_overdue(self, obj):
+        return False
+
+    def get_effectiveness_is_overdue(self, obj):
+        return False
+
+    def get_can_manage(self, obj):
+        return False
+
+    def get_can_add_late_participant(self, obj):
+        return False
+
+    def get_can_validate_effectiveness(self, obj):
+        return False
+
+    def get_anomaly_links(self, obj):
+        if not obj.primary_anomaly:
+            return []
+        anomaly_data = TreatmentAnomalySummarySerializer(
+            obj.primary_anomaly,
+            context=self.context,
+        ).data
+        return [
+            {
+                "id": str(obj.original_treatment_id),
+                "anomaly": anomaly_data,
+                "is_primary": True,
+                "created_at": obj.treatment_created_at,
+            }
+        ]
+
+    def get_root_causes(self, obj):
+        return []
+
+    def get_tasks(self, obj):
+        return []
+
+    def get_evidences(self, obj):
+        return []
+
+    def get_audit_events(self, obj):
+        return [
+            {
+                "id": str(obj.pk),
+                "action": "treatment.deleted",
+                "actor": UserSummarySerializer(obj.deleted_by, context=self.context).data,
+                "after_data": {
+                    "deletion_reason": obj.deletion_reason,
+                    "previous_status": obj.previous_status,
+                },
+                "created_at": obj.deleted_at,
+            }
+        ]
+
+    def get_learned_lesson(self, obj):
+        return None
+
+    def get_validation_state(self, obj):
+        return {"available": False, "blockers": ["El tratamiento fue eliminado."]}
+
+    def get_formally_closed_at(self, obj):
+        return None
+
+    def get_effectiveness_evaluation_date(self, obj):
+        return None
+
+    def get_effectiveness_responsible(self, obj):
+        return None
+
+    def get_effectiveness_validation_result(self, obj):
+        return ""
+
+    def get_effectiveness_validated_at(self, obj):
+        return None
+
+    def get_effectiveness_validated_by(self, obj):
+        return None
+
+    def get_effectiveness_validation_comment(self, obj):
+        return ""
+
+
 class TreatmentDetailSerializer(serializers.ModelSerializer):
     is_overdue = serializers.BooleanField(read_only=True)
     effectiveness_is_overdue = serializers.BooleanField(read_only=True)
@@ -548,9 +713,16 @@ class TreatmentCreateSerializer(serializers.Serializer):
 
 class TreatmentDeleteEmptySerializer(serializers.Serializer):
     code = serializers.CharField(max_length=40)
+    reason = serializers.CharField(max_length=1000, trim_whitespace=True)
 
     def validate_code(self, value):
         return value.strip().upper()
+
+    def validate_reason(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Debe indicar el fundamento de la eliminacion.")
+        return value
 
 
 class TreatmentUpdateSerializer(serializers.Serializer):

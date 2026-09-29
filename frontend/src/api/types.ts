@@ -723,6 +723,11 @@ export interface TreatmentSummary {
   tasks_completed?: number;
   created_at: string;
   updated_at: string;
+  is_deleted?: boolean;
+  previous_status?: string;
+  deleted_at?: string | null;
+  deleted_by?: UserSummary | null;
+  deletion_reason?: string;
 }
 
 export interface TreatmentAuditEvent {

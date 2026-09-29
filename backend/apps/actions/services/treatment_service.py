@@ -15,6 +15,7 @@ from apps.actions.models import (
     Treatment,
     TreatmentAnomaly,
     TreatmentCodeSequence,
+    TreatmentDeletionRecord,
     TreatmentEffectivenessValidationResult,
     TreatmentEvidence,
     TreatmentLearnedLesson,
@@ -44,6 +45,7 @@ from apps.anomalies.services.classification_rules import is_immediate_action_ano
 from apps.notifications.services import (
     complete_treatment_effectiveness_assignment,
     complete_treatment_learned_lesson_assignment,
+    dismiss_deleted_treatment_participation_tasks,
     dismiss_treatment_task_assignment_tasks,
     notify_treatment_anomaly_associated,
     notify_treatment_closed,
@@ -176,15 +178,9 @@ def is_mergeable_pending_treatment(treatment: Treatment) -> bool:
 
 
 def is_deletable_empty_treatment(treatment: Treatment) -> bool:
-    """Allow deletion only before either treatment view records any work."""
-    responsible_id = treatment.responsible_id or treatment.primary_anomaly.owner_id
+    """Allow administrative deletion through View 1, before analysis begins."""
     return bool(
-        treatment.status == TreatmentStatus.PENDING
-        and treatment.row_version == 1
-        and not treatment.scheduled_for
-        and not (treatment.treatment_location or "").strip()
-        and not treatment.convocation_confirmed_at
-        and not treatment.convocation_confirmed_by_id
+        treatment.status in {TreatmentStatus.PENDING, TreatmentStatus.SCHEDULED}
         and not (treatment.method_used or "").strip()
         and not (treatment.observations or "").strip()
         and not treatment.effectiveness_evaluation_date
@@ -193,14 +189,11 @@ def is_deletable_empty_treatment(treatment: Treatment) -> bool:
         and not treatment.effectiveness_validated_at
         and not treatment.effectiveness_validated_by_id
         and not (treatment.effectiveness_validation_comment or "").strip()
+        and not treatment.formally_closed_at
         and not treatment.root_causes.exists()
         and not treatment.tasks.exists()
         and not treatment.evidences.exists()
         and not hasattr(treatment, "learned_lesson")
-        and not treatment.participants.exclude(
-            user_id=responsible_id,
-            role=TreatmentParticipantRole.OWNER,
-        ).exists()
     )
 
 
@@ -1657,7 +1650,9 @@ def associate_anomaly_to_treatment(*, treatment: Treatment, anomaly: Anomaly, us
     return locked_treatment
 
 
-def _restore_anomaly_after_treatment_removal(*, anomaly: Anomaly, treatment: Treatment, user) -> None:
+def _restore_anomaly_after_treatment_removal(
+    *, anomaly: Anomaly, treatment: Treatment, user, reason: str
+) -> None:
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
     previous_stage = locked.current_stage
     previous_status = locked.current_status
@@ -1674,20 +1669,28 @@ def _restore_anomaly_after_treatment_removal(*, anomaly: Anomaly, treatment: Tre
     _register_anomaly_history_event(
         anomaly=locked,
         user=user,
-        comment=f"Calidad retira la anomalia del tratamiento {treatment.code} antes de iniciar su ejecucion.",
+        comment=(
+            f"Calidad retira la anomalia del tratamiento {treatment.code} antes de iniciar su ejecucion. "
+            f"Fundamento: {reason}"
+        ),
         evidence_note=(
             f"Etapa anterior: {previous_stage}\nEtapa nueva: {locked.current_stage}\n"
             f"Estado anterior: {previous_status}\nEstado nuevo: {locked.current_status}\n"
             f"Camino anterior: {previous_path or 'sin definir'}\n"
-            f"Camino nuevo: {locked.observation_resolution_path or 'sin definir'}"
+            f"Camino nuevo: {locked.observation_resolution_path or 'sin definir'}\n"
+            f"Fundamento de eliminacion: {reason}"
         ),
     )
 
 
 @transaction.atomic
-def delete_empty_treatment(*, treatment: Treatment, user, request_id: str = "") -> str:
+def delete_empty_treatment(*, treatment: Treatment, user, reason: str, request_id: str = "") -> str:
     if user.access_level not in {User.AccessLevel.ADMINISTRADOR, User.AccessLevel.DESARROLLADOR}:
         raise PermissionDenied("Solo un administrador o desarrollador puede eliminar tratamientos.")
+
+    reason = (reason or "").strip()
+    if not reason:
+        raise ValidationError({"reason": "Debe indicar el fundamento de la eliminacion."})
 
     locked = (
         Treatment.objects.select_for_update(of=("self",))
@@ -1699,14 +1702,57 @@ def delete_empty_treatment(*, treatment: Treatment, user, request_id: str = "") 
         raise ValidationError(
             {
                 "treatment": (
-                    "El tratamiento no puede eliminarse porque ya tiene datos agregados "
-                    "o modificados en las vistas 1 o 2."
+                    "El tratamiento no puede eliminarse porque ya se inicio el analisis "
+                    "en la vista 2 o posee datos posteriores."
                 )
             }
         )
 
     code = locked.code
     linked_anomalies = [link.anomaly for link in locked.anomaly_links.all()]
+    participants_snapshot = [
+        {
+            "id": str(participant.pk),
+            "role": participant.role,
+            "note": participant.note,
+            "added_after_convocation": participant.added_after_convocation,
+            "user": {
+                "id": str(participant.user_id),
+                "username": participant.user.username,
+                "full_name": participant.user.full_name,
+            },
+        }
+        for participant in locked.participants.select_related("user").all()
+    ]
+    anomalies_snapshot = [
+        {
+            "id": str(anomaly.pk),
+            "code": anomaly.code,
+            "title": anomaly.title,
+            "is_primary": anomaly.pk == locked.primary_anomaly_id,
+        }
+        for anomaly in linked_anomalies
+    ]
+    TreatmentDeletionRecord.objects.create(
+        original_treatment_id=locked.pk,
+        code=locked.code,
+        primary_anomaly=locked.primary_anomaly,
+        responsible=locked.responsible,
+        previous_status=locked.status,
+        deadline=locked.deadline,
+        creation_comment=locked.creation_comment,
+        scheduled_for=locked.scheduled_for,
+        treatment_location=locked.treatment_location,
+        convocation_confirmed_at=locked.convocation_confirmed_at,
+        treatment_created_at=locked.created_at,
+        treatment_updated_at=locked.updated_at,
+        deleted_by=user,
+        deletion_reason=reason,
+        participants_snapshot=participants_snapshot,
+        anomalies_snapshot=anomalies_snapshot,
+        created_by=user,
+        updated_by=user,
+    )
     record_audit_event(
         entity=locked,
         action="treatment.deleted",
@@ -1715,11 +1761,22 @@ def delete_empty_treatment(*, treatment: Treatment, user, request_id: str = "") 
             **snapshot_treatment(locked),
             "anomaly_ids": [str(anomaly.pk) for anomaly in linked_anomalies],
         },
-        after_data={},
+        after_data={"deletion_reason": reason},
         request_id=_request_id(request_id),
     )
+    dismiss_deleted_treatment_participation_tasks(
+        treatment=locked,
+        actor=user,
+        reason=reason,
+        request_id=request_id,
+    )
     for anomaly in linked_anomalies:
-        _restore_anomaly_after_treatment_removal(anomaly=anomaly, treatment=locked, user=user)
+        _restore_anomaly_after_treatment_removal(
+            anomaly=anomaly,
+            treatment=locked,
+            user=user,
+            reason=reason,
+        )
 
     locked.delete()
     return code
@@ -1760,7 +1817,12 @@ def reconfigure_treatment(
         if anomaly_id not in related_by_id:
             anomaly = link.anomaly
             link.delete()
-            _restore_anomaly_after_treatment_removal(anomaly=anomaly, treatment=locked, user=user)
+            _restore_anomaly_after_treatment_removal(
+                anomaly=anomaly,
+                treatment=locked,
+                user=user,
+                reason=reason,
+            )
 
     added_anomalies = []
     for anomaly_id, anomaly in related_by_id.items():

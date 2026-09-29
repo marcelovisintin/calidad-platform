@@ -197,9 +197,9 @@ const TOURS: Record<string, GuidedTourDefinition> = {
     description: "Consulta en modo lectura toda la trazabilidad del tratamiento.",
     steps: [
       { selector: ".page-header", title: "Seguimiento", content: "Esta vista permite auditar tratamientos sin modificar su información." },
-      { selector: ".tabbed-filters", title: "Filtros", content: "Localiza procedimientos por código, usuario, proceso y los demás criterios disponibles." },
-      { selector: ".treatment-list-panel", title: "Procedimientos", content: "Selecciona un tratamiento para cargar su detalle completo." },
-      { selector: ".treatment-detail-panel", title: "Detalle solo lectura", content: "Consulta datos generales, usuarios, anomalías, convocados, causas, acciones, eficacia, evidencias e historial." },
+      { selector: ".tabbed-filters", title: "Filtros", content: "Localiza procedimientos por código, usuario, proceso y estado. Administrador y Desarrollador también pueden filtrar los eliminados." },
+      { selector: ".treatment-list-panel", title: "Procedimientos", content: "Selecciona un tratamiento para cargar su detalle completo. Los eliminados se identifican por estado y aparecen al final del listado." },
+      { selector: ".treatment-detail-panel", title: "Detalle solo lectura", content: "Consulta datos generales, usuarios, anomalías, convocados, causas, acciones, eficacia, evidencias e historial. En un tratamiento eliminado se muestran además el fundamento, quién lo eliminó, la fecha y el estado anterior." },
     ],
   },
   indicators: {

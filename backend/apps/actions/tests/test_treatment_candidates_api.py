@@ -18,6 +18,7 @@ from apps.actions.models import (
     Treatment,
     TreatmentAnomaly,
     TreatmentCodeSequence,
+    TreatmentDeletionRecord,
     TreatmentLearnedLesson,
     TreatmentLearnedLessonRevision,
     TreatmentParticipant,
@@ -28,6 +29,7 @@ from apps.actions.models import (
 )
 from apps.actions.services import can_manage_treatment, create_configured_treatment
 from apps.actions.services.treatment_service import _next_treatment_code
+from apps.audit.models import AuditEvent
 from apps.anomalies.models import (
     AnalysisMethod,
     Anomaly,
@@ -40,7 +42,12 @@ from apps.anomalies.models import (
     ObservationResolutionPath,
 )
 from apps.catalog.models import AnomalyOrigin, AnomalyType, Area, Priority, Severity, Site
-from apps.notifications.models import Notification, NotificationChannel, NotificationRecipient
+from apps.notifications.models import (
+    Notification,
+    NotificationChannel,
+    NotificationRecipient,
+    RecipientTaskStatus,
+)
 from apps.notifications.services.email_delivery import dispatch_pending_email_notifications
 
 
@@ -662,21 +669,144 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         response = self.client.post(
             "/api/v1/actions/treatments/delete-empty/",
-            {"code": self.treatment_one.code.lower()},
+            {
+                "code": self.treatment_one.code.lower(),
+                "reason": "Tratamiento creado por error.",
+            },
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(Treatment.objects.filter(pk=self.treatment_one.pk).exists())
+        deletion_record = TreatmentDeletionRecord.objects.get(
+            original_treatment_id=self.treatment_one.pk
+        )
+        self.assertEqual(deletion_record.code, self.treatment_one.code)
+        self.assertEqual(deletion_record.deletion_reason, "Tratamiento creado por error.")
+        self.assertEqual(deletion_record.deleted_by, self.admin)
         self.anomaly_one.refresh_from_db()
         self.assertEqual(self.anomaly_one.current_stage, AnomalyStage.CLASSIFICATION)
         self.assertEqual(self.anomaly_one.current_status, AnomalyStatus.IN_EVALUATION)
+        self.assertTrue(
+            AnomalyStatusHistory.objects.filter(
+                anomaly=self.anomaly_one,
+                comment__contains="Fundamento: Tratamiento creado por error.",
+            ).exists()
+        )
+        deletion_event = AuditEvent.objects.get(
+            entity_type="actions.treatment",
+            entity_id=self.treatment_one.pk,
+            action="treatment.deleted",
+        )
+        self.assertEqual(deletion_event.after_data["deletion_reason"], "Tratamiento creado por error.")
 
-    def test_treatment_with_view_data_cannot_be_deleted(self):
-        self.treatment_one.treatment_location = "Sala de calidad"
-        self.treatment_one.row_version = 2
-        self.treatment_one.save(update_fields=["treatment_location", "row_version"])
+    def test_tracking_lists_deleted_treatments_last_and_filters_by_status(self):
+        deleted_treatment_id = self.treatment_one.pk
+        delete_response = self.client.post(
+            "/api/v1/actions/treatments/delete-empty/",
+            {
+                "code": self.treatment_one.code,
+                "reason": "Tratamiento duplicado.",
+            },
+            format="json",
+        )
+        self.assertEqual(delete_response.status_code, status.HTTP_200_OK)
 
+        response = self.client.get("/api/v1/actions/treatment-tracking/?page_size=10")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["results"][-1]["status"], "deleted")
+        self.assertEqual(response.data["results"][-1]["code"], self.treatment_one.code)
+
+        filtered_response = self.client.get(
+            "/api/v1/actions/treatment-tracking/?status=deleted&page_size=10"
+        )
+        self.assertEqual(filtered_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(filtered_response.data["count"], 1)
+        deleted_item = filtered_response.data["results"][0]
+        self.assertTrue(deleted_item["is_deleted"])
+        self.assertEqual(deleted_item["deletion_reason"], "Tratamiento duplicado.")
+
+        detail_response = self.client.get(
+            f"/api/v1/actions/treatment-tracking/{deleted_item['id']}/"
+        )
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.data["original_treatment_id"], str(deleted_treatment_id))
+
+    def test_non_admin_cannot_see_deleted_treatments_in_tracking(self):
+        delete_response = self.client.post(
+            "/api/v1/actions/treatments/delete-empty/",
+            {
+                "code": self.treatment_one.code,
+                "reason": "Tratamiento duplicado.",
+            },
+            format="json",
+        )
+        self.assertEqual(delete_response.status_code, status.HTTP_200_OK)
+        self.client.force_authenticate(user=self.reporter_one)
+
+        response = self.client.get(
+            "/api/v1/actions/treatment-tracking/?status=deleted&page_size=10"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
+
+    def test_admin_can_delete_treatment_after_confirming_view_one(self):
+        TreatmentParticipant.objects.create(
+            treatment=self.treatment_one,
+            user=self.reporter_two,
+            role="convoked",
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+        confirm_response = self.client.post(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/confirm-convocation/",
+            {
+                "scheduled_for": (timezone.now() + timedelta(days=2)).isoformat(),
+                "treatment_location": "Sala de Calidad",
+            },
+            format="json",
+        )
+        self.assertEqual(confirm_response.status_code, status.HTTP_200_OK)
+        invitation_recipients = NotificationRecipient.objects.filter(
+            notification__source_type="actions.treatment",
+            notification__source_id=self.treatment_one.pk,
+        )
+        self.assertTrue(invitation_recipients.exists())
+
+        response = self.client.post(
+            "/api/v1/actions/treatments/delete-empty/",
+            {
+                "code": self.treatment_one.code,
+                "reason": "La convocatoria se generó sobre el hallazgo equivocado.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(Treatment.objects.filter(pk=self.treatment_one.pk).exists())
+        self.assertFalse(
+            invitation_recipients.exclude(task_status=RecipientTaskStatus.DISMISSED).exists()
+        )
+
+    def test_treatment_cannot_be_deleted_after_analysis_starts(self):
+        self.treatment_one.method_used = TreatmentMethod.FIVE_WHYS
+        self.treatment_one.save(update_fields=["method_used", "updated_at"])
+
+        response = self.client.post(
+            "/api/v1/actions/treatments/delete-empty/",
+            {
+                "code": self.treatment_one.code,
+                "reason": "Solicitud administrativa.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(Treatment.objects.filter(pk=self.treatment_one.pk).exists())
+
+    def test_delete_treatment_requires_reason(self):
         response = self.client.post(
             "/api/v1/actions/treatments/delete-empty/",
             {"code": self.treatment_one.code},
@@ -684,6 +814,7 @@ class TreatmentCandidatesApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("reason", response.data)
         self.assertTrue(Treatment.objects.filter(pk=self.treatment_one.pk).exists())
 
     def test_non_admin_cannot_delete_empty_treatment(self):
@@ -691,7 +822,7 @@ class TreatmentCandidatesApiTests(APITestCase):
 
         response = self.client.post(
             "/api/v1/actions/treatments/delete-empty/",
-            {"code": self.treatment_one.code},
+            {"code": self.treatment_one.code, "reason": "Solicitud sin permisos."},
             format="json",
         )
 
