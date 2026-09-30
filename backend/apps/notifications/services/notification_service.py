@@ -594,6 +594,101 @@ def dismiss_deleted_treatment_participation_tasks(
         )
 
 
+def _close_treatment_participation_tasks(
+    *,
+    treatment,
+    actor=None,
+    task_status: str,
+    reason: str,
+    pending_email_reason: str,
+    request_id: str = "",
+) -> None:
+    recipients = list(
+        NotificationRecipient.objects.select_for_update()
+        .select_related("notification")
+        .filter(
+            notification__source_type="actions.treatment",
+            notification__source_id=treatment.pk,
+            notification__template_code="treatment_participant_invited",
+            notification__task_type=NotificationTaskType.TREATMENT_PARTICIPATION,
+            task_status__in=[RecipientTaskStatus.PENDING, RecipientTaskStatus.IN_PROGRESS],
+        )
+    )
+    if not recipients:
+        return
+
+    now = timezone.now()
+    for recipient in recipients:
+        recipient.task_status = task_status
+        recipient.resolved_at = now
+        if recipient.channel == NotificationChannel.EMAIL and recipient.delivery_status == DeliveryStatus.PENDING:
+            recipient.delivery_status = DeliveryStatus.SKIPPED
+            recipient.delivery_error = pending_email_reason
+        recipient.updated_by = actor
+        recipient.row_version = (recipient.row_version or 0) + 1
+        recipient.updated_at = now
+
+    NotificationRecipient.objects.bulk_update(
+        recipients,
+        [
+            "task_status",
+            "resolved_at",
+            "delivery_status",
+            "delivery_error",
+            "updated_by",
+            "row_version",
+            "updated_at",
+        ],
+    )
+    Notification.objects.filter(
+        pk__in={recipient.notification_id for recipient in recipients}
+    ).update(
+        status=NotificationStatus.SENT,
+        row_version=F("row_version") + 1,
+        updated_at=now,
+    )
+    for recipient in recipients:
+        record_audit_event(
+            entity=recipient.notification,
+            action="notification.task_synced",
+            actor=actor,
+            after_data={
+                "recipient_id": str(recipient.pk),
+                "task_status": task_status,
+                "reason": reason,
+            },
+            request_id=_request_id(request_id),
+        )
+
+
+@transaction.atomic
+def complete_treatment_participation_tasks(
+    *, treatment, actor=None, request_id: str = ""
+) -> None:
+    _close_treatment_participation_tasks(
+        treatment=treatment,
+        actor=actor,
+        task_status=RecipientTaskStatus.COMPLETED,
+        reason="treatment_started",
+        pending_email_reason="El tratamiento comenzó antes del envío de la invitación.",
+        request_id=request_id,
+    )
+
+
+@transaction.atomic
+def dismiss_cancelled_treatment_participation_tasks(
+    *, treatment, actor=None, request_id: str = ""
+) -> None:
+    _close_treatment_participation_tasks(
+        treatment=treatment,
+        actor=actor,
+        task_status=RecipientTaskStatus.DISMISSED,
+        reason="treatment_cancelled",
+        pending_email_reason="El tratamiento fue cancelado antes del envío de la invitación.",
+        request_id=request_id,
+    )
+
+
 @transaction.atomic
 def sync_treatment_task_assignment_status(*, treatment_task, actor=None, request_id: str = "") -> None:
     task_status = TREATMENT_TASK_STATUS_MAP.get(treatment_task.status, RecipientTaskStatus.PENDING)

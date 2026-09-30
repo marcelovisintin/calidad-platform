@@ -543,6 +543,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         title: "Acciones disponibles",
         paragraphs: [
           "Abre el contexto de una notificación para ir al registro relacionado. La apertura actualiza su lectura. Algunas participaciones permiten además confirmar que fueron vistas.",
+          "Las invitaciones a tratamientos dejan de estar pendientes automáticamente cuando el tratamiento comienza. Si el tratamiento se cancela, sus invitaciones se descartan.",
         ],
       },
       {
@@ -652,6 +653,14 @@ export const HELP_TOPICS: HelpTopic[] = [
         paragraphs: [
           "El historial identifica la versión, fecha, estado, resumen, referencia Git y responsable de cada revisión registrada.",
           "Se consulta desde Centro de Ayuda, Acerca de, Historial de cambios.",
+        ],
+      },
+      {
+        title: "Política de versión A.B.C",
+        bullets: [
+          "A: cambios mayores del sistema, tecnología, proceso general o incorporación de módulos.",
+          "B: modificaciones funcionales en módulos, políticas, filtros o campos.",
+          "C: correcciones menores, ayuda, textos y detalles visuales.",
         ],
       },
       {

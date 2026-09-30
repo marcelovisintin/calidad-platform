@@ -160,7 +160,7 @@ const TOURS: Record<string, GuidedTourDefinition> = {
       { selector: ".page-header", title: "Bandeja", content: "La Bandeja concentra las comunicaciones y actividades relacionadas con tu usuario." },
       { selector: ".stats-grid", title: "Resumen", content: "Las tarjetas superiores muestran cantidades para ubicar rápidamente el trabajo actual." },
       { selector: ".inbox-tabs", title: "Secciones", content: "Cambia entre Pendientes, Avisos e Historial sin duplicar información." },
-      { selector: ".notification-card", title: "Notificación", content: "Cada tarjeta describe el evento y ofrece las acciones disponibles, como abrir el contexto, marcar leído o confirmar participación." },
+      { selector: ".notification-card", title: "Notificación", content: "Cada tarjeta describe el evento y ofrece las acciones disponibles, como abrir el contexto, marcar leído o confirmar participación. Las invitaciones dejan de estar pendientes automáticamente cuando el tratamiento comienza." },
     ],
   },
   learnedLessons: {

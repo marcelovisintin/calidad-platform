@@ -21,26 +21,33 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Calcular siguiente version diaria
+      - name: Obtener version aprobada
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          release_date=$(TZ=America/Argentina/Buenos_Aires date +%F)
-          prefix="release-${release_date}."
-          maximum=0
+          version=$(node -p "require('./frontend/package.json').version")
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "La version '$version' no cumple el formato A.B.C." >&2
+            exit 1
+          fi
 
-          while IFS= read -r tag; do
-            suffix=${tag#"$prefix"}
-            if [[ "$suffix" =~ ^[0-9]+$ ]] && (( suffix > maximum )); then
-              maximum=$suffix
-            fi
-          done < <(git tag --list "${prefix}*")
+          release_tag="release-${version}"
+          existing_commit=$(git rev-list -n 1 "$release_tag" 2>/dev/null || true)
+          if [[ -n "$existing_commit" && "$existing_commit" != "$GITHUB_SHA" ]]; then
+            echo "El tag $release_tag ya pertenece a otro commit. Actualice frontend/package.json." >&2
+            exit 1
+          fi
 
-          release_tag="${prefix}$((maximum + 1))"
           echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
+          if [[ -n "$existing_commit" ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Etiquetar commit publicado
+        if: steps.version.outputs.exists != 'true'
         env:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         shell: bash

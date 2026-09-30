@@ -7,7 +7,13 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
-from apps.actions.models import Treatment, TreatmentParticipantRole, TreatmentRootCause, TreatmentTaskStatus
+from apps.actions.models import (
+    Treatment,
+    TreatmentParticipantRole,
+    TreatmentRootCause,
+    TreatmentStatus,
+    TreatmentTaskStatus,
+)
 from apps.actions.services.treatment_service import (
     add_treatment_participant,
     add_treatment_task,
@@ -552,6 +558,89 @@ class NotificationServiceTests(TestCase):
         self.assertIn("con tu propio usuario", mail.outbox[0].body)
 
     @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
+    def test_treatment_start_completes_invitation_and_excludes_it_from_due_digest(self):
+        self.analyst.email_notifications_enabled = True
+        self.analyst.save(update_fields=["email_notifications_enabled", "updated_at"])
+        treatment = self._create_treatment()
+        add_treatment_participant(
+            treatment=treatment,
+            participant_user=self.analyst,
+            role=TreatmentParticipantRole.CONVOKED,
+            note="Participar del tratamiento.",
+            user=self.admin,
+        )
+        confirm_treatment_convocation(
+            treatment=treatment,
+            scheduled_for=treatment.scheduled_for,
+            treatment_location=treatment.treatment_location,
+            user=self.admin,
+        )
+
+        updated = update_treatment(
+            treatment=treatment,
+            user=self.admin,
+            data={
+                "method_used": "five_whys",
+                "observations": "Se inicia el análisis del tratamiento.",
+            },
+            request_id="req-start-treatment",
+        )
+
+        recipients = NotificationRecipient.objects.filter(
+            notification__source_type="actions.treatment",
+            notification__source_id=treatment.pk,
+            notification__template_code="treatment_participant_invited",
+            user=self.analyst,
+        )
+        self.assertEqual(updated.status, TreatmentStatus.IN_PROGRESS)
+        self.assertEqual(recipients.count(), 2)
+        self.assertFalse(recipients.exclude(task_status=RecipientTaskStatus.COMPLETED).exists())
+        self.assertFalse(recipients.filter(resolved_at__isnull=True).exists())
+        self.assertEqual(
+            recipients.get(channel=NotificationChannel.EMAIL).delivery_status,
+            DeliveryStatus.SKIPPED,
+        )
+        self.assertEqual(notification_summary_for_user(self.analyst)["tasks_pending"], 0)
+        digest_result = create_due_notification_digests(reminder_days=365)
+        self.assertEqual(digest_result["tasks"], 0)
+
+    @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
+    def test_treatment_cancellation_dismisses_pending_invitations(self):
+        self.analyst.email_notifications_enabled = True
+        self.analyst.save(update_fields=["email_notifications_enabled", "updated_at"])
+        treatment = self._create_treatment()
+        add_treatment_participant(
+            treatment=treatment,
+            participant_user=self.analyst,
+            role=TreatmentParticipantRole.CONVOKED,
+            note="Participar del tratamiento.",
+            user=self.admin,
+        )
+        confirm_treatment_convocation(
+            treatment=treatment,
+            scheduled_for=treatment.scheduled_for,
+            treatment_location=treatment.treatment_location,
+            user=self.admin,
+        )
+
+        updated = update_treatment(
+            treatment=treatment,
+            user=self.admin,
+            data={"status": TreatmentStatus.CANCELLED},
+            request_id="req-cancel-treatment",
+        )
+
+        recipients = NotificationRecipient.objects.filter(
+            notification__source_type="actions.treatment",
+            notification__source_id=treatment.pk,
+            notification__template_code="treatment_participant_invited",
+            user=self.analyst,
+        )
+        self.assertEqual(updated.status, TreatmentStatus.CANCELLED)
+        self.assertFalse(recipients.exclude(task_status=RecipientTaskStatus.DISMISSED).exists())
+        self.assertFalse(recipients.filter(resolved_at__isnull=True).exists())
+
+    @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
     def test_treatment_participant_update_does_not_duplicate_invitation(self):
         self.analyst.email_notifications_enabled = True
         self.analyst.save(update_fields=["email_notifications_enabled", "updated_at"])
@@ -716,26 +805,28 @@ class NotificationServiceTests(TestCase):
         self.assertEqual(notification.recipients.filter(channel=NotificationChannel.IN_APP).count(), 1)
 
     @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
-    def test_improvement_opportunity_responsible_is_directed_to_treatment(self):
+    def test_improvement_opportunity_is_not_classified_or_notified(self):
         opportunity = Severity.objects.create(code="OPM", name="Oportunidad de mejora")
         anomaly = self._create_unclassified_anomaly(title="Mejora de proceso")
 
-        update_anomaly(
-            anomaly=anomaly,
-            user=self.admin,
-            data={
-                "severity": opportunity,
-                "classification_responsible": self.analyst,
-            },
-        )
+        with self.assertRaises(ValidationError):
+            update_anomaly(
+                anomaly=anomaly,
+                user=self.admin,
+                data={
+                    "severity": opportunity,
+                    "classification_responsible": self.analyst,
+                },
+            )
 
-        notification = Notification.objects.get(
-            template_code="finding_management_assigned",
-            source_id=anomaly.pk,
+        anomaly.refresh_from_db()
+        self.assertIsNone(anomaly.severity_id)
+        self.assertFalse(
+            Notification.objects.filter(
+                template_code="finding_management_assigned",
+                source_id=anomaly.pk,
+            ).exists()
         )
-        self.assertEqual(notification.action_url, f"/treatments?anomaly={anomaly.pk}")
-        self.assertIn("crear y coordinar el tratamiento", notification.body)
-        self.assertEqual(notification.context_data["severity_code"], opportunity.code)
 
     @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
     def test_responsible_change_dismisses_previous_task_and_pending_email(self):

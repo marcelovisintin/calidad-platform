@@ -129,7 +129,9 @@ En **Centro de Ayuda → Acerca de** se muestran el nombre del sistema, la versi
 
 El botón **Historial de cambios** despliega automáticamente los últimos commits de Git desde el más reciente, indicando versión o commit, fecha, estado, mensaje, referencia Git, rama actual y responsable. Los scripts de inicio local y despliegue transmiten esta información al contenedor durante la compilación, por lo que no es necesario editar el historial manualmente. Una compilación marcada **En preparación local** contiene cambios sin confirmar y no debe considerarse liberada ni productiva.
 
-Al publicar un commit en la rama `main`, GitHub asigna automáticamente el siguiente tag diario con formato `release-AAAA-MM-DD.N`. Si una compilación se realiza antes de que el tag esté disponible, se identifica de manera inequívoca como `commit-xxxxxxx`; al reconstruirse con el tag ya creado, muestra el número formal de versión.
+Las versiones siguen el formato `A.B.C`: `A` identifica cambios mayores del sistema, tecnología, proceso general o nuevos módulos; `B` identifica modificaciones funcionales en módulos, políticas, filtros o campos; y `C` identifica correcciones menores, ayuda, textos o detalles visuales.
+
+Al publicar un commit en la rama `main`, GitHub toma la versión aprobada desde `frontend/package.json` y crea el tag `release-A.B.C`. El proceso rechaza reutilizar una versión asignada a otro commit. Si una compilación se realiza antes de que el tag esté disponible, se identifica como `commit-xxxxxxx`; al reconstruirse con el tag creado, muestra el número formal de versión.
 
 La ayuda **¿Cómo aporta a ISO 9001?** explica la relación con el control de información documentada y aclara los controles complementarios: pruebas, aprobación, commit/tag definitivo, backup y registro del despliegue. El historial mejora la trazabilidad, pero no constituye por sí solo certificación de cumplimiento.
 

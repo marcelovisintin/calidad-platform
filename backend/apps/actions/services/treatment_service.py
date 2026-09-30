@@ -45,6 +45,8 @@ from apps.anomalies.services.classification_rules import is_immediate_action_ano
 from apps.notifications.services import (
     complete_treatment_effectiveness_assignment,
     complete_treatment_learned_lesson_assignment,
+    complete_treatment_participation_tasks,
+    dismiss_cancelled_treatment_participation_tasks,
     dismiss_deleted_treatment_participation_tasks,
     dismiss_treatment_task_assignment_tasks,
     notify_treatment_anomaly_associated,
@@ -970,7 +972,9 @@ def _move_anomaly_to_cause_analysis(*, anomaly, user, comment: str) -> None:
 
 
 
-def _ensure_treatment_in_progress(*, treatment: Treatment, user, reason: str) -> bool:
+def _ensure_treatment_in_progress(
+    *, treatment: Treatment, user, reason: str, request_id: str = ""
+) -> bool:
     if treatment.status not in {TreatmentStatus.PENDING, TreatmentStatus.SCHEDULED}:
         return False
 
@@ -979,6 +983,11 @@ def _ensure_treatment_in_progress(*, treatment: Treatment, user, reason: str) ->
     _bump_version(treatment)
     treatment.full_clean()
     treatment.save(update_fields=["status", "updated_by", "row_version", "updated_at"])
+    complete_treatment_participation_tasks(
+        treatment=treatment,
+        actor=user,
+        request_id=request_id,
+    )
 
     _register_history_for_treatment(
         treatment=treatment,
@@ -1338,6 +1347,19 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
     _bump_version(locked)
     locked.full_clean()
     locked.save()
+
+    if locked.status in {TreatmentStatus.IN_PROGRESS, TreatmentStatus.COMPLETED}:
+        complete_treatment_participation_tasks(
+            treatment=locked,
+            actor=user,
+            request_id=request_id,
+        )
+    elif locked.status == TreatmentStatus.CANCELLED:
+        dismiss_cancelled_treatment_participation_tasks(
+            treatment=locked,
+            actor=user,
+            request_id=request_id,
+        )
 
     if analysis_updated:
         _sync_treatment_analysis_to_anomalies(treatment=locked, user=user)
@@ -2149,6 +2171,7 @@ def add_root_cause(*, treatment: Treatment, description: str, user, request_id: 
         treatment=locked_treatment,
         user=user,
         reason=f"Tratamiento {locked_treatment.code}: pasa a en curso por inicio de analisis de causa.",
+        request_id=request_id,
     )
 
     links = TreatmentAnomaly.objects.filter(treatment=locked_treatment).select_related("anomaly")
@@ -2426,6 +2449,7 @@ def add_treatment_task_evidence(*, treatment_task: TreatmentTask, user, data: di
         treatment=treatment,
         user=user,
         reason=f"Tratamiento {treatment.code}: pasa a en curso por carga de evidencias en acciones.",
+        request_id=request_id,
     )
 
     record_audit_event(

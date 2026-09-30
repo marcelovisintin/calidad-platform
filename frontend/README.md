@@ -23,7 +23,11 @@ Frontend liviano en React + TypeScript para consumir la API DRF del backend de C
 
 La compilación obtiene automáticamente de Git el commit, la rama, el autor, la fecha y los últimos mensajes para mostrarlos en **Centro de Ayuda → Acerca de → Historial de cambios**. En Docker, usar los scripts `deploy/scripts/start_local_stack.ps1`, `start_local_stack.sh` o `deploy_update.sh`; estos inyectan la misma información al contenedor sin edición manual.
 
-Cada push a `main` activa el workflow `.github/workflows/automatic-release-tag.yml`, que etiqueta el commit publicado con el siguiente número diario `release-AAAA-MM-DD.N`. El workflow no modifica archivos ni crea commits adicionales.
+Cada cambio aprobado usa una versión `A.B.C` en `package.json`. Al publicar `main`, el workflow `.github/workflows/automatic-release-tag.yml` crea el tag `release-A.B.C` y rechaza reutilizar una versión asignada a otro commit.
+
+- `A`: cambios mayores del sistema, tecnología, proceso general o incorporación de módulos.
+- `B`: modificaciones funcionales en módulos, políticas, filtros o campos.
+- `C`: correcciones menores, ayuda, textos y detalles visuales.
 - `npm run check`
 
 ## Variables de entorno recomendadas
