@@ -79,7 +79,7 @@ function currentStatus(): Pick<ReleaseHistoryEntry, "status" | "statusLabel"> {
 }
 
 function releaseTag(decorations: string) {
-  return decorations.match(/(?:^|, )tag: (release-[^,]+)/)?.[1];
+  return decorations.match(/(?:^|, )tag: (release-\d+\.\d+\.\d+)(?=,|$)/)?.[1];
 }
 
 const automatedHistory: ReleaseHistoryEntry[] = __APP_BUILD_INFO__.history.map((entry, index) => {

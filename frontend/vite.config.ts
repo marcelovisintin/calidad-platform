@@ -64,7 +64,7 @@ const gitDirty = process.env.APP_GIT_DIRTY
   ? process.env.APP_GIT_DIRTY.toLowerCase() === "true"
   : Boolean(runGit(["status", "--porcelain"]));
 const deploymentEnvironment = process.env.APP_DEPLOYMENT_ENV?.trim() || "local";
-const releaseTag = currentGitEntry?.decorations.match(/(?:^|, )tag: (release-[^,]+)/)?.[1] ?? "";
+const releaseTag = currentGitEntry?.decorations.match(/(?:^|, )tag: (release-\d+\.\d+\.\d+)(?=,|$)/)?.[1] ?? "";
 const buildInfo = {
   buildDate: buildVersion,
   commit: gitCommit,
