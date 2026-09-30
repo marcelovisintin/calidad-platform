@@ -65,16 +65,28 @@ export function fetchWorkflowMetadata() {
   return apiRequest<WorkflowMetadata>("/anomalies/workflow-metadata/");
 }
 
-export function fetchMyAnomalies(reporterId?: string, search = "", page = 1, anomalyType = "") {
+export type AnomalyRelationshipFilter = "related" | "received" | "reported";
+
+export function fetchMyAnomalies({
+  search = "",
+  page = 1,
+  anomalyType = "",
+  relationship = "related",
+}: {
+  search?: string;
+  page?: number;
+  anomalyType?: string;
+  relationship?: AnomalyRelationshipFilter;
+} = {}) {
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("page_size", "10");
-
-  if (reporterId) {
-    params.set("reporter", reporterId);
-  }
+  params.set("relationship", relationship);
   if (search.trim()) {
     params.set("search", search.trim());
+  }
+  if (anomalyType) {
+    params.set("anomaly_type", anomalyType);
   }
 
   return apiRequest<PagedResponse<AnomalyListItem>>(`/anomalies/?${params.toString()}`);

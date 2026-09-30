@@ -542,6 +542,17 @@ class AnomalyViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(owner_id=owner_id)
         if reporter_id := params.get("reporter"):
             queryset = queryset.filter(reporter_id=reporter_id)
+        relationship = params.get("relationship", "related")
+        if relationship not in {"related", "received", "reported"}:
+            raise ValidationError({"relationship": "Seleccione una relación válida."})
+        if relationship == "reported":
+            queryset = queryset.filter(reporter=self.request.user)
+        elif relationship == "received":
+            queryset = queryset.filter(owner=self.request.user).filter(
+                Q(immediate_action__isnull=False)
+                | Q(primary_treatments__isnull=False)
+                | Q(treatment_links__treatment__isnull=False)
+            ).distinct()
         if anomaly_type_id := params.get("anomaly_type"):
             queryset = queryset.filter(anomaly_type_id=anomaly_type_id)
         if term := params.get("search"):

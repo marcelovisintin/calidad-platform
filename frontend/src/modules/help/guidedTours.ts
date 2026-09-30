@@ -55,7 +55,7 @@ const TOURS: Record<string, GuidedTourDefinition> = {
     description: "Aprende a buscar, abrir y revisar el estado de los casos visibles.",
     steps: [
       { selector: ".page-header", title: "Seguimiento", content: "Esta pantalla reúne las anomalías disponibles según tu nivel y relación con cada caso." },
-      { selector: ".tabbed-filters", title: "Buscar y filtrar", content: "Escribe código, título, área o estado para reducir el listado. Puedes limpiar el filtro cuando quieras." },
+      { selector: ".tabbed-filters", title: "Buscar y filtrar", content: "Busca por texto, filtra por tipo de desvío y elige si quieres ver todas las relacionadas, las recibidas como NC u Observación, o las realizadas por ti. Los filtros se pueden combinar y limpiar." },
       { selector: ".anomaly-row", title: "Tarjeta de anomalía", content: "La tarjeta resume código, título, tipo, generador, proceso, fecha y estado. Pulsa sobre sus datos para abrir el detalle." },
       { selector: ".anomaly-classification-control", title: "Revisión de hallazgos", content: "Selecciona Inválida, No conformidad u Observación. Oportunidad de mejora está temporalmente deshabilitada. Si eliges No conformidad, define responsable, fecha límite y un comentario opcional para crear un tratamiento nuevo." },
       { selector: ".associate-anomalies-button", title: "Asociar anomalías", content: "Usa este camino para incorporar el caso a un tratamiento existente. La anomalía se clasificará automáticamente como No Conformidad y heredará el responsable del tratamiento." },

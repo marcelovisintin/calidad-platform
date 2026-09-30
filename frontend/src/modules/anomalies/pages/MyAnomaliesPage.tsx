@@ -1,7 +1,7 @@
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchUsers } from "../../../api/accounts";
-import { classifyAnomalyBySeverity, fetchMyAnomalies, unlockAnomalyClassificationChange } from "../../../api/anomalies";
+import { AnomalyRelationshipFilter, classifyAnomalyBySeverity, fetchMyAnomalies, unlockAnomalyClassificationChange } from "../../../api/anomalies";
 import { fetchCatalogBootstrap } from "../../../api/catalog";
 import { fetchOpenTreatmentOptions } from "../../../api/treatments";
 import type { CatalogSummary, TreatmentSummary, UserDirectoryItem } from "../../../api/types";
@@ -83,6 +83,7 @@ export function MyAnomaliesPage() {
   const strictAdminUser = user?.access_level === "administrador" || user?.access_level === "desarrollador";
   const [search, setSearch] = useState("");
   const [anomalyType, setAnomalyType] = useState("");
+  const [relationship, setRelationship] = useState<AnomalyRelationshipFilter>("related");
   const [page, setPage] = useState(1);
   const [classificationError, setClassificationError] = useState<string | null>(null);
   const [classificationMessage, setClassificationMessage] = useState<string | null>(null);
@@ -100,7 +101,7 @@ export function MyAnomaliesPage() {
     }
 
     const [anomalies, catalogs, users] = await Promise.all([
-      fetchMyAnomalies(adminUser ? undefined : user.id, search, page, anomalyType),
+      fetchMyAnomalies({ search, page, anomalyType, relationship }),
       fetchCatalogBootstrap(),
       adminUser ? fetchUsers({ active: true, pageSize: 200 }) : Promise.resolve({ count: 0, next: null, previous: null, results: [] as UserDirectoryItem[] }),
     ]);
@@ -113,12 +114,22 @@ export function MyAnomaliesPage() {
         ["mando_medio_activo", "administrador", "desarrollador"].includes(candidate.access_level),
       ),
     };
-  }, [user?.id, search, anomalyType, adminUser, page]);
+  }, [user?.id, search, anomalyType, relationship, adminUser, page]);
 
   const criteria: CatalogSummary[] = data?.criteria ?? [];
   const anomalyTypes: CatalogSummary[] = data?.anomalyTypes ?? [];
   const users: UserDirectoryItem[] = data?.users ?? [];
   const totalCount = data?.anomalies.count ?? 0;
+  const emptyTitle = relationship === "received"
+    ? "No hay anomalías recibidas"
+    : relationship === "reported"
+      ? "No hay anomalías realizadas por ti"
+      : adminUser ? "No hay anomalías registradas" : "No hay anomalías relacionadas";
+  const emptyDescription = relationship === "received"
+    ? "Cuando te asignen una NC u Observación, aparecerá en este listado."
+    : relationship === "reported"
+      ? "Cuando registres una nueva anomalía, aparecerá en este listado."
+      : "No existen anomalías que coincidan con los filtros seleccionados.";
   const visibleAssociationOptions = useMemo(() => {
     const normalizedSearch = associationSearch.trim().toLowerCase();
     return associationOptions.filter((treatment) => {
@@ -344,7 +355,7 @@ export function MyAnomaliesPage() {
           </Link>
         ) : null}
         ariaLabel="Filtros de seguimiento de anomalias"
-        onClear={() => { setSearch(""); setAnomalyType(""); setPage(1); }}
+        onClear={() => { setSearch(""); setAnomalyType(""); setRelationship("related"); setPage(1); }}
         items={[
           {
             id: "search",
@@ -360,6 +371,24 @@ export function MyAnomaliesPage() {
               <SearchableSelect ariaLabel="Buscar por tipo de desvio" onChange={(value) => { setAnomalyType(value); setPage(1); }} options={anomalyTypes.map((type) => ({ value: type.id, label: type.name }))} placeholder="Todos los tipos de desvio" value={anomalyType} />
             ),
           },
+          {
+            id: "relationship",
+            label: "Recibidas / realizadas",
+            active: relationship !== "related",
+            content: (
+              <SearchableSelect
+                ariaLabel="Filtrar anomalías recibidas o realizadas"
+                clearable={false}
+                onChange={(value) => { setRelationship(value as AnomalyRelationshipFilter); setPage(1); }}
+                options={[
+                  { value: "related", label: adminUser ? "Todas las anomalías" : "Todas las relacionadas" },
+                  { value: "received", label: "Recibidas" },
+                  { value: "reported", label: "Realizadas por mí" },
+                ]}
+                value={relationship}
+              />
+            ),
+          },
         ]}
       />
 
@@ -371,8 +400,8 @@ export function MyAnomaliesPage() {
         error={error}
         onRetry={reload}
         empty={totalCount === 0}
-        emptyTitle={adminUser ? "No hay anomalias registradas" : "Todavia no reportaste anomalias"}
-        emptyDescription="Cuando registres una nueva anomalia, aparecera en este listado."
+        emptyTitle={emptyTitle}
+        emptyDescription={emptyDescription}
       >
         <div className="stack-list">
           {data?.anomalies.results.map((item) => {

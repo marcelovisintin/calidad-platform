@@ -1524,6 +1524,50 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertIn(f"{year}9001", codes)
         self.assertIn(f"{year}9002", codes)
 
+    def test_tracking_relationship_and_anomaly_type_filters(self):
+        reporter = User.objects.create_user(
+            username="relationship-reporter",
+            email="relationship-reporter@example.com",
+            password="secret123",
+            access_level=User.AccessLevel.USUARIO_ACTIVO,
+            primary_sector=self.area,
+        )
+        other_type = AnomalyType.objects.create(code="OTRO", name="Otro tipo")
+        year = timezone.localdate().year
+
+        reported = Anomaly.objects.create(
+            code=f"{year}9051", title="Realizada por mi", description="Caso emitido",
+            site=self.site, area=self.area, reporter=self.user, anomaly_type=self.anomaly_type,
+            anomaly_origin=self.anomaly_origin, priority=self.priority, detected_at=timezone.now(),
+            created_by=self.user, updated_by=self.user,
+        )
+        received = Anomaly.objects.create(
+            code=f"{year}9052", title="Recibida como observacion", description="Caso recibido",
+            site=self.site, area=self.area, reporter=reporter, owner=self.user, anomaly_type=other_type,
+            anomaly_origin=self.anomaly_origin, priority=self.priority, detected_at=timezone.now(),
+            observation_resolution_path=ObservationResolutionPath.OBSERVATION,
+            created_by=reporter, updated_by=reporter,
+        )
+        AnomalyImmediateAction.objects.create(
+            anomaly=received, responsible=self.user, action_date=timezone.localdate(),
+            observation="Observacion asignada", created_by=self.user, updated_by=self.user,
+        )
+
+        reported_response = self.client.get("/api/v1/anomalies/?relationship=reported")
+        reported_codes = {item["code"] for item in reported_response.data["results"]}
+        self.assertIn(reported.code, reported_codes)
+        self.assertNotIn(received.code, reported_codes)
+
+        received_response = self.client.get("/api/v1/anomalies/?relationship=received")
+        received_codes = {item["code"] for item in received_response.data["results"]}
+        self.assertIn(received.code, received_codes)
+        self.assertNotIn(reported.code, received_codes)
+
+        type_response = self.client.get(f"/api/v1/anomalies/?anomaly_type={other_type.pk}")
+        type_codes = {item["code"] for item in type_response.data["results"]}
+        self.assertIn(received.code, type_codes)
+        self.assertNotIn(reported.code, type_codes)
+
     def test_tracking_list_includes_associated_treatment_anomalies(self):
         year = timezone.localdate().year
         parent = Anomaly.objects.create(

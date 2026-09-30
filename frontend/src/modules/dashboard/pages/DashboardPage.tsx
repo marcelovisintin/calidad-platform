@@ -313,7 +313,7 @@ export function DashboardPage({ defaultView = "none" }: { defaultView?: Dashboar
 
     const [summary, anomalies, treatments, pendingActions] = await Promise.all([
       fetchDashboardSummary(),
-      fetchMyAnomalies(user.id),
+      fetchMyAnomalies({ relationship: "reported" }),
       fetchTreatments(),
       fetchPendingActions(),
     ]);

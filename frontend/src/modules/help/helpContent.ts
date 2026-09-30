@@ -198,7 +198,8 @@ export const HELP_TOPICS: HelpTopic[] = [
         title: "Cómo buscar",
         bullets: [
           "Utiliza el texto libre para buscar por los datos mostrados en el listado.",
-          "Combina los filtros disponibles para reducir resultados.",
+          "Filtra por Tipo de desvío y combina ese criterio con la búsqueda libre.",
+          "En Recibidas / realizadas elige Todas las relacionadas, Recibidas para los casos asignados como NC u Observación, o Realizadas por mí para las anomalías que reportaste.",
           "Limpia los filtros para recuperar el listado completo de tu alcance.",
         ],
       },
