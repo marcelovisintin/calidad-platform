@@ -133,6 +133,11 @@ export function AppLayout() {
   }, [user?.photo_url]);
 
   const handleGoBack = () => {
+    const returnTo = new URLSearchParams(location.search).get("returnTo");
+    if (returnTo?.startsWith("/") && !returnTo.startsWith("//")) {
+      navigate(returnTo, { replace: true });
+      return;
+    }
     if (canGoBack) {
       navigate(-1);
       return;

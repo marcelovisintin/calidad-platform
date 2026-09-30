@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, MouseEvent, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   addLateTreatmentParticipant,
   addTreatmentParticipant,
@@ -1069,7 +1069,12 @@ return (
                           {selectedTreatment.anomaly_links.map((link) => (
                             <div className="list-card compact" key={`linked-${link.id}`}>
                               <div>
-                                <strong>{link.anomaly.code}</strong>
+                                <Link
+                                  className="text-link"
+                                  to={`/anomalies/${link.anomaly.id}?returnTo=${encodeURIComponent(`/treatments?treatment=${selectedTreatment.id}`)}`}
+                                >
+                                  <strong>{link.anomaly.code}</strong>
+                                </Link>
                                 <p>{link.anomaly.title}</p>
                                 <small>
                                   Proceso: {link.anomaly.imputed_area?.name || link.anomaly.area?.name || "-"} | Estado: <StatusBadge compact value={link.anomaly.current_status} overdue={link.anomaly.is_overdue} />
