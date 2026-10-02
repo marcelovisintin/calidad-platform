@@ -26,6 +26,7 @@
     notify_treatment_task_assigned,
     resolve_notification_task,
     sync_action_assignment_task_status,
+    sync_finding_management_task_status,
     sync_treatment_task_assignment_status,
 )
 
@@ -57,5 +58,6 @@ __all__ = [
     "notify_treatment_task_assigned",
     "resolve_notification_task",
     "sync_action_assignment_task_status",
+    "sync_finding_management_task_status",
     "sync_treatment_task_assignment_status",
 ]

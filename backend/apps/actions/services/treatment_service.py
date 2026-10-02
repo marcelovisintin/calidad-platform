@@ -49,6 +49,7 @@ from apps.notifications.services import (
     dismiss_cancelled_treatment_participation_tasks,
     dismiss_deleted_treatment_participation_tasks,
     dismiss_treatment_task_assignment_tasks,
+    notify_finding_management_assigned,
     notify_treatment_anomaly_associated,
     notify_treatment_closed,
     notify_treatment_effectiveness_assigned,
@@ -58,6 +59,7 @@ from apps.notifications.services import (
     notify_treatment_participant_invited,
     notify_treatment_task_assigned,
     sync_treatment_task_assignment_status,
+    sync_finding_management_task_status,
 )
 from common.upload_validation import normalized_upload_content_type, validate_evidence_file
 
@@ -988,6 +990,12 @@ def _ensure_treatment_in_progress(
         actor=user,
         request_id=request_id,
     )
+    _sync_treatment_finding_management_tasks(
+        treatment=treatment,
+        task_status="in_progress",
+        actor=user,
+        request_id=request_id,
+    )
 
     _register_history_for_treatment(
         treatment=treatment,
@@ -995,6 +1003,19 @@ def _ensure_treatment_in_progress(
         comment=reason,
     )
     return True
+
+
+def _sync_treatment_finding_management_tasks(
+    *, treatment: Treatment, task_status: str, actor=None, request_id: str = ""
+) -> None:
+    anomaly_ids = TreatmentAnomaly.objects.filter(treatment=treatment).values_list("anomaly_id", flat=True)
+    for anomaly in Anomaly.objects.filter(pk__in=anomaly_ids):
+        sync_finding_management_task_status(
+            anomaly=anomaly,
+            task_status=task_status,
+            actor=actor,
+            request_id=request_id,
+        )
 
 
 @transaction.atomic
@@ -1361,6 +1382,20 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
             request_id=request_id,
         )
 
+    finding_task_status = {
+        TreatmentStatus.SCHEDULED: "in_progress",
+        TreatmentStatus.IN_PROGRESS: "in_progress",
+        TreatmentStatus.COMPLETED: "completed",
+        TreatmentStatus.CANCELLED: "dismissed",
+    }.get(locked.status)
+    if finding_task_status:
+        _sync_treatment_finding_management_tasks(
+            treatment=locked,
+            task_status=finding_task_status,
+            actor=user,
+            request_id=request_id,
+        )
+
     if analysis_updated:
         _sync_treatment_analysis_to_anomalies(treatment=locked, user=user)
         links = TreatmentAnomaly.objects.filter(treatment=locked).select_related("anomaly")
@@ -1475,6 +1510,12 @@ def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str,
         request_id=request_id,
     )
     if result == TreatmentEffectivenessValidationResult.EFFECTIVE:
+        _sync_treatment_finding_management_tasks(
+            treatment=locked,
+            task_status="completed",
+            actor=user,
+            request_id=request_id,
+        )
         _close_anomalies_for_effective_treatment(
             treatment=locked,
             user=user,
@@ -1487,6 +1528,20 @@ def validate_treatment_effectiveness(*, treatment: Treatment, user, result: str,
             request_id=request_id,
         )
     else:
+        for link in locked.anomaly_links.all():
+            notify_finding_management_assigned(
+                anomaly=link.anomaly,
+                responsible=locked.responsible or link.anomaly.owner,
+                actor=user,
+                request_id=request_id,
+                treatment=locked,
+            )
+        _sync_treatment_finding_management_tasks(
+            treatment=locked,
+            task_status="in_progress",
+            actor=user,
+            request_id=request_id,
+        )
         notify_treatment_not_effective(
             treatment=locked,
             actor=user,
@@ -1792,6 +1847,12 @@ def delete_empty_treatment(*, treatment: Treatment, user, reason: str, request_i
         reason=reason,
         request_id=request_id,
     )
+    _sync_treatment_finding_management_tasks(
+        treatment=locked,
+        task_status="dismissed",
+        actor=user,
+        request_id=request_id,
+    )
     for anomaly in linked_anomalies:
         _restore_anomaly_after_treatment_removal(
             anomaly=anomaly,
@@ -1986,6 +2047,13 @@ def confirm_treatment_convocation(
             actor=user,
             request_id=request_id,
         )
+
+    _sync_treatment_finding_management_tasks(
+        treatment=locked,
+        task_status="in_progress",
+        actor=user,
+        request_id=request_id,
+    )
 
     record_audit_event(
         entity=locked,

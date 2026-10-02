@@ -766,6 +766,84 @@ class NotificationServiceTests(TestCase):
         self.assertIn("verificación de eficacia", notification.body)
         self.assertEqual(notification.context_data["management_path"], "observation_direct")
 
+    def test_observation_management_moves_to_in_progress_when_responsible_starts(self):
+        observation = Severity.objects.create(code="OBS-PROGRESS", name="Observación")
+        anomaly = self._create_unclassified_anomaly(title="Observación en gestión")
+        anomaly = update_anomaly(
+            anomaly=anomaly,
+            user=self.admin,
+            data={
+                "severity": observation,
+                "classification_responsible": self.analyst,
+                "observation_due_date": timezone.localdate() + timezone.timedelta(days=3),
+                "observation_comment": "Gestión directa.",
+            },
+        )
+        recipient = NotificationRecipient.objects.get(
+            notification__template_code="finding_management_assigned",
+            notification__source_id=anomaly.pk,
+            channel=NotificationChannel.IN_APP,
+        )
+        self.assertEqual(recipient.task_status, RecipientTaskStatus.PENDING)
+
+        save_observation_load(
+            anomaly=anomaly,
+            user=self.analyst,
+            data={
+                "responsible": self.analyst,
+                "action_date": timezone.localdate() + timezone.timedelta(days=3),
+                "observation": "Se inicia la gestión directa.",
+            },
+        )
+
+        recipient.refresh_from_db()
+        self.assertEqual(recipient.task_status, RecipientTaskStatus.IN_PROGRESS)
+        self.assertIsNone(recipient.resolved_at)
+
+    def test_treatment_management_moves_to_in_progress_and_is_dismissed_when_cancelled(self):
+        nonconformity = Severity.objects.create(code="NC-PROGRESS", name="No Conformidad")
+        anomaly = self._create_unclassified_anomaly(title="Tratamiento con seguimiento")
+        update_anomaly(
+            anomaly=anomaly,
+            user=self.admin,
+            data={
+                "severity": nonconformity,
+                "classification_responsible": self.analyst,
+                "treatment_deadline": timezone.localdate() + timezone.timedelta(days=5),
+            },
+        )
+        treatment = Treatment.objects.get(primary_anomaly=anomaly)
+        add_treatment_participant(
+            treatment=treatment,
+            participant_user=self.reporter,
+            role=TreatmentParticipantRole.CONVOKED,
+            note="Participar del tratamiento.",
+            user=self.analyst,
+        )
+        recipient = NotificationRecipient.objects.get(
+            notification__template_code="finding_management_assigned",
+            notification__source_id=anomaly.pk,
+            channel=NotificationChannel.IN_APP,
+        )
+
+        treatment = confirm_treatment_convocation(
+            treatment=treatment,
+            scheduled_for=timezone.now() + timezone.timedelta(days=1),
+            treatment_location="Sala de Calidad",
+            user=self.analyst,
+        )
+        recipient.refresh_from_db()
+        self.assertEqual(recipient.task_status, RecipientTaskStatus.IN_PROGRESS)
+
+        update_treatment(
+            treatment=treatment,
+            user=self.analyst,
+            data={"status": TreatmentStatus.CANCELLED},
+        )
+        recipient.refresh_from_db()
+        self.assertEqual(recipient.task_status, RecipientTaskStatus.DISMISSED)
+        self.assertIsNotNone(recipient.resolved_at)
+
     @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
     def test_observation_trt_decision_creates_treatment_notification(self):
         observation = Severity.objects.create(code="OBS", name="Observación")

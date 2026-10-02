@@ -965,6 +965,78 @@ def _dismiss_previous_finding_management_tasks(
 
 
 @transaction.atomic
+def sync_finding_management_task_status(
+    *, anomaly, task_status: str, actor=None, request_id: str = ""
+) -> None:
+    allowed_statuses = {
+        RecipientTaskStatus.PENDING,
+        RecipientTaskStatus.IN_PROGRESS,
+        RecipientTaskStatus.COMPLETED,
+        RecipientTaskStatus.DISMISSED,
+    }
+    if task_status not in allowed_statuses:
+        raise ValidationError({"task_status": "El estado de gestión de hallazgo no es válido."})
+
+    recipients = list(
+        NotificationRecipient.objects.select_for_update()
+        .select_related("notification")
+        .filter(
+            notification__source_type="anomalies.anomaly",
+            notification__source_id=anomaly.pk,
+            notification__template_code=FINDING_MANAGEMENT_TEMPLATE,
+            notification__task_type=NotificationTaskType.FINDING_MANAGEMENT,
+            task_status__in=[RecipientTaskStatus.PENDING, RecipientTaskStatus.IN_PROGRESS],
+        )
+    )
+    if not recipients:
+        return
+
+    is_terminal = task_status in {RecipientTaskStatus.COMPLETED, RecipientTaskStatus.DISMISSED}
+    now = timezone.now()
+    for recipient in recipients:
+        recipient.task_status = task_status
+        recipient.resolved_at = now if is_terminal else None
+        if (
+            is_terminal
+            and recipient.channel == NotificationChannel.EMAIL
+            and recipient.delivery_status == DeliveryStatus.PENDING
+        ):
+            recipient.delivery_status = DeliveryStatus.SKIPPED
+            recipient.delivery_error = "La gestión del hallazgo finalizó antes del envío."
+        recipient.updated_by = actor
+        recipient.row_version = (recipient.row_version or 0) + 1
+        recipient.updated_at = now
+
+    NotificationRecipient.objects.bulk_update(
+        recipients,
+        [
+            "task_status",
+            "resolved_at",
+            "delivery_status",
+            "delivery_error",
+            "updated_by",
+            "row_version",
+            "updated_at",
+        ],
+    )
+    notification_ids = {recipient.notification_id for recipient in recipients}
+    if is_terminal:
+        Notification.objects.filter(pk__in=notification_ids).update(
+            status=NotificationStatus.SENT,
+            row_version=F("row_version") + 1,
+            updated_at=now,
+        )
+    for recipient in recipients:
+        record_audit_event(
+            entity=recipient.notification,
+            action="notification.task_synced",
+            actor=actor,
+            after_data={"recipient_id": str(recipient.pk), "task_status": task_status},
+            request_id=_request_id(request_id),
+        )
+
+
+@transaction.atomic
 def notify_finding_management_assigned(
     *,
     anomaly,

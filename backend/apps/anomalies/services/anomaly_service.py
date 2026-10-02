@@ -25,6 +25,7 @@ from apps.notifications.services import (
     notify_observation_effectiveness_assigned,
     notify_observation_not_effective,
     notify_participation_request,
+    sync_finding_management_task_status,
 )
 from apps.anomalies.models import (
     AffectedOrder,
@@ -1384,6 +1385,13 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
             request_id=request_id,
             treatment=configured_treatment,
         )
+    else:
+        sync_finding_management_task_status(
+            anomaly=locked,
+            task_status="in_progress",
+            actor=user,
+            request_id=request_id,
+        )
     return immediate_action
 
 
@@ -1480,6 +1488,12 @@ def create_observation_action(*, anomaly: Anomaly, user, data: dict, request_id:
             "effectiveness_due_date": action.effectiveness_due_date.isoformat(),
         },
         request_id=_request_id(request_id),
+    )
+    sync_finding_management_task_status(
+        anomaly=locked,
+        task_status="in_progress",
+        actor=user,
+        request_id=request_id,
     )
     return action
 
@@ -1592,6 +1606,12 @@ def complete_observation_action(*, action: ObservationAction, user, completed_at
         request_id=_request_id(request_id),
     )
     if all_actions_completed and immediate_action is not None:
+        sync_finding_management_task_status(
+            anomaly=locked_anomaly,
+            task_status="completed",
+            actor=user,
+            request_id=request_id,
+        )
         notify_observation_effectiveness_assigned(
             anomaly=locked_anomaly,
             immediate_action=immediate_action,
@@ -1673,6 +1693,12 @@ def save_observation_action_taken(*, anomaly: Anomaly, user, data: dict, request
         before_data=before,
         after_data=snapshot_anomaly(locked) | {"immediate_action_id": str(immediate_action.pk)},
         request_id=_request_id(request_id),
+    )
+    sync_finding_management_task_status(
+        anomaly=locked,
+        task_status="completed",
+        actor=user,
+        request_id=request_id,
     )
     notify_observation_effectiveness_assigned(
         anomaly=locked,
@@ -1900,6 +1926,12 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, file
             actor=user,
             request_id=request_id,
         )
+        notify_finding_management_assigned(
+            anomaly=locked,
+            responsible=immediate_action.responsible,
+            actor=user,
+            request_id=request_id,
+        )
     return immediate_action
 
 
@@ -1981,10 +2013,23 @@ def transition_anomaly(*, anomaly: Anomaly, user, target_stage: str | None = Non
         request_id=_request_id(request_id),
     )
     if previous_status != AnomalyStatus.CLOSED and locked.current_status == AnomalyStatus.CLOSED:
+        sync_finding_management_task_status(
+            anomaly=locked,
+            task_status="completed",
+            actor=user,
+            request_id=request_id,
+        )
         notify_anomaly_closed(
             anomaly=locked,
             actor=user,
             closure_path="administrative",
+            request_id=request_id,
+        )
+    elif locked.current_status == AnomalyStatus.CANCELLED:
+        sync_finding_management_task_status(
+            anomaly=locked,
+            task_status="dismissed",
+            actor=user,
             request_id=request_id,
         )
     return locked
