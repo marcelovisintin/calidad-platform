@@ -69,6 +69,11 @@ const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
 ];
 
 const RELEASE_SUMMARIES: Record<string, string[]> = {
+  "release-1.7.1": [
+    "Las áreas de texto de tratamientos, anomalías, acciones, validaciones y lecciones aprendidas comienzan compactas y crecen con el contenido.",
+    "Revisión de hallazgos muestra Observación / Motivo en todas las clasificaciones y conserva el texto en el historial.",
+    "Se compactó el comentario al confirmar una No Conformidad y se quitaron rótulos redundantes en Observación.",
+  ],
   "release-1.7.0": [
     "Los vencimientos comienzan al día siguiente de la fecha límite y dejan de mostrarse al cambiar de estado.",
     "Los correos de vencimiento se dirigen al responsable actual de cada tratamiento, acción o verificación.",

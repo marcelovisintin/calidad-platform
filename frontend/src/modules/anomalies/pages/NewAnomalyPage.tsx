@@ -7,6 +7,7 @@ import { newAnomalyDraftKey } from "../../../app/sessionDrafts";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { toOffsetIso } from "../../../app/utils";
 import { SearchableSelect } from "../../../components/SearchableSelect";
+import { AutoResizeTextarea } from "../../../components/AutoResizeTextarea";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
@@ -510,12 +511,12 @@ export function NewAnomalyPage() {
             </div>
             <label className="field field-span-2" data-tour="anomaly-observation">
               <span>Observacion</span>
-              <textarea
+              <AutoResizeTextarea
                 name="description"
+                minHeightPx={70}
                 onChange={handleChange}
                 placeholder="Describi lo observado, donde ocurrio y cualquier dato util para analizar despues."
                 required
-                rows={3}
                 value={form.description}
               />
             </label>

@@ -21,6 +21,7 @@ import { readStoredSession } from "../../../api/http";
 import { formatDate, formatDateTime, toDateTimeLocalValue, toOffsetIso } from "../../../app/utils";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { DataState } from "../../../components/DataState";
+import { AutoResizeTextarea } from "../../../components/AutoResizeTextarea";
 import { PageHeader } from "../../../components/PageHeader";
 import { TreatmentStartDeadline } from "../../../components/TreatmentStartDeadline";
 import { PaginationControls } from "../../../components/PaginationControls";
@@ -1037,14 +1038,14 @@ return (
 
                   <div className="treatment-tab-row">
                     <button
-                      className={`button button-secondary treatment-tab-agenda${selectedTab === "agenda" ? " active" : ""}`}
+                      className={`button button-secondary treatment-tab-button treatment-tab-agenda${selectedTab === "agenda" ? " active" : ""}`}
                       onClick={() => setSelectedTab("agenda")}
                       type="button"
                     >
                       Vista 1 - Convocatoria
                     </button>
                     <button
-                      className={`button button-secondary treatment-tab-analysis${selectedTab === "analysis" ? " active" : ""}`}
+                      className={`button button-secondary treatment-tab-button treatment-tab-analysis${selectedTab === "analysis" ? " active" : ""}`}
                       onClick={() => setSelectedTab("analysis")}
                       type="button"
                     >
@@ -1067,7 +1068,7 @@ return (
 
                         <div className="stack-list compact">
                           {selectedTreatment.anomaly_links.map((link) => (
-                            <div className="list-card compact" key={`linked-${link.id}`}>
+                            <div className={`list-card compact${link.is_primary ? " treatment-origin-anomaly" : ""}`} key={`linked-${link.id}`}>
                               <div>
                                 <Link
                                   className="text-link"
@@ -1087,12 +1088,6 @@ return (
                           ))}
                         </div>
 
-                        <div className="panel info compact-inline-panel">
-                          <p>
-                            La composición es informativa. Las nuevas asociaciones se realizan únicamente desde
-                            Seguimiento de anomalías por Administrador o Desarrollador.
-                          </p>
-                        </div>
                       </section>
 
                       <form className="form-section" data-tour="treatment-participants" onSubmit={handleAddParticipant}>
@@ -1105,18 +1100,14 @@ return (
                         <div className="form-grid">
                           <SearchableSelect className="field" disabled={treatmentLocked || convocationConfirmed} label="Area" onChange={setParticipantAreaId} options={participantAreaOptions.map((area) => ({ value: area.id, label: area.name }))} placeholder="Todas las areas" value={participantAreaId} />
                           <SearchableSelect className="field" clearable={false} disabled={treatmentLocked || convocationConfirmed} label="Usuario" onChange={setParticipantUserId} options={participantUserOptions.map((user) => ({ value: user.id, label: buildUsersLabel(user) }))} placeholder="Seleccionar usuario..." value={participantUserId} />
-                          <div className="field">
-                            <span>Participacion</span>
-                            <strong>Convocado</strong>
-                          </div>
                         </div>
                         <label className="field">
                           <span>Nota</span>
-                          <textarea
+                          <AutoResizeTextarea
                             name="participant_note"
                             disabled={treatmentLocked || convocationConfirmed}
+                            minHeightPx={70}
                             onChange={(event) => setParticipantNote(event.target.value)}
-                            rows={3}
                             value={participantNote}
                           />
                         </label>
@@ -1200,14 +1191,14 @@ return (
                       </form>
 
                       {convocationConfirmed ? (
-                        <form className="form-section" data-tour="treatment-late-participants" onSubmit={handleAddLateParticipant}>
+                        <form className="form-section treatment-late-participants" data-tour="treatment-late-participants" onSubmit={handleAddLateParticipant}>
                           <div className="section-head compact">
                             <div>
                               <h3>Incorporar asistente posterior</h3>
                               <small>El responsable del tratamiento puede sumar un asistente con motivo registrado.</small>
                             </div>
-                            <button className="button button-primary" disabled={busy || !canAddLateParticipant || !lateParticipantUserId || !lateParticipantReason.trim()} type="submit">
-                              Incorporar asistente
+                            <button className="button button-primary treatment-add-assistant" disabled={busy || !canAddLateParticipant || !lateParticipantUserId || !lateParticipantReason.trim()} type="submit">
+                              Agrega asistente
                             </button>
                           </div>
                           {canAddLateParticipant ? (
@@ -1286,7 +1277,7 @@ return (
                         <SearchableSelect className="field" disabled={treatmentLocked} label="Metodo usado" onChange={setMethodUsed} options={METHOD_OPTIONS.filter((method) => method.value)} placeholder={METHOD_OPTIONS.find((method) => !method.value)?.label || "Seleccionar..."} value={methodUsed} />
                         <label className="field">
                           <span>Detalle de análisis</span>
-                          <textarea disabled={treatmentLocked} onChange={(event) => setObservations(event.target.value)} rows={4} value={observations} />
+                          <AutoResizeTextarea disabled={treatmentLocked} minHeightPx={70} onChange={(event) => setObservations(event.target.value)} value={observations} />
                         </label>
                       </div>
 
@@ -1346,10 +1337,10 @@ return (
                         </div>
                         <label className="field">
                           <span>Descripcion de la causa raiz</span>
-                          <textarea
+                          <AutoResizeTextarea
                             disabled={treatmentLocked}
+                            minHeightPx={70}
                             onChange={(event) => setRootCauseDescription(event.target.value)}
-                            rows={3}
                             value={rootCauseDescription}
                           />
                         </label>
@@ -1427,11 +1418,11 @@ return (
 
                           <label className="field field-span-2">
                             <span>Descripcion / observaciones</span>
-                            <textarea
+                            <AutoResizeTextarea
                               disabled={treatmentLocked}
+                              minHeightPx={70}
                               onChange={(event) => handleTaskDraftChange("description", event.target.value)}
                               required
-                              rows={3}
                               value={taskDraft.description}
                             />
                           </label>

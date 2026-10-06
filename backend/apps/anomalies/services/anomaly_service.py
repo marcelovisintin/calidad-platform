@@ -736,7 +736,7 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
 
 
         classification_summary = locked.classification_summary or f"Criterio de Revisión de hallazgos aplicado: {locked.severity.name}."
-        if closes_as_invalid and classification_reason:
+        if classification_reason:
             classification_summary = f"{classification_summary} Motivo: {classification_reason}"
         classification = _get_related_or_none(locked, "classification")
         if classification is None:
@@ -776,9 +776,10 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
         ]
         if closes_as_invalid:
             evidence_lines.append("Resultado: Invalida")
-            evidence_lines.append(f"Motivo: {classification_reason}")
         elif classification_responsible is not None:
             evidence_lines.append(f"Responsable asignado: {_user_label(classification_responsible)}")
+        if classification_reason:
+            evidence_lines.append(f"Motivo: {classification_reason}")
         if is_observation:
             evidence_lines.append(f"Fecha de realizacion: {observation_due_date.isoformat()}")
         evidence_lines.extend(

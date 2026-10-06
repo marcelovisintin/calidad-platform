@@ -2565,10 +2565,23 @@ small {
   gap: 0.9rem;
 }
 
+.treatment-origin-data {
+  margin-top: 0;
+}
+
+.treatment-detail-panel [data-tour="treatment-summary"] .page-description {
+  margin-bottom: 0.5rem;
+}
+
 .treatment-tab-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
+}
+
+.treatment-tab-row .treatment-tab-button {
+  padding: 0.68rem 0.96rem;
+  font-size: 0.9rem;
 }
 
 .button.button-secondary.active {
@@ -2580,6 +2593,33 @@ small {
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
+}
+
+.treatment-origin-anomaly {
+  padding: 0.7rem 0.85rem;
+  gap: 0.7rem;
+}
+
+.treatment-origin-anomaly p {
+  margin: 0.35rem 0;
+}
+
+.treatment-late-participants {
+  padding: 0.8rem;
+  gap: 0.7rem;
+}
+
+.treatment-late-participants .form-grid,
+.treatment-late-participants .stack-list {
+  gap: 0.7rem;
+}
+
+.treatment-add-assistant {
+  flex-shrink: 0;
+  width: max-content;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.9rem;
+  white-space: nowrap;
 }
 
 .treatment-checkbox-grid {

@@ -1888,9 +1888,11 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
 
         anomaly_id = create_response.data["id"]
+        classification_payload = self._classification_payload(self.severity)
+        classification_payload["classification_reason"] = "Se requiere analizar la desviacion."
         patch_response = self.client.patch(
             f"/api/v1/anomalies/{anomaly_id}/",
-            self._classification_payload(self.severity),
+            classification_payload,
             format="json",
         )
 
@@ -1902,6 +1904,11 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertIsNotNone(patch_response.data["classification"])
         self.assertIn("Criterio de Revisión de hallazgos aplicado", patch_response.data["classification"]["summary"])
         self.assertIn(self.severity.name, patch_response.data["classification"]["summary"])
+        self.assertIn("Motivo: Se requiere analizar la desviacion.", patch_response.data["classification"]["summary"])
+        self.assertTrue(any(
+            "Motivo: Se requiere analizar la desviacion." in item["evidence_note"]
+            for item in patch_response.data["status_history"]
+        ))
 
         participant_exists = AnomalyParticipant.objects.filter(
             anomaly_id=anomaly_id,

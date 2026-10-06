@@ -5,6 +5,7 @@ import { fetchTreatmentDetail, validateTreatmentEffectiveness } from "../../../a
 import type { ActionWorkItemSource, ValidationWorkItem } from "../../../api/types";
 import { formatDate, formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
+import { AutoResizeTextarea } from "../../../components/AutoResizeTextarea";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
 import { SearchableSelect } from "../../../components/SearchableSelect";
@@ -295,11 +296,11 @@ export function TreatmentValidationPage() {
                         <SearchableSelect className="field" dataTour="validation-result" disabled={!selectedItem.can_validate || busy} label="Resultado" onChange={(value) => setValidationResult(value as ValidationResult)} options={[{ value: "effective", label: "Eficaz" }, { value: "not_effective", label: "No eficaz" }]} placeholder="Seleccionar..." required value={validationResult} />
                         <label className="field field-span-2" data-tour="validation-reason">
                           <span>Fundamento de eficacia</span>
-                          <textarea
+                          <AutoResizeTextarea
                             disabled={!selectedItem.can_validate || busy}
+                            minHeightPx={70}
                             onChange={(event) => setValidationComment(event.target.value)}
                             required
-                            rows={3}
                             value={validationComment}
                           />
                         </label>

@@ -14,6 +14,7 @@ import {
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { formatDateTime, toOffsetIso } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
+import { AutoResizeTextarea } from "../../../components/AutoResizeTextarea";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
 import { SearchableSelect } from "../../../components/SearchableSelect";
@@ -563,7 +564,6 @@ export function ImmediateActionsPage() {
                   <form className="form-section" data-tour="observation-general" onSubmit={handleLoadAction}>
                     <div className="section-head compact">
                       <div>
-                        <p className="eyebrow">Primera tarjeta</p>
                         <h3>Datos generales de la Observacion</h3>
                       </div>
                     </div>
@@ -581,7 +581,7 @@ export function ImmediateActionsPage() {
 
                       <label className="field field-span-2" data-tour="observation-cause">
                         <span>Causa asignada</span>
-                        <textarea disabled={hasLoadedAction} onChange={(event) => setObservation(event.target.value)} required rows={3} value={observation} />
+                        <AutoResizeTextarea disabled={hasLoadedAction} minHeightPx={70} onChange={(event) => setObservation(event.target.value)} required value={observation} />
                       </label>
 
                       <label className="checkbox-inline field-span-2" data-tour="observation-treatment-path">
@@ -609,7 +609,6 @@ export function ImmediateActionsPage() {
                     <form className="form-section" data-tour="observation-actions" onSubmit={handleCreateObservationAction}>
                       <div className="section-head compact">
                         <div>
-                          <p className="eyebrow">Segunda tarjeta</p>
                           <h3>Acciones tomadas</h3>
                         </div>
                       </div>
@@ -627,7 +626,7 @@ export function ImmediateActionsPage() {
 
                         <label className="field field-span-2">
                           <span>Detalle de la accion</span>
-                          <textarea onChange={(event) => setActionDetail(event.target.value)} required rows={3} value={actionDetail} />
+                          <AutoResizeTextarea minHeightPx={70} onChange={(event) => setActionDetail(event.target.value)} required value={actionDetail} />
                         </label>
 
                         <label className="field field-span-2" data-tour="observation-evidence">
@@ -786,7 +785,7 @@ export function ImmediateActionsPage() {
 
                         <label className="field field-span-2" data-tour="observation-effectiveness-reason">
                           <span>Fundamento de eficacia</span>
-                          <textarea disabled={!canVerifyEffectiveness} onChange={(event) => setEffectivenessComment(event.target.value)} required rows={3} value={effectivenessComment} />
+                          <AutoResizeTextarea disabled={!canVerifyEffectiveness} minHeightPx={70} onChange={(event) => setEffectivenessComment(event.target.value)} required value={effectivenessComment} />
                         </label>
                         <label className="field field-span-2">
                           <span>Evidencia objetiva de la verificacion (obligatoria)</span>

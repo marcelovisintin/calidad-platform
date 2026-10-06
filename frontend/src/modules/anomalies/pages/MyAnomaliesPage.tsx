@@ -9,6 +9,7 @@ import { isAdminUser } from "../../../app/access";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { formatDateTime } from "../../../app/utils";
 import { DataState } from "../../../components/DataState";
+import { AutoResizeTextarea } from "../../../components/AutoResizeTextarea";
 import { PageHeader } from "../../../components/PageHeader";
 import { PaginationControls } from "../../../components/PaginationControls";
 import { SearchableSelect } from "../../../components/SearchableSelect";
@@ -298,7 +299,7 @@ export function MyAnomaliesPage() {
       await classifyAnomalyBySeverity(pendingClassification.anomalyId, {
         severity: pendingClassification.severityId,
         classification_responsible: pendingClassification.closesAsInvalid ? undefined : pendingClassification.responsibleId || undefined,
-        classification_reason: pendingClassification.closesAsInvalid ? pendingClassification.reason.trim() : undefined,
+        classification_reason: pendingClassification.reason.trim() || undefined,
         observation_due_date: pendingClassification.isObservation
           ? pendingClassification.observationDueDate
           : undefined,
@@ -453,19 +454,18 @@ export function MyAnomaliesPage() {
                             <h3>{`Confirmar ${pendingForItem.severityName}`}</h3>
                           </div>
 
-                          {pendingForItem.closesAsInvalid ? (
-                            <label className="field">
-                              <span>Observacion / Motivo</span>
-                              <textarea
-                                onChange={(event) =>
-                                  setPendingClassification((current) => current && current.anomalyId === item.id ? { ...current, reason: event.target.value } : current)
-                                }
-                                required
-                                rows={3}
-                                value={pendingForItem.reason}
-                              />
-                            </label>
-                          ) : (
+                          <label className="field">
+                            <span>Observacion / Motivo</span>
+                            <AutoResizeTextarea
+                              minHeightPx={70}
+                              onChange={(event) =>
+                                setPendingClassification((current) => current && current.anomalyId === item.id ? { ...current, reason: event.target.value } : current)
+                              }
+                              required={pendingForItem.closesAsInvalid}
+                              value={pendingForItem.reason}
+                            />
+                          </label>
+                          {!pendingForItem.closesAsInvalid ? (
                             <>
                               {pendingForItem.requiresResponsible ? (
                                 <SearchableSelect
@@ -514,20 +514,20 @@ export function MyAnomaliesPage() {
                                   </label>
                                   <label className="field">
                                     <span>Comentario (opcional)</span>
-                                    <textarea
+                                    <AutoResizeTextarea
+                                      minHeightPx={70}
                                       onChange={(event) =>
                                         setPendingClassification((current) => current && current.anomalyId === item.id
                                           ? { ...current, treatmentComment: event.target.value }
                                           : current)
                                       }
-                                      rows={3}
                                       value={pendingForItem.treatmentComment}
                                     />
                                   </label>
                                 </section>
                               ) : null}
                             </>
-                          )}
+                          ) : null}
 
                           <div className="form-actions">
                             <button className="button button-primary" disabled={updatingAnomalyId === item.id} type="submit">

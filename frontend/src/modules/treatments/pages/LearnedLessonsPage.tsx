@@ -7,6 +7,7 @@ import type { ObservationLearnedLessonItem, TreatmentParticipantOption, Treatmen
 import { formatDate, formatDateTime } from "../../../app/utils";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { DataState } from "../../../components/DataState";
+import { AutoResizeTextarea } from "../../../components/AutoResizeTextarea";
 import { PageHeader } from "../../../components/PageHeader";
 import { SearchableSelect } from "../../../components/SearchableSelect";
 import { PaginationControls } from "../../../components/PaginationControls";
@@ -249,7 +250,7 @@ function LearnedLessonCard({
           <>
             <label className="field" data-tour="lesson-learning-text">
               <span>Que se aprendio?</span>
-              <textarea value={form.learnedText} onChange={(event) => updateForm({ learnedText: event.target.value })} />
+              <AutoResizeTextarea minHeightPx={70} value={form.learnedText} onChange={(event) => updateForm({ learnedText: event.target.value })} />
             </label>
             <label className="field" data-tour="lesson-evidence">
               <span>Evidencia objetiva</span>
@@ -261,7 +262,7 @@ function LearnedLessonCard({
         {form.hasLearning === "no" ? (
           <label className="field" data-tour="lesson-no-learning">
             <span>Por que no se aprendio?</span>
-            <textarea value={form.noLearningReason} onChange={(event) => updateForm({ noLearningReason: event.target.value })} />
+            <AutoResizeTextarea minHeightPx={70} value={form.noLearningReason} onChange={(event) => updateForm({ noLearningReason: event.target.value })} />
           </label>
         ) : null}
 
@@ -270,7 +271,7 @@ function LearnedLessonCard({
         {form.procedureModified === "yes" ? (
           <label className="field" data-tour="lesson-procedure-detail">
             <span>Observaciones sobre modificacion de procedimiento</span>
-            <textarea value={form.procedureModificationNotes} onChange={(event) => updateForm({ procedureModificationNotes: event.target.value })} />
+            <AutoResizeTextarea minHeightPx={70} value={form.procedureModificationNotes} onChange={(event) => updateForm({ procedureModificationNotes: event.target.value })} />
           </label>
         ) : null}
 
@@ -523,7 +524,7 @@ function ObservationLearnedLessonCard({
           <>
             <label className="field" data-tour="lesson-learning-text">
               <span>Que se aprendio?</span>
-              <textarea value={form.learnedText} onChange={(event) => updateForm({ learnedText: event.target.value })} />
+              <AutoResizeTextarea minHeightPx={70} value={form.learnedText} onChange={(event) => updateForm({ learnedText: event.target.value })} />
             </label>
             <label className="field" data-tour="lesson-evidence">
               <span>Evidencia objetiva</span>
@@ -535,7 +536,7 @@ function ObservationLearnedLessonCard({
         {form.hasLearning === "no" ? (
           <label className="field" data-tour="lesson-no-learning">
             <span>Por que no se aprendio?</span>
-            <textarea value={form.noLearningReason} onChange={(event) => updateForm({ noLearningReason: event.target.value })} />
+            <AutoResizeTextarea minHeightPx={70} value={form.noLearningReason} onChange={(event) => updateForm({ noLearningReason: event.target.value })} />
           </label>
         ) : null}
 
@@ -544,7 +545,7 @@ function ObservationLearnedLessonCard({
         {form.procedureModified === "yes" ? (
           <label className="field" data-tour="lesson-procedure-detail">
             <span>Observaciones sobre modificacion de procedimiento</span>
-            <textarea value={form.procedureModificationNotes} onChange={(event) => updateForm({ procedureModificationNotes: event.target.value })} />
+            <AutoResizeTextarea minHeightPx={70} value={form.procedureModificationNotes} onChange={(event) => updateForm({ procedureModificationNotes: event.target.value })} />
           </label>
         ) : null}
 
