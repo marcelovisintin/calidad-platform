@@ -69,6 +69,9 @@ const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
 ];
 
 const RELEASE_SUMMARIES: Record<string, string[]> = {
+  "release-1.7.2": [
+    "Se corrigió la carga de Lecciones aprendidas de Observaciones al quitar una referencia a un filtro inexistente.",
+  ],
   "release-1.7.1": [
     "Las áreas de texto de tratamientos, anomalías, acciones, validaciones y lecciones aprendidas comienzan compactas y crecen con el contenido.",
     "Revisión de hallazgos muestra Observación / Motivo en todas las clasificaciones y conserva el texto en el historial.",

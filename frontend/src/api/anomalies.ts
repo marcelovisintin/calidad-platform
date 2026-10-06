@@ -175,9 +175,6 @@ export function fetchObservationLearnedLessons(page = 1, search = "") {
   if (search.trim()) {
     params.set("search", search.trim());
   }
-  if (anomalyType) {
-    params.set("anomaly_type", anomalyType);
-  }
   return apiRequest<PagedResponse<ObservationLearnedLessonItem>>(
     `/anomalies/observation-learned-lessons/?${params.toString()}`,
   );
