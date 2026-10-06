@@ -8,7 +8,7 @@ const source = readFileSync(new URL("./src/app/deadlines.ts", import.meta.url), 
 const { outputText } = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
 });
-const { isDeadlineOverdue } = await import(
+const { isDeadlineOverdue, canShowOverdue } = await import(
   "data:text/javascript;base64," + Buffer.from(outputText).toString("base64")
 );
 
@@ -25,4 +25,10 @@ test("finished records and missing or invalid dates are not overdue", () => {
   }
   assert.equal(isDeadlineOverdue(null, "pending"), false);
   assert.equal(isDeadlineOverdue("invalid", "pending"), false);
+});
+
+test("a started activity no longer shows overdue", () => {
+  assert.equal(isDeadlineOverdue("2000-01-01", "in_progress"), false);
+  assert.equal(canShowOverdue("in_progress"), false);
+  assert.equal(canShowOverdue("scheduled"), false);
 });

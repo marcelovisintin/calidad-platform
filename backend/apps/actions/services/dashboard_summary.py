@@ -116,13 +116,13 @@ def _count_anomalies(queryset):
 def _count_actions(queryset):
     today = timezone.localdate()
     overdue = queryset.filter(
-        status__in=[ActionItemStatus.PENDING, ActionItemStatus.IN_PROGRESS],
+        status=ActionItemStatus.PENDING,
         due_date__lt=today,
     ).count()
     counts = {"overdue": overdue}
     for status in ActionItemStatus.values:
         status_queryset = queryset.filter(status=status)
-        if status in {ActionItemStatus.PENDING, ActionItemStatus.IN_PROGRESS}:
+        if status == ActionItemStatus.PENDING:
             status_queryset = status_queryset.exclude(due_date__lt=today)
         counts[status] = status_queryset.count()
     return counts
@@ -131,13 +131,13 @@ def _count_actions(queryset):
 def _count_treatment_tasks(queryset):
     today = timezone.localdate()
     overdue = queryset.filter(
-        status__in=[TreatmentTaskStatus.PENDING, TreatmentTaskStatus.IN_PROGRESS],
+        status=TreatmentTaskStatus.PENDING,
         execution_date__lt=today,
     ).count()
     counts = {"overdue": overdue}
     for status in TreatmentTaskStatus.values:
         status_queryset = queryset.filter(status=status)
-        if status in {TreatmentTaskStatus.PENDING, TreatmentTaskStatus.IN_PROGRESS}:
+        if status == TreatmentTaskStatus.PENDING:
             status_queryset = status_queryset.exclude(execution_date__lt=today)
         counts[status] = status_queryset.count()
     return counts
@@ -157,7 +157,7 @@ def _count_action_work(querysets):
 
 
 def _count_treatments(queryset):
-    expired = Q(deadline__lt=timezone.localdate()) & ~Q(status__in=["completed", "cancelled"])
+    expired = Q(deadline__lt=timezone.localdate(), status=TreatmentStatus.PENDING)
     return {
         "overdue": queryset.filter(expired).count(),
         **{status: queryset.filter(status=status).exclude(expired).count() for status in TreatmentStatus.values},

@@ -27,6 +27,10 @@ from apps.notifications.services import (
     notify_participation_request,
     sync_finding_management_task_status,
 )
+from apps.notifications.services.notification_service import (
+    complete_observation_action_assignment,
+    notify_observation_action_assigned,
+)
 from apps.anomalies.models import (
     AffectedOrder,
     Anomaly,
@@ -1444,6 +1448,7 @@ def create_observation_action(*, anomaly: Anomaly, user, data: dict, request_id:
     )
     action.full_clean()
     action.save()
+    notify_observation_action_assigned(action=action, actor=user, request_id=request_id)
 
     previous_status = locked.current_status
     previous_stage = locked.current_stage
@@ -1533,6 +1538,7 @@ def complete_observation_action(*, action: ObservationAction, user, completed_at
     if not locked_action.evidences.exists():
         raise ValidationError({"evidence": "Debe cargar evidencia propia de esta accion antes de finalizarla."})
 
+    overdue_before_completion = locked_action.is_overdue
     previous_status = locked_anomaly.current_status
     previous_stage = locked_anomaly.current_stage
     locked_action.status = ObservationActionStatus.COMPLETED
@@ -1542,6 +1548,7 @@ def complete_observation_action(*, action: ObservationAction, user, completed_at
     _bump_version(locked_action)
     locked_action.full_clean()
     locked_action.save()
+    complete_observation_action_assignment(action=locked_action, actor=user, request_id=request_id)
 
     now = timezone.now()
     reference_action = None
@@ -1577,6 +1584,9 @@ def complete_observation_action(*, action: ObservationAction, user, completed_at
             "Todas las acciones estan completas; continua la verificacion de eficacia."
             if all_actions_completed
             else f"Accion {locked_action.sequence} de Observacion finalizada."
+        ) + (
+            f" Finaliza el vencimiento de la fecha {locked_action.estimated_completion_date:%d/%m/%Y}."
+            if overdue_before_completion else ""
         ),
         evidence_note=f"Fecha real de finalizacion: {locked_action.completed_at.isoformat()}",
         actor=user,

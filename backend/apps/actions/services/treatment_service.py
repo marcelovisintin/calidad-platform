@@ -980,6 +980,7 @@ def _ensure_treatment_in_progress(
     if treatment.status not in {TreatmentStatus.PENDING, TreatmentStatus.SCHEDULED}:
         return False
 
+    overdue_before_transition = treatment.is_overdue
     treatment.status = TreatmentStatus.IN_PROGRESS
     treatment.updated_by = user
     _bump_version(treatment)
@@ -1000,7 +1001,10 @@ def _ensure_treatment_in_progress(
     _register_history_for_treatment(
         treatment=treatment,
         user=user,
-        comment=reason,
+        comment=(
+            f"{reason} El inicio pone fin al vencimiento de la fecha {treatment.deadline:%d/%m/%Y}."
+            if overdue_before_transition else reason
+        ),
     )
     return True
 
@@ -1321,6 +1325,7 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
             {"scheduled_for": "La convocatoria ya fue confirmada y su agenda no puede modificarse."}
         )
     before = snapshot_treatment(locked)
+    overdue_before_transition = locked.is_overdue
 
     status_changed = False
     auto_progressed = False
@@ -1418,6 +1423,8 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
     comments: list[str] = []
     if status_changed or auto_progressed:
         comments.append(f"El tratamiento {locked.code} cambia a estado {locked.status}.")
+        if overdue_before_transition and not locked.is_overdue:
+            comments.append(f"Finaliza el vencimiento de la fecha {before['deadline']}.")
     if "scheduled_for" in data or "treatment_location" in data:
         comments.append("Se actualiza la agenda del tratamiento.")
     if "effectiveness_evaluation_date" in data or "effectiveness_responsible" in data:
@@ -2353,6 +2360,8 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
         ensure_treatment_is_editable(treatment_task.treatment)
     locked = TreatmentTask.objects.select_for_update().get(pk=treatment_task.pk)
     previous_status = locked.status
+    overdue_before_transition = locked.is_overdue
+    overdue_deadline = locked.execution_date
     previous_responsible_id = locked.responsible_id
     next_status = data.get("status", locked.status)
     status_changed = "status" in data and next_status != previous_status
@@ -2418,6 +2427,8 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
             comment=(
                 f"Tratamiento {locked.treatment.code}: se actualiza la accion "
                 f"{locked.code or locked.title} de estado {previous_status} a estado {locked.status}."
+                + (f" Finaliza el vencimiento de la fecha {overdue_deadline:%d/%m/%Y}."
+                   if overdue_before_transition and not locked.is_overdue else "")
             ),
             evidence_note=evidence_note,
         )

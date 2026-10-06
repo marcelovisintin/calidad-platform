@@ -26,7 +26,7 @@ class DeadlineTests(SimpleTestCase):
     def test_treatment_deadline_and_verification_deadline_are_independent(self):
         treatment = Treatment(status="in_progress", deadline=date(2000, 1, 1),
                               effectiveness_evaluation_date=timezone.localdate())
-        self.assertTrue(treatment.is_overdue)
+        self.assertFalse(treatment.is_overdue)
         self.assertFalse(treatment.effectiveness_is_overdue)
         treatment.deadline = timezone.localdate()
         treatment.effectiveness_evaluation_date = date(2000, 1, 1)
@@ -34,6 +34,14 @@ class DeadlineTests(SimpleTestCase):
         self.assertTrue(treatment.effectiveness_is_overdue)
         treatment.effectiveness_validated_at = timezone.now()
         self.assertFalse(treatment.effectiveness_is_overdue)
+
+    def test_started_treatment_no_longer_overdue(self):
+        treatment = Treatment(status="pending", deadline=date(2000, 1, 1))
+        self.assertTrue(treatment.is_overdue)
+        treatment.status = "scheduled"
+        self.assertFalse(treatment.is_overdue)
+        treatment.status = "in_progress"
+        self.assertFalse(treatment.is_overdue)
 
     def test_closed_treatment_suppresses_pending_child_warning(self):
         task = TreatmentTask(status="pending", execution_date=date(2000, 1, 1),

@@ -104,7 +104,7 @@ class ActionItem(AuditBaseModel):
     @property
     def is_overdue(self) -> bool:
         return bool(
-            self.status in {ActionItemStatus.PENDING, ActionItemStatus.IN_PROGRESS}
+            self.status == ActionItemStatus.PENDING
             and self.due_date
             and self.due_date < timezone.localdate()
         )

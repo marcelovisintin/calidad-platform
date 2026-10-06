@@ -51,7 +51,7 @@ class Treatment(AuditBaseModel):
     def is_overdue(self) -> bool:
         from common.deadlines import is_overdue
 
-        return is_overdue(self.deadline, self.status)
+        return self.status == TreatmentStatus.PENDING and is_overdue(self.deadline, self.status)
 
     @property
     def effectiveness_is_overdue(self) -> bool:
@@ -269,7 +269,7 @@ class TreatmentTask(AuditBaseModel):
     @property
     def is_overdue(self) -> bool:
         return bool(
-            self.status in {TreatmentTaskStatus.PENDING, TreatmentTaskStatus.IN_PROGRESS}
+            self.status == TreatmentTaskStatus.PENDING
             and self.execution_date
             and self.execution_date < timezone.localdate()
             and (self.derived_from_lesson_id or self.treatment.status not in {TreatmentStatus.COMPLETED, TreatmentStatus.CANCELLED})

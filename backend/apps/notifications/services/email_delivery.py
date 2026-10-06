@@ -161,6 +161,13 @@ def _send_claimed_recipient(recipient_id) -> str:
         _mark_skipped(recipient, "El destinatario no tiene una dirección de correo.")
         return "skipped"
 
+    if recipient.notification.template_code == "daily_due_digest":
+        from apps.notifications.services.digest_service import refresh_due_digest_email
+
+        if not refresh_due_digest_email(recipient):
+            _mark_skipped(recipient, "Los pendientes del resumen cambiaron antes del envío.")
+            return "skipped"
+
     try:
         message = EmailMultiAlternatives(
             subject=(recipient.email_subject or recipient.notification.title).replace("\r", " ").replace("\n", " "),

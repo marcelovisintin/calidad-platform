@@ -20,7 +20,7 @@ OPEN_ACTION_ITEM_STATUSES = {ActionItemStatus.PENDING, ActionItemStatus.IN_PROGR
 
 
 def _overdue_filter() -> Q:
-    return Q(status__in=OPEN_ACTION_ITEM_STATUSES, due_date__lt=timezone.localdate())
+    return Q(status=ActionItemStatus.PENDING, due_date__lt=timezone.localdate())
 
 
 

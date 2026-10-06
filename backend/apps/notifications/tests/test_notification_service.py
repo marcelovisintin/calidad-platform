@@ -28,6 +28,7 @@ from apps.actions.services.treatment_service import (
 from apps.anomalies.models import ParticipantRole
 from apps.anomalies.services.anomaly_service import (
     add_participant,
+    create_observation_action,
     create_anomaly,
     save_observation_load,
     update_anomaly,
@@ -1434,3 +1435,134 @@ class NotificationServiceTests(TestCase):
             ).count(),
             2,
         )
+
+    @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
+    def test_started_action_stops_overdue_digest_but_other_pending_action_remains(self):
+        self.analyst.email_notifications_enabled = True
+        self.analyst.save(update_fields=["email_notifications_enabled", "updated_at"])
+        treatment, root_cause, started = self._prepare_treatment_task()
+        today = timezone.localdate()
+        started.execution_date = today - timezone.timedelta(days=1)
+        started.save(update_fields=["execution_date", "updated_at"])
+
+        pending = add_treatment_task(
+            treatment=treatment,
+            data={"root_cause_ids": [root_cause], "title": "Acción aún pendiente",
+                  "description": "Ejecutar control.", "responsible": self.analyst,
+                  "execution_date": today - timezone.timedelta(days=1),
+                  "status": TreatmentTaskStatus.PENDING,
+                  "anomaly_ids": [treatment.primary_anomaly_id]},
+            user=self.admin,
+        )
+        update_treatment_task(
+            treatment_task=started, data={"status": TreatmentTaskStatus.IN_PROGRESS,
+                                          "evidence_note": "Comenzó la ejecución."},
+            user=self.analyst,
+        )
+        started.refresh_from_db()
+        self.assertFalse(started.is_overdue)
+        self.assertTrue(pending.is_overdue)
+
+        create_due_notification_digests(reminder_days=0)
+        digest = Notification.objects.get(template_code="daily_due_digest", source_id=self.analyst.pk)
+        self.assertEqual(digest.context_data["overdue_count"], 1)
+        self.assertIn(pending.code, digest.body)
+        self.assertNotIn(started.code, digest.body)
+
+        update_treatment_task(
+            treatment_task=pending, data={"status": TreatmentTaskStatus.IN_PROGRESS,
+                                          "evidence_note": "Comenzó la ejecución."},
+            user=self.analyst,
+        )
+        dispatch_pending_email_notifications()
+        email_recipient = NotificationRecipient.objects.get(
+            notification=digest, channel=NotificationChannel.EMAIL,
+        )
+        self.assertEqual(email_recipient.delivery_status, DeliveryStatus.SKIPPED)
+        self.assertFalse(any("vencido" in message.subject.lower() for message in mail.outbox))
+
+    @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
+    def test_digest_starts_overdue_day_after_deadline_and_only_for_assignee(self):
+        for user in (self.analyst, self.reporter):
+            user.email_notifications_enabled = True
+            user.save(update_fields=["email_notifications_enabled", "updated_at"])
+        _treatment, _root_cause, task = self._prepare_treatment_task()
+        task.execution_date = timezone.localdate()
+        task.save(update_fields=["execution_date", "updated_at"])
+
+        today = timezone.localdate()
+        create_due_notification_digests(digest_date=today, reminder_days=0)
+        today_digest = Notification.objects.get(
+            template_code="daily_due_digest", source_id=self.analyst.pk,
+            context_data__digest_date=today.isoformat(),
+        )
+        self.assertEqual(today_digest.context_data["overdue_count"], 0)
+        self.assertEqual(today_digest.context_data["upcoming_count"], 1)
+        self.assertFalse(Notification.objects.filter(
+            template_code="daily_due_digest", source_id=self.reporter.pk,
+        ).exists())
+
+        tomorrow = today + timezone.timedelta(days=1)
+        create_due_notification_digests(digest_date=tomorrow, reminder_days=0)
+        tomorrow_digest = Notification.objects.get(
+            template_code="daily_due_digest", source_id=self.analyst.pk,
+            context_data__digest_date=tomorrow.isoformat(),
+        )
+        self.assertEqual(tomorrow_digest.context_data["overdue_count"], 1)
+
+    @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
+    def test_observation_action_has_own_overdue_notice_after_management_starts(self):
+        self.analyst.email_notifications_enabled = True
+        self.analyst.save(update_fields=["email_notifications_enabled", "updated_at"])
+        observation = Severity.objects.create(code="OBS-DUE", name="Observación")
+        anomaly = update_anomaly(
+            anomaly=self._create_unclassified_anomaly(), user=self.admin,
+            data={"severity": observation, "classification_responsible": self.analyst,
+                  "observation_due_date": timezone.localdate() - timezone.timedelta(days=3),
+                  "observation_comment": "Gestión directa."},
+        )
+        save_observation_load(
+            anomaly=anomaly, user=self.analyst,
+            data={"responsible": self.analyst,
+                  "action_date": timezone.localdate() - timezone.timedelta(days=3),
+                  "observation": "Se inició la gestión."},
+        )
+        action = create_observation_action(
+            anomaly=anomaly, user=self.analyst,
+            data={"detail": "Realizar control", "estimated_completion_date": timezone.localdate() - timezone.timedelta(days=1),
+                  "effectiveness_due_date": timezone.localdate() + timezone.timedelta(days=5)},
+        )
+        create_due_notification_digests(reminder_days=0)
+        digest = Notification.objects.get(template_code="daily_due_digest", source_id=self.analyst.pk)
+        self.assertEqual(digest.context_data["overdue_count"], 1)
+        self.assertIn(f"Acción {action.sequence}", digest.body)
+
+    @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
+    def test_queued_digest_removes_started_action_and_keeps_other_responsibility(self):
+        self.analyst.email_notifications_enabled = True
+        self.analyst.save(update_fields=["email_notifications_enabled", "updated_at"])
+        treatment, root_cause, started = self._prepare_treatment_task()
+        started.execution_date = timezone.localdate() - timezone.timedelta(days=1)
+        started.save(update_fields=["execution_date", "updated_at"])
+        pending = add_treatment_task(
+            treatment=treatment, user=self.admin,
+            data={"root_cause_ids": [root_cause], "title": "Control pendiente",
+                  "description": "Realizar control.", "responsible": self.analyst,
+                  "execution_date": timezone.localdate() - timezone.timedelta(days=1),
+                  "status": TreatmentTaskStatus.PENDING,
+                  "anomaly_ids": [treatment.primary_anomaly_id]},
+        )
+        create_due_notification_digests(reminder_days=0)
+        update_treatment_task(
+            treatment_task=started, user=self.analyst,
+            data={"status": TreatmentTaskStatus.IN_PROGRESS,
+                  "evidence_note": "Se comenzó la tarea."},
+        )
+        dispatch_pending_email_notifications()
+        digest = Notification.objects.get(template_code="daily_due_digest", source_id=self.analyst.pk)
+        self.assertEqual(digest.context_data["overdue_count"], 1)
+        self.assertIn(pending.code, digest.body)
+        self.assertNotIn(started.code, digest.body)
+        self.assertEqual(NotificationRecipient.objects.get(
+            notification=digest, channel=NotificationChannel.EMAIL,
+        ).delivery_status, DeliveryStatus.DELIVERED)

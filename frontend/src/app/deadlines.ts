@@ -7,7 +7,7 @@ export function isDeadlineOverdue(
   status: string | null | undefined,
   now = new Date(),
 ): boolean {
-  if (!dueDate || !status || terminalStatuses.has(status)) return false;
+  if (!dueDate || !canShowOverdue(status)) return false;
   // Calendar dates are valid through the end of the business day in Argentina.
   const businessDate = (date: Date) => new Intl.DateTimeFormat("en-CA", {
     timeZone: import.meta.env.VITE_BUSINESS_TIME_ZONE || "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit",
@@ -18,5 +18,5 @@ export function isDeadlineOverdue(
 }
 
 export function canShowOverdue(status?: string | null): boolean {
-  return !!status && !terminalStatuses.has(status);
+  return !!status && status !== "in_progress" && status !== "scheduled" && !terminalStatuses.has(status);
 }

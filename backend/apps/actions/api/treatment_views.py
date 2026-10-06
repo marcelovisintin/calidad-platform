@@ -506,7 +506,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
         status_value = (request.query_params.get("status") or "").strip()
         if status_value == "overdue":
             queryset = queryset.filter(
-                status__in=["pending", "in_progress"],
+                status="pending",
                 execution_date__lt=timezone.localdate(),
             ).exclude(treatment__status__in=["completed", "cancelled"])
         elif status_value:

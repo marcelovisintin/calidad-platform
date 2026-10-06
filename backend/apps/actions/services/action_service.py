@@ -350,6 +350,9 @@ def update_action_item(*, action_item: ActionItem, user, data: dict, request_id:
         event_type = ActionHistoryEvent.UPDATED
         history_comment = "Accion actualizada."
 
+    if "due_date" in data or previous_assigned_to_id != locked.assigned_to_id:
+        sync_action_assignment_task_status(action_item=locked, actor=user, request_id=request_id)
+
     _write_action_history(
         action_item=locked,
         event_type=event_type,
@@ -393,6 +396,7 @@ def transition_action_item(
         _require_action_assignee(user, locked)
 
     before = snapshot_action_item(locked)
+    overdue_before_transition = locked.is_overdue
     locked.status = target_status
     locked.updated_by = user
     if target_status == ActionItemStatus.COMPLETED:
@@ -415,7 +419,10 @@ def transition_action_item(
         comment=comment,
         from_status=before["status"],
         to_status=locked.status,
-        snapshot_data=snapshot_action_item(locked),
+        snapshot_data=snapshot_action_item(locked) | {
+            "overdue_before_transition": overdue_before_transition,
+            "overdue_ended_at": timezone.now().isoformat() if overdue_before_transition else None,
+        },
     )
     record_audit_event(
         entity=locked,

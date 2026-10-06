@@ -123,7 +123,7 @@ def _treatment_items_queryset(user, params):
     status_value = (params.get("status") or "").strip().lower()
     if status_value == "overdue":
         queryset = queryset.filter(
-            status__in=[TreatmentTaskStatus.PENDING, TreatmentTaskStatus.IN_PROGRESS],
+            status=TreatmentTaskStatus.PENDING,
             execution_date__lt=timezone.localdate(),
         ).exclude(treatment__status__in=["completed", "cancelled"], derived_from_lesson__isnull=True)
     elif status_value:

@@ -92,7 +92,7 @@ class ActionPlanViewSet(viewsets.ModelViewSet):
 
     def _with_counts(self, queryset):
         open_filter = Q(items__status__in=OPEN_ACTION_ITEM_STATUSES)
-        overdue_filter = Q(items__status__in=OPEN_ACTION_ITEM_STATUSES, items__due_date__lt=timezone.localdate())
+        overdue_filter = Q(items__status="pending", items__due_date__lt=timezone.localdate())
         return queryset.annotate(
             items_count=Count("items", distinct=True),
             pending_items_count=Count("items", filter=open_filter, distinct=True),

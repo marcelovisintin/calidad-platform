@@ -419,13 +419,16 @@ def dismiss_action_assignment_tasks(*, action_item, actor=None, keep_user_id=Non
     for recipient in recipients:
         recipient.task_status = RecipientTaskStatus.DISMISSED
         recipient.resolved_at = now
+        if recipient.channel == NotificationChannel.EMAIL and recipient.delivery_status == DeliveryStatus.PENDING:
+            recipient.delivery_status = DeliveryStatus.SKIPPED
+            recipient.delivery_error = "Asignación reemplazada antes del envío."
         recipient.updated_by = actor
         recipient.row_version = (recipient.row_version or 0) + 1
         recipient.updated_at = now
 
     NotificationRecipient.objects.bulk_update(
         recipients,
-        ["task_status", "resolved_at", "updated_by", "row_version", "updated_at"],
+        ["task_status", "resolved_at", "delivery_status", "delivery_error", "updated_by", "row_version", "updated_at"],
     )
     for recipient in recipients:
         record_audit_event(
@@ -447,6 +450,7 @@ def sync_action_assignment_task_status(*, action_item, actor=None, request_id: s
         notification__source_type="actions.actionitem",
         notification__source_id=action_item.pk,
         notification__task_type=NotificationTaskType.ACTION_ASSIGNMENT,
+        user_id=action_item.assigned_to_id,
     )
     recipients = list(queryset.select_related("notification"))
     if not recipients:
@@ -462,6 +466,9 @@ def sync_action_assignment_task_status(*, action_item, actor=None, request_id: s
     NotificationRecipient.objects.bulk_update(
         recipients,
         ["task_status", "resolved_at", "updated_by", "row_version", "updated_at"],
+    )
+    Notification.objects.filter(pk__in={recipient.notification_id for recipient in recipients}).update(
+        due_at=_action_due_at(action_item), row_version=F("row_version") + 1, updated_at=now,
     )
     for recipient in recipients:
         record_audit_event(
@@ -1153,7 +1160,10 @@ def notify_finding_management_assigned(
         is_task=True,
         task_type=NotificationTaskType.FINDING_MANAGEMENT,
         action_url=action_url,
-        due_at=anomaly.due_at,
+        due_at=_date_due_at(treatment.deadline) if treatment is not None else (
+            _date_due_at(anomaly.immediate_action.action_date)
+            if is_observation and hasattr(anomaly, "immediate_action") else anomaly.due_at
+        ),
         context_data={
             "anomaly_id": str(anomaly.pk),
             "anomaly_code": anomaly.code,
@@ -1331,6 +1341,57 @@ def notify_treatment_task_assigned(*, treatment_task, actor=None, reassigned: bo
             "anomaly_codes": anomaly_label,
             "execution_date": execution_label,
         },
+    )
+
+
+def notify_observation_action_assigned(*, action, actor=None, request_id: str = ""):
+    observation = getattr(action.anomaly, "immediate_action", None)
+    if not observation or action.status != "pending":
+        return None
+    existing = Notification.objects.filter(
+        source_type="anomalies.observationaction", source_id=action.pk,
+        template_code="observation_action_assigned",
+    )
+    if existing.filter(
+        recipients__channel=NotificationChannel.IN_APP,
+        recipients__user_id=observation.responsible_id,
+        recipients__task_status=RecipientTaskStatus.PENDING,
+    ).exists():
+        return None
+    NotificationRecipient.objects.filter(
+        notification__in=existing,
+        task_status__in=[RecipientTaskStatus.PENDING, RecipientTaskStatus.IN_PROGRESS],
+    ).update(
+        task_status=RecipientTaskStatus.DISMISSED, resolved_at=timezone.now(),
+        updated_by=actor, updated_at=timezone.now(), row_version=F("row_version") + 1,
+    )
+    return create_internal_notification(
+        recipients=[observation.responsible],
+        title=f"Acción {action.sequence} de observación {action.anomaly.code}",
+        body=f"Debes realizar la acción {action.sequence} de la observación {action.anomaly.code}: {action.detail}",
+        source_type="anomalies.observationaction",
+        source_id=action.pk,
+        actor=actor,
+        category=NotificationCategory.ACTION,
+        template_code="observation_action_assigned",
+        is_task=True,
+        task_type=NotificationTaskType.ACTION_ASSIGNMENT,
+        action_url=f"/anomalies/{action.anomaly_id}",
+        due_at=_date_due_at(action.estimated_completion_date),
+        context_data={"anomaly_id": str(action.anomaly_id), "responsible_id": str(observation.responsible_id)},
+        request_id=request_id,
+    )
+
+
+def complete_observation_action_assignment(*, action, actor=None, request_id: str = "") -> None:
+    now = timezone.now()
+    NotificationRecipient.objects.filter(
+        notification__source_type="anomalies.observationaction",
+        notification__source_id=action.pk,
+        task_status__in=[RecipientTaskStatus.PENDING, RecipientTaskStatus.IN_PROGRESS],
+    ).update(
+        task_status=RecipientTaskStatus.COMPLETED, resolved_at=now,
+        updated_by=actor, updated_at=now, row_version=F("row_version") + 1,
     )
 
 

@@ -333,7 +333,7 @@ def _actions_dashboard(params, period, area_id) -> dict:
     rows = _action_records(period, area_id)
     previous_rows = _action_records(type("Previous", (), {"date_from": period.previous_from, "date_to": period.previous_to})(), area_id)
     today = timezone.localdate()
-    open_statuses = {ActionItemStatus.PENDING, ActionItemStatus.IN_PROGRESS}
+    open_statuses = {ActionItemStatus.PENDING}
     status_counts: dict[str, int] = defaultdict(int)
     source_counts: dict[str, int] = defaultdict(int)
     monthly: dict[date, dict[str, int]] = defaultdict(lambda: defaultdict(int))

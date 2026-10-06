@@ -97,7 +97,8 @@ class Anomaly(AuditBaseModel):
         # Use the current obligation, not dates of actions already completed.
         links = list(self.treatment_links.all())
         if links:
-            return links[0].treatment.deadline
+            treatment = links[0].treatment
+            return treatment.deadline if treatment.status == "pending" else None
         observation = getattr(self, "immediate_action", None)
         if observation and self.observation_resolution_path == ObservationResolutionPath.OBSERVATION:
             actions = list(self.observation_actions.all())
@@ -121,6 +122,8 @@ class Anomaly(AuditBaseModel):
 
         if self.current_status in {AnomalyStatus.CLOSED, AnomalyStatus.CANCELLED}:
             return False
+        if self.treatment_links.exists():
+            return any(link.treatment.is_overdue for link in self.treatment_links.all())
         return is_overdue(self.deadline, self.current_status, finished=bool(self.closed_at))
 
     code = models.CharField(max_length=50, unique=True)
