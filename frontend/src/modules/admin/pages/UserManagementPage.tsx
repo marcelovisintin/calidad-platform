@@ -172,6 +172,13 @@ export function UserManagementPage() {
     setForm((current) => ({ ...current, photo: file }));
   };
 
+  const handleAccessLevelChange = (value: string) => {
+    const accessLevel = accessLevelOptions.find((option) => option.value === value)?.value;
+    if (accessLevel) {
+      setForm((current) => ({ ...current, access_level: accessLevel }));
+    }
+  };
+
   const handleEdit = (item: UserDirectoryItem) => {
     setEditingId(item.id);
     setFeedback(null);
@@ -436,7 +443,7 @@ export function UserManagementPage() {
                       : "Se mostrara en la etiqueta superior derecha."}
                 </small>
               </label>
-              <SearchableSelect className="field" clearable={false} dataTour="user-access-level" label="Nivel de acceso" onChange={(value) => setForm((current) => ({ ...current, access_level: value }))} options={accessLevelOptions} placeholder="Seleccionar..." value={form.access_level} />
+              <SearchableSelect className="field" clearable={false} dataTour="user-access-level" label="Nivel de acceso" onChange={handleAccessLevelChange} options={accessLevelOptions} placeholder="Seleccionar..." value={form.access_level} />
               <SearchableSelect className="field" label="Sector principal" onChange={(value) => setForm((current) => ({ ...current, primary_sector: value }))} options={areas.map((item) => ({ value: item.id, label: `${item.code} - ${item.name}`, searchTerms: [item.code, item.name] }))} placeholder="Sin asignar" value={form.primary_sector} />
               <div className="field field-span-2 temporary-password-card">
                 <div className="section-head compact">

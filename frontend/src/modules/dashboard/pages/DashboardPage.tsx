@@ -290,7 +290,7 @@ export function DashboardPage({ defaultView = "none" }: { defaultView?: Dashboar
     setActiveView(resolveDashboardView(searchParams.get("view"), adminUser, defaultView));
   }, [adminUser, defaultView, searchParams]);
 
-  const contextualOptions = useMemo(
+  const contextualOptions = useMemo<ViewOption[]>(
     () => (adminUser ? [...baseOptions, { id: "indicators", label: "Indicadores" }, { id: "admin", label: "Configuracion admin" }] : baseOptions),
     [adminUser],
   );
@@ -555,7 +555,7 @@ export function DashboardPage({ defaultView = "none" }: { defaultView?: Dashboar
                   </p>
                   <div className="admin-grid">
                     {adminSections.map((section) => {
-                      if ("to" in section) {
+                      if (section.to) {
                         return (
                           <Link className="admin-card" key={section.title} to={section.to}>
                             <h3>{section.title}</h3>

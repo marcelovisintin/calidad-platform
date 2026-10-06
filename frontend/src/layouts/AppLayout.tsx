@@ -184,7 +184,7 @@ export function AppLayout() {
         <div className="sidebar-footer">
           <div className="user-panel">
             <strong>{user?.full_name || userTag}</strong>
-            <span>{user?.access_level?.replaceAll("_", " ") || "Sin nivel"}</span>
+            <span>{user?.access_level?.split("_").join(" ") || "Sin nivel"}</span>
           </div>
           <button className="button button-secondary" onClick={() => void handleLogout()} type="button">
             Cerrar sesión
@@ -290,7 +290,7 @@ export function AppLayout() {
           <div className="mobile-nav-footer">
             <div className="user-panel">
               <strong>{user?.full_name || userTag}</strong>
-              <span>{user?.access_level?.replaceAll("_", " ") || "Sin nivel"}</span>
+              <span>{user?.access_level?.split("_").join(" ") || "Sin nivel"}</span>
             </div>
             <button
               className="button button-secondary button-block"

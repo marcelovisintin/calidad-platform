@@ -107,7 +107,7 @@ export function AffectedOrdersPage() {
                 { value: "process", label: "Proceso" },
               ]}
               placeholder="Ordenar listado"
-              value={filters.ordering}
+              value={filters.ordering ?? ""}
             />
             <button className="button button-secondary" data-tour="affected-orders-export" disabled={exporting} onClick={() => void handleExport()} type="button">
               {exporting ? "Exportando..." : "Exportar CSV"}
@@ -128,7 +128,7 @@ export function AffectedOrdersPage() {
             label: "Tipo de orden",
             active: Boolean(filters.orderType),
             content: (
-              <SearchableSelect ariaLabel="Tipo de orden" onChange={(value) => setFilter("orderType", value)} options={(catalogs?.orderTypes ?? []).map((item) => ({ value: item.id, label: `${item.code} - ${item.name}`, searchTerms: [item.code, item.name] }))} placeholder="Todos" value={filters.orderType} />
+              <SearchableSelect ariaLabel="Tipo de orden" onChange={(value) => setFilter("orderType", value)} options={(catalogs?.orderTypes ?? []).map((item) => ({ value: item.id, label: `${item.code} - ${item.name}`, searchTerms: [item.code, item.name] }))} placeholder="Todos" value={filters.orderType ?? ""} />
             ),
           },
           {
@@ -148,7 +148,7 @@ export function AffectedOrdersPage() {
             label: "Proceso",
             active: Boolean(filters.area),
             content: (
-              <SearchableSelect ariaLabel="Proceso" onChange={(value) => setFilter("area", value)} options={(catalogs?.areas ?? []).map((item) => ({ value: item.id, label: `${item.code} - ${item.name}`, searchTerms: [item.code, item.name] }))} placeholder="Todos" value={filters.area} />
+              <SearchableSelect ariaLabel="Proceso" onChange={(value) => setFilter("area", value)} options={(catalogs?.areas ?? []).map((item) => ({ value: item.id, label: `${item.code} - ${item.name}`, searchTerms: [item.code, item.name] }))} placeholder="Todos" value={filters.area ?? ""} />
             ),
           },
           {
@@ -167,7 +167,7 @@ export function AffectedOrdersPage() {
             label: "Estado",
             active: Boolean(filters.status),
             content: (
-              <SearchableSelect ariaLabel="Estado de anomalia" onChange={(value) => setFilter("status", value)} options={STATUS_OPTIONS.map((status) => ({ value: status, label: humanizeToken(status) }))} placeholder="Todos" value={filters.status} />
+              <SearchableSelect ariaLabel="Estado de anomalia" onChange={(value) => setFilter("status", value)} options={STATUS_OPTIONS.map((status) => ({ value: status, label: humanizeToken(status) }))} placeholder="Todos" value={filters.status ?? ""} />
             ),
           },
           {

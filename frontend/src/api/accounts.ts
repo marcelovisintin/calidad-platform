@@ -74,7 +74,7 @@ function userPayloadBody(payload: UserWritePayload) {
 }
 
 export function createUser(payload: UserWritePayload) {
-  return apiRequest<UserDirectoryItem>("/accounts/users/", {
+  return apiRequest<UserDirectoryItem & { initial_password?: string | null }>("/accounts/users/", {
     method: "POST",
     body: userPayloadBody(payload),
   });

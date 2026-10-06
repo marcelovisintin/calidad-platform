@@ -50,6 +50,12 @@ const METHOD_OPTIONS = [
   { value: "6m", label: "6M" },
 ] as const;
 
+type TreatmentMethod = (typeof METHOD_OPTIONS)[number]["value"];
+
+function isTreatmentMethod(value: string): value is TreatmentMethod {
+  return METHOD_OPTIONS.some((method) => method.value === value);
+}
+
 const EVIDENCE_ACCEPT = "image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.odt,.ods,.zip";
 
 const TASK_STATUS_OPTIONS = [
@@ -181,7 +187,7 @@ export function TreatmentsPage() {
 
   const [scheduledFor, setScheduledFor] = useState("");
   const [treatmentLocation, setTreatmentLocation] = useState("");
-  const [methodUsed, setMethodUsed] = useState("");
+  const [methodUsed, setMethodUsed] = useState<TreatmentMethod>("");
   const [observations, setObservations] = useState("");
   const [effectivenessEvaluationDate, setEffectivenessEvaluationDate] = useState("");
   const [effectivenessResponsibleId, setEffectivenessResponsibleId] = useState("");
@@ -289,7 +295,8 @@ export function TreatmentsPage() {
 
     setScheduledFor(toDateTimeLocalValue(selectedTreatment.scheduled_for));
     setTreatmentLocation(selectedTreatment.treatment_location || "");
-    setMethodUsed(selectedTreatment.method_used || "");
+    const savedMethod = selectedTreatment.method_used || "";
+    setMethodUsed(isTreatmentMethod(savedMethod) ? savedMethod : "");
     setObservations(selectedTreatment.observations || "");
     setEffectivenessEvaluationDate(selectedTreatment.effectiveness_evaluation_date || "");
     setEffectivenessResponsibleId(selectedTreatment.effectiveness_responsible?.id || "");
@@ -1274,7 +1281,7 @@ return (
                         <div className="section-head compact">
                           <h3>Metodo y observaciones</h3>
                         </div>
-                        <SearchableSelect className="field" disabled={treatmentLocked} label="Metodo usado" onChange={setMethodUsed} options={METHOD_OPTIONS.filter((method) => method.value)} placeholder={METHOD_OPTIONS.find((method) => !method.value)?.label || "Seleccionar..."} value={methodUsed} />
+                        <SearchableSelect className="field" disabled={treatmentLocked} label="Metodo usado" onChange={(value) => { if (isTreatmentMethod(value)) setMethodUsed(value); }} options={METHOD_OPTIONS.filter((method) => method.value)} placeholder={METHOD_OPTIONS.find((method) => !method.value)?.label || "Seleccionar..."} value={methodUsed} />
                         <label className="field">
                           <span>Detalle de análisis</span>
                           <AutoResizeTextarea disabled={treatmentLocked} minHeightPx={70} onChange={(event) => setObservations(event.target.value)} value={observations} />

@@ -11,7 +11,7 @@ export function AnomalyCreatedPage() {
   usePageTitle("Confirmacion de carga");
   const location = useLocation();
   const state = (location.state as { anomaly?: AnomalyDetail; attachmentWarning?: string | null } | null) ?? null;
-  const fromState = state.anomaly;
+  const fromState = state?.anomaly;
   const fromStorage = window.sessionStorage.getItem(CREATED_ANOMALY_KEY);
   const anomaly = fromState ?? (fromStorage ? (JSON.parse(fromStorage) as AnomalyDetail) : null);
 
@@ -19,7 +19,7 @@ export function AnomalyCreatedPage() {
     <section className="page-shell narrow">
       <PageHeader title="Confirmacion de carga" description="La anomalia fue registrada correctamente en backend." />
 
-      {state.attachmentWarning ? <div className="panel warning">{state.attachmentWarning}</div> : null}
+      {state?.attachmentWarning ? <div className="panel warning">{state.attachmentWarning}</div> : null}
 
       {anomaly ? (
         <article className="panel confirmation-card">
