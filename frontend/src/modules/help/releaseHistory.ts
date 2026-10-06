@@ -68,6 +68,14 @@ const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
   },
 ];
 
+const RELEASE_SUMMARIES: Record<string, string[]> = {
+  "release-1.7.0": [
+    "Los vencimientos comienzan al día siguiente de la fecha límite y dejan de mostrarse al cambiar de estado.",
+    "Los correos de vencimiento se dirigen al responsable actual de cada tratamiento, acción o verificación.",
+    "El historial usa una frase única cuando una actividad deja de figurar como vencida.",
+  ],
+};
+
 function currentStatus(): Pick<ReleaseHistoryEntry, "status" | "statusLabel"> {
   if (__APP_BUILD_INFO__.dirty) {
     return { status: "preparation", statusLabel: "En preparación local" };
@@ -86,11 +94,12 @@ const automatedHistory: ReleaseHistoryEntry[] = __APP_BUILD_INFO__.history.map((
   const status = index === 0
     ? currentStatus()
     : { status: "versioned" as const, statusLabel: "Versionada en Git" };
+  const version = releaseTag(entry.decorations) ?? `commit-${entry.shortCommit}`;
   return {
-    version: releaseTag(entry.decorations) ?? `commit-${entry.shortCommit}`,
+    version,
     date: entry.date.slice(0, 10),
     ...status,
-    summary: [entry.subject],
+    summary: RELEASE_SUMMARIES[version] ?? [entry.subject],
     commit: entry.shortCommit,
     responsible: entry.author,
     branch: index === 0 ? __APP_BUILD_INFO__.branch : undefined,
