@@ -62,6 +62,7 @@ from apps.notifications.services import (
     sync_finding_management_task_status,
 )
 from common.upload_validation import normalized_upload_content_type, validate_evidence_file
+from common.deadlines import overdue_end_message
 
 
 ALLOWED_TREATMENT_TRANSITIONS = {
@@ -1002,7 +1003,7 @@ def _ensure_treatment_in_progress(
         treatment=treatment,
         user=user,
         comment=(
-            f"{reason} El inicio pone fin al vencimiento de la fecha {treatment.deadline:%d/%m/%Y}."
+            f"{reason} {overdue_end_message(treatment.deadline)}"
             if overdue_before_transition else reason
         ),
     )
@@ -1326,6 +1327,7 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
         )
     before = snapshot_treatment(locked)
     overdue_before_transition = locked.is_overdue
+    overdue_deadline = locked.deadline
 
     status_changed = False
     auto_progressed = False
@@ -1424,7 +1426,7 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
     if status_changed or auto_progressed:
         comments.append(f"El tratamiento {locked.code} cambia a estado {locked.status}.")
         if overdue_before_transition and not locked.is_overdue:
-            comments.append(f"Finaliza el vencimiento de la fecha {before['deadline']}.")
+            comments.append(overdue_end_message(overdue_deadline))
     if "scheduled_for" in data or "treatment_location" in data:
         comments.append("Se actualiza la agenda del tratamiento.")
     if "effectiveness_evaluation_date" in data or "effectiveness_responsible" in data:
@@ -2033,6 +2035,7 @@ def confirm_treatment_convocation(
         raise ValidationError({"treatment_location": "Debe indicar el lugar de tratamiento."})
 
     before = snapshot_treatment(locked)
+    overdue_before_transition = locked.is_overdue
     locked.scheduled_for = scheduled_for
     locked.treatment_location = normalized_treatment_location
     locked.convocation_confirmed_at = timezone.now()
@@ -2079,7 +2082,7 @@ def confirm_treatment_convocation(
         comment=(
             f"Se confirma la convocatoria del tratamiento {locked.code} y se notifican "
             f"{len(participants)} usuario(s) convocado(s)."
-        ),
+        ) + (f" {overdue_end_message(locked.deadline)}" if overdue_before_transition else ""),
     )
     return locked
 
@@ -2427,7 +2430,7 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
             comment=(
                 f"Tratamiento {locked.treatment.code}: se actualiza la accion "
                 f"{locked.code or locked.title} de estado {previous_status} a estado {locked.status}."
-                + (f" Finaliza el vencimiento de la fecha {overdue_deadline:%d/%m/%Y}."
+                + (f" {overdue_end_message(overdue_deadline)}"
                    if overdue_before_transition and not locked.is_overdue else "")
             ),
             evidence_note=evidence_note,

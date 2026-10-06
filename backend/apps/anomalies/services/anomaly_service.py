@@ -7,6 +7,7 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError as DjangoValidationError
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
+from common.deadlines import overdue_end_message
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.accounts.services.access_policy import (
@@ -1585,7 +1586,7 @@ def complete_observation_action(*, action: ObservationAction, user, completed_at
             if all_actions_completed
             else f"Accion {locked_action.sequence} de Observacion finalizada."
         ) + (
-            f" Finaliza el vencimiento de la fecha {locked_action.estimated_completion_date:%d/%m/%Y}."
+            f" {overdue_end_message(locked_action.estimated_completion_date)}"
             if overdue_before_completion else ""
         ),
         evidence_note=f"Fecha real de finalizacion: {locked_action.completed_at.isoformat()}",

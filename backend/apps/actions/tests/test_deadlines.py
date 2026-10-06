@@ -7,10 +7,16 @@ from django.utils import timezone
 
 from apps.actions.models import Treatment, TreatmentTask
 from apps.anomalies.models import Anomaly, ObservationAction
-from common.deadlines import is_overdue
+from common.deadlines import is_overdue, overdue_end_message
 
 
 class DeadlineTests(SimpleTestCase):
+    def test_history_uses_one_message_when_overdue_state_ends(self):
+        self.assertEqual(
+            overdue_end_message(date(2026, 10, 5)),
+            "La actividad dejó de figurar como vencida al cambiar de estado (fecha límite: 05/10/2026).",
+        )
+
     def test_date_deadline_includes_its_entire_day(self):
         today = timezone.localdate()
         self.assertTrue(is_overdue(today - timedelta(days=1), "pending"))

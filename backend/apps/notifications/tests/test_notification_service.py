@@ -25,7 +25,7 @@ from apps.actions.services.treatment_service import (
     update_treatment,
     update_treatment_task,
 )
-from apps.anomalies.models import ParticipantRole
+from apps.anomalies.models import AnomalyStatusHistory, ParticipantRole
 from apps.anomalies.services.anomaly_service import (
     add_participant,
     create_observation_action,
@@ -844,6 +844,27 @@ class NotificationServiceTests(TestCase):
         recipient.refresh_from_db()
         self.assertEqual(recipient.task_status, RecipientTaskStatus.DISMISSED)
         self.assertIsNotNone(recipient.resolved_at)
+
+    def test_scheduling_overdue_treatment_records_end_of_warning_in_history(self):
+        treatment = self._create_treatment()
+        treatment.deadline = timezone.localdate() - timezone.timedelta(days=1)
+        treatment.save(update_fields=["deadline", "updated_at"])
+        add_treatment_participant(
+            treatment=treatment, participant_user=self.analyst,
+            role=TreatmentParticipantRole.CONVOKED, note="Participar.", user=self.admin,
+        )
+
+        updated = confirm_treatment_convocation(
+            treatment=treatment,
+            scheduled_for=timezone.now() + timezone.timedelta(days=1),
+            treatment_location="Sala de Calidad", user=self.admin,
+        )
+
+        self.assertFalse(updated.is_overdue)
+        self.assertTrue(AnomalyStatusHistory.objects.filter(
+            anomaly=treatment.primary_anomaly,
+            comment__contains="La actividad dejó de figurar como vencida al cambiar de estado",
+        ).exists())
 
     @override_settings(EMAIL_NOTIFICATIONS_ENABLED=True)
     def test_observation_trt_decision_creates_treatment_notification(self):

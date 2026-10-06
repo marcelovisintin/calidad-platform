@@ -13,3 +13,8 @@ def is_overdue(due, status: str, *, finished: bool = False) -> bool:
     if isinstance(due, datetime):
         due = timezone.localtime(due).date() if timezone.is_aware(due) else due.date()
     return due < timezone.localdate()
+
+
+def overdue_end_message(due) -> str:
+    """Use one wording when an overdue obligation changes state."""
+    return f"La actividad dejó de figurar como vencida al cambiar de estado (fecha límite: {due:%d/%m/%Y})."

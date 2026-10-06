@@ -25,6 +25,7 @@ from apps.notifications.services import (
     sync_action_assignment_task_status,
 )
 from common.upload_validation import validate_evidence_file
+from common.deadlines import overdue_end_message
 
 ALLOWED_ACTION_ITEM_TRANSITIONS = {
     ActionItemStatus.PENDING: {ActionItemStatus.IN_PROGRESS, ActionItemStatus.COMPLETED, ActionItemStatus.CANCELLED},
@@ -416,7 +417,8 @@ def transition_action_item(
         action_item=locked,
         event_type=ActionHistoryEvent.STATUS_CHANGED,
         actor=user,
-        comment=comment,
+        comment=(f"{comment.strip()} {overdue_end_message(locked.due_date)}"
+                 if overdue_before_transition else comment),
         from_status=before["status"],
         to_status=locked.status,
         snapshot_data=snapshot_action_item(locked) | {
