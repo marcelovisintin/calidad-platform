@@ -69,6 +69,9 @@ const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
 ];
 
 const RELEASE_SUMMARIES: Record<string, string[]> = {
+  "release-1.8.3": [
+    "La nota de evidencia del cambio de estado en Datos de la acción empieza compacta y crece al escribir.",
+  ],
   "release-1.8.2": [
     "El motivo para incorporar un asistente posterior en Tratamientos empieza compacto y crece al escribir.",
   ],

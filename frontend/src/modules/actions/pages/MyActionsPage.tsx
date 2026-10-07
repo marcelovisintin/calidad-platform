@@ -531,7 +531,7 @@ export function MyActionsPage() {
                   <label className="field"><span>Fecha límite de ejecución</span><input disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("execution_date", event.target.value)} type="date" value={taskDraft.execution_date} /></label>
                 </div>
                 <label className="field"><span>Descripcion</span><AutoResizeTextarea disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} minHeightPx={70} onChange={(event) => handleTaskDraftChange("description", event.target.value)} value={taskDraft.description} /></label>
-                {taskDraft.status !== selectedWorkItem.status ? <label className="field" data-tour="action-state-note"><span>Nota de evidencia del cambio de estado</span><textarea onChange={(event) => setTaskStatusEvidenceNote(event.target.value)} required rows={3} value={taskStatusEvidenceNote} /></label> : null}
+                {taskDraft.status !== selectedWorkItem.status ? <label className="field" data-tour="action-state-note"><span>Nota de evidencia del cambio de estado</span><AutoResizeTextarea minHeightPx={70} onChange={(event) => setTaskStatusEvidenceNote(event.target.value)} required value={taskStatusEvidenceNote} /></label> : null}
                 </fieldset>
               </form>
             ) : null}
