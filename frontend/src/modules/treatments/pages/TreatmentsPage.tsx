@@ -1216,7 +1216,13 @@ return (
                               </div>
                               <label className="field">
                                 <span>Motivo de incorporacion posterior</span>
-                                <textarea name="late_participant_reason" onChange={(event) => setLateParticipantReason(event.target.value)} required rows={3} value={lateParticipantReason} />
+                                <AutoResizeTextarea
+                                  minHeightPx={70}
+                                  name="late_participant_reason"
+                                  onChange={(event) => setLateParticipantReason(event.target.value)}
+                                  required
+                                  value={lateParticipantReason}
+                                />
                               </label>
                             </>
                           ) : (

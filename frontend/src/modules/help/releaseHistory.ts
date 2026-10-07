@@ -69,6 +69,9 @@ const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
 ];
 
 const RELEASE_SUMMARIES: Record<string, string[]> = {
+  "release-1.8.2": [
+    "El motivo para incorporar un asistente posterior en Tratamientos empieza compacto y crece al escribir.",
+  ],
   "release-1.8.1": [
     "La evidencia de cada acción requiere una nota; el archivo es opcional en tratamientos y observaciones.",
     "Las notas sin archivo se conservan en el historial y se muestran en el detalle de la acción.",
