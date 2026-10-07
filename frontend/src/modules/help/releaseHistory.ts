@@ -69,6 +69,10 @@ const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
 ];
 
 const RELEASE_SUMMARIES: Record<string, string[]> = {
+  "release-1.7.3": [
+    "Se corrigieron los tipos del frontend en usuarios, filtros, navegación, confirmación de anomalías y métodos de tratamiento.",
+    "La comprobación del frontend ahora revisa realmente los archivos de la aplicación y detecta errores de TypeScript durante la compilación.",
+  ],
   "release-1.7.2": [
     "Se corrigió la carga de Lecciones aprendidas de Observaciones al quitar una referencia a un filtro inexistente.",
   ],
