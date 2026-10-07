@@ -1052,6 +1052,41 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(completed.data["status"], "completed")
         self.assertFalse(ObservationAction.objects.get(pk=created.data["id"]).evidences.exists())
 
+    def test_observation_action_evidence_requires_note_but_not_file(self):
+        anomaly = self._immediate_anomaly("OBS-EVIDENCE-NOTE")
+        self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": timezone.localdate().isoformat(),
+                "observation": "Datos generales confirmados.",
+            },
+            format="json",
+        )
+        created = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/",
+            {
+                "detail": "Accion con nota de evidencia.",
+                "estimated_completion_date": timezone.localdate().isoformat(),
+                "effectiveness_due_date": (timezone.localdate() + timedelta(days=5)).isoformat(),
+            },
+            format="json",
+        )
+        url = f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{created.data['id']}/evidences/"
+        missing_note = self.client.post(
+            url,
+            {"file": SimpleUploadedFile("sin-nota.txt", b"evidencia", content_type="text/plain")},
+            format="multipart",
+        )
+        note_only = self.client.post(url, {"note": "Se reviso y ajusto la accion."}, format="multipart")
+
+        self.assertEqual(missing_note.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("note", missing_note.data)
+        self.assertEqual(note_only.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(note_only.data["file_url"], "")
+        self.assertEqual(note_only.data["note"], "Se reviso y ajusto la accion.")
+        self.assertTrue(ObservationAction.objects.get(pk=created.data["id"]).evidences.exists())
+
     def test_observation_actions_advance_to_effectiveness_and_use_latest_due_date(self):
         anomaly = self._immediate_anomaly("OBS-EFFECTIVENESS-001")
         self.client.post(
@@ -1093,7 +1128,7 @@ class AnomalyCreateApiTests(APITestCase):
             if action == created_actions[0]:
                 uploaded = self.client.post(
                     f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action['id']}/evidences/",
-                    {"file": SimpleUploadedFile("evidencia.txt", b"Trabajo realizado", content_type="text/plain")},
+                    {"file": SimpleUploadedFile("evidencia.txt", b"Trabajo realizado", content_type="text/plain"), "note": "Trabajo realizado."},
                     format="multipart",
                 )
                 self.assertEqual(uploaded.status_code, status.HTTP_201_CREATED)
@@ -1150,7 +1185,7 @@ class AnomalyCreateApiTests(APITestCase):
         )
         uploaded = self.client.post(
             f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action_response.data['id']}/evidences/",
-            {"file": SimpleUploadedFile("evidencia.txt", b"Trabajo realizado", content_type="text/plain")},
+            {"file": SimpleUploadedFile("evidencia.txt", b"Trabajo realizado", content_type="text/plain"), "note": "Trabajo realizado."},
             format="multipart",
         )
         self.assertEqual(uploaded.status_code, status.HTTP_201_CREATED)
@@ -1275,7 +1310,7 @@ class AnomalyCreateApiTests(APITestCase):
         )
         uploaded = self.client.post(
             f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action_response.data['id']}/evidences/",
-            {"file": SimpleUploadedFile("evidencia.txt", b"Trabajo realizado", content_type="text/plain")},
+            {"file": SimpleUploadedFile("evidencia.txt", b"Trabajo realizado", content_type="text/plain"), "note": "Trabajo realizado."},
             format="multipart",
         )
         self.assertEqual(uploaded.status_code, status.HTTP_201_CREATED)

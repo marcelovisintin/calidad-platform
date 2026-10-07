@@ -20,6 +20,7 @@ from apps.accounts.permissions import CanCreateAnomaly, CanEditAnomaly
 from apps.anomalies.api.serializers import (
     AnomalyAttachmentSerializer,
     AnomalyAttachmentWriteSerializer,
+    ObservationActionEvidenceWriteSerializer,
     AffectedOrderListSerializer,
     AnomalyCauseAnalysisSerializer,
     AnomalyCodeReservationSerializer,
@@ -813,11 +814,11 @@ class AnomalyViewSet(viewsets.ModelViewSet):
     def add_observation_action_evidence(self, request, pk=None, observation_action_id=None):
         anomaly = self.get_object()
         observation_action = get_object_or_404(ObservationAction, pk=observation_action_id, anomaly=anomaly)
-        serializer = AnomalyAttachmentWriteSerializer(data=request.data)
+        serializer = ObservationActionEvidenceWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         evidence = add_observation_action_evidence(
             action=observation_action, user=request.user,
-            data={**serializer.validated_data, "note": request.data.get("note", "")},
+            data=serializer.validated_data,
             request_id=self._request_id(),
         )
         return Response(AnomalyAttachmentSerializer(evidence, context=self.get_serializer_context()).data,

@@ -352,14 +352,14 @@ export function MyActionsPage() {
       setFormError("No tienes permisos para cargar evidencias en esta acción.");
       return;
     }
-    if (!taskEvidenceFile) {
-      setFormError("Debes seleccionar una evidencia para cargar en la acción.");
+    if (!taskEvidenceNote.trim()) {
+      setFormError("Debes ingresar una nota de evidencia.");
       return;
     }
     await runMutation(async () => {
       const payload = {
         file: taskEvidenceFile,
-        note: taskEvidenceNote,
+        note: taskEvidenceNote.trim(),
       };
       if (selectedWorkItem.source === "observation") {
         await addObservationActionEvidence(selectedWorkItem.anomalies[0].id, selectedWorkItem.id, payload);
@@ -482,9 +482,9 @@ export function MyActionsPage() {
               <div><dt>Finalizada por</dt><dd>{selectedWorkItem.completed_by ? getUserLabel(selectedWorkItem.completed_by) : "-"}</dd></div>
             </dl>
             <section className="form-section nested-form" data-tour="action-evidence">
-              <div className="section-head compact"><h3>Evidencia de la acción</h3>{!selectedIsTerminal ? <button className="button button-primary" disabled={busy || !selectedWorkItem.can_add_evidence || !taskEvidenceFile} onClick={() => void handleAddTaskEvidence()} type="button">Cargar evidencia</button> : null}</div>
-              {selectedWorkItem.evidences.map((evidence) => <div className="list-card compact" key={evidence.id}><a href={normalizeProtectedFileUrl(evidence.file_url)} onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)}>{evidence.original_name}</a><p>{evidence.note || "Sin nota"}</p></div>)}
-              {!selectedIsTerminal ? <><label className="field"><span>Archivo</span><input accept={EVIDENCE_ACCEPT} disabled={!selectedWorkItem.can_add_evidence || busy} key={taskEvidenceInputKey} onChange={(event) => setTaskEvidenceFile(event.target.files?.[0] ?? null)} type="file" /></label><label className="field"><span>Nota de evidencia (opcional)</span><AutoResizeTextarea disabled={!selectedWorkItem.can_add_evidence || busy} minHeightPx={70} onChange={(event) => setTaskEvidenceNote(event.target.value)} value={taskEvidenceNote} /></label></> : null}
+              <div className="section-head compact"><h3>Evidencia de la acción</h3>{!selectedIsTerminal ? <button className="button button-primary" disabled={busy || !selectedWorkItem.can_add_evidence || !taskEvidenceNote.trim()} onClick={() => void handleAddTaskEvidence()} type="button">Cargar evidencia</button> : null}</div>
+              {selectedWorkItem.evidences.map((evidence) => <div className="list-card compact" key={evidence.id}>{evidence.file_url ? <a href={normalizeProtectedFileUrl(evidence.file_url)} onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)}>{evidence.original_name}</a> : <strong>Nota sin archivo</strong>}<p>{evidence.note}</p></div>)}
+              {!selectedIsTerminal ? <><label className="field"><span>Archivo (opcional)</span><input accept={EVIDENCE_ACCEPT} disabled={!selectedWorkItem.can_add_evidence || busy} key={taskEvidenceInputKey} onChange={(event) => setTaskEvidenceFile(event.target.files?.[0] ?? null)} type="file" /></label><label className="field"><span>Nota de evidencia (obligatoria)</span><AutoResizeTextarea disabled={!selectedWorkItem.can_add_evidence || busy} minHeightPx={70} onChange={(event) => setTaskEvidenceNote(event.target.value)} required value={taskEvidenceNote} /></label></> : null}
             </section>
             {!selectedIsTerminal && selectedWorkItem.can_update_status ? (
               <form className="form-section nested-form" data-tour="action-observation-completion" onSubmit={handleCompleteObservation}>
@@ -509,15 +509,15 @@ export function MyActionsPage() {
               <div><dt>Fecha terminada</dt><dd>{formatDate(selectedWorkItem.completed_on)}</dd></div>
             </dl>
             <section className="form-section nested-form" data-tour="action-evidence">
-              <div className="section-head compact"><h3>Evidencia de la acción</h3>{!selectedIsTerminal ? <button className="button button-primary" disabled={busy || !selectedWorkItem.can_add_evidence || !taskEvidenceFile} onClick={() => void handleAddTaskEvidence()} type="button">Cargar evidencia</button> : null}</div>
+              <div className="section-head compact"><h3>Evidencia de la acción</h3>{!selectedIsTerminal ? <button className="button button-primary" disabled={busy || !selectedWorkItem.can_add_evidence || !taskEvidenceNote.trim()} onClick={() => void handleAddTaskEvidence()} type="button">Cargar evidencia</button> : null}</div>
               <div className="stack-list compact" data-tour="action-status-history">
                 <h4>Notas de cambios de estado</h4>
                 {(selectedWorkItem.status_evidences ?? []).length ? selectedWorkItem.status_evidences.map((evidence) => <div className="list-card compact" key={evidence.id}><div className="evidence-block"><div className="timeline-row"><StatusBadge compact value={evidence.from_status} /><span className="timeline-arrow">a</span><StatusBadge compact value={evidence.to_status} /></div><small>{formatDateTime(evidence.changed_at)}{evidence.changed_by ? ` - ${getUserLabel(evidence.changed_by)}` : ""}</small><p>{evidence.note}</p></div></div>) : <p className="muted-copy">Todavía no hay notas de cambios de estado.</p>}
               </div>
-              {!selectedIsTerminal ? <div className="form-grid"><label className="field field-span-2"><span>Archivo</span><input accept={EVIDENCE_ACCEPT} disabled={!selectedWorkItem.can_add_evidence} key={taskEvidenceInputKey} onChange={(event) => setTaskEvidenceFile(event.target.files?.[0] ?? null)} type="file" /></label><label className="field field-span-2"><span>Nota de evidencia (opcional)</span><AutoResizeTextarea disabled={!selectedWorkItem.can_add_evidence} minHeightPx={70} onChange={(event) => setTaskEvidenceNote(event.target.value)} value={taskEvidenceNote} /></label></div> : null}
+              {!selectedIsTerminal ? <div className="form-grid"><label className="field field-span-2"><span>Archivo (opcional)</span><input accept={EVIDENCE_ACCEPT} disabled={!selectedWorkItem.can_add_evidence} key={taskEvidenceInputKey} onChange={(event) => setTaskEvidenceFile(event.target.files?.[0] ?? null)} type="file" /></label><label className="field field-span-2"><span>Nota de evidencia (obligatoria)</span><AutoResizeTextarea disabled={!selectedWorkItem.can_add_evidence} minHeightPx={70} onChange={(event) => setTaskEvidenceNote(event.target.value)} required value={taskEvidenceNote} /></label></div> : null}
               <div className="stack-list compact" data-tour="action-files">
-                <h4>Archivos de evidencia</h4>
-                {selectedWorkItem.evidences.length ? selectedWorkItem.evidences.map((evidence) => <div className="list-card compact" key={evidence.id}><div className="evidence-block"><a href={normalizeProtectedFileUrl(evidence.file_url)} onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)} rel="noopener noreferrer" target="_blank">{evidence.original_name}</a><small>{formatDateTime(evidence.created_at)}</small><p>{evidence.note || "Sin nota"}</p></div></div>) : <p className="muted-copy">Todavía no hay evidencias cargadas en esta acción.</p>}
+                <h4>Evidencias registradas</h4>
+                {selectedWorkItem.evidences.length ? selectedWorkItem.evidences.map((evidence) => <div className="list-card compact" key={evidence.id}><div className="evidence-block">{evidence.file_url ? <a href={normalizeProtectedFileUrl(evidence.file_url)} onClick={(event) => void handleOpenEvidence(event, evidence.file_url, evidence.original_name)} rel="noopener noreferrer" target="_blank">{evidence.original_name}</a> : <strong>Nota sin archivo</strong>}<small>{formatDateTime(evidence.created_at)}</small><p>{evidence.note}</p></div></div>) : <p className="muted-copy">Todavía no hay evidencias cargadas en esta acción.</p>}
               </div>
             </section>
             {!selectedIsTerminal ? (

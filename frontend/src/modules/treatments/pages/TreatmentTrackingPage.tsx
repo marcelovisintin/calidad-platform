@@ -460,7 +460,7 @@ export function TreatmentTrackingPage() {
                               <ul className="evidence-list">
                                 {task.evidences.map((evidence) => (
                                   <li className="evidence-item" key={evidence.id}>
-                                    <a href={evidenceUrl(evidence.file_url)} rel="noopener noreferrer" target="_blank">{evidence.original_name}</a>
+                                    {evidence.file_url ? <a href={evidenceUrl(evidence.file_url)} rel="noopener noreferrer" target="_blank">{evidence.original_name}</a> : <strong>Nota sin archivo</strong>}
                                     <small>{formatDateTime(evidence.created_at)} | {evidence.note || "Sin nota"}</small>
                                   </li>
                                 ))}

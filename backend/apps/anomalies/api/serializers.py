@@ -339,6 +339,8 @@ class AnomalyAttachmentSerializer(serializers.ModelSerializer):
         )
 
     def get_file_url(self, obj):
+        if not obj.file:
+            return ""
         request = self.context.get("request")
         url = reverse("api:anomalies:attachment-download", kwargs={"attachment_id": obj.pk})
         return request.build_absolute_uri(url) if request else url
@@ -1084,6 +1086,14 @@ class AnomalyObservationVerificationWriteSerializer(serializers.Serializer):
 class AnomalyAttachmentWriteSerializer(serializers.Serializer):
     file = serializers.FileField()
     original_name = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_file(self, value):
+        return validate_evidence_file(value)
+
+
+class ObservationActionEvidenceWriteSerializer(serializers.Serializer):
+    file = serializers.FileField(required=False)
+    note = serializers.CharField()
 
     def validate_file(self, value):
         return validate_evidence_file(value)

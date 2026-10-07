@@ -283,15 +283,13 @@ export function addTreatmentTaskEvidence(
   treatmentId: string,
   taskId: string,
   payload: {
-    file: File;
-    note?: string;
+    file?: File | null;
+    note: string;
   },
 ) {
   const formData = new FormData();
-  formData.append("file", payload.file);
-  if (payload.note?.trim()) {
-    formData.append("note", payload.note.trim());
-  }
+  if (payload.file) formData.append("file", payload.file);
+  formData.append("note", payload.note.trim());
   return apiRequest<TreatmentTaskEvidence>(`/actions/treatments/${treatmentId}/tasks/${taskId}/evidences/`, {
     method: "POST",
     body: formData,

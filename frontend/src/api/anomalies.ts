@@ -209,10 +209,10 @@ export function completeObservationAction(anomalyId: string, actionId: string, c
   });
 }
 
-export function addObservationActionEvidence(anomalyId: string, actionId: string, payload: { file: File; note?: string }) {
+export function addObservationActionEvidence(anomalyId: string, actionId: string, payload: { file?: File | null; note: string }) {
   const body = new FormData();
-  body.append("file", payload.file);
-  body.append("note", payload.note ?? "");
+  if (payload.file) body.append("file", payload.file);
+  body.append("note", payload.note.trim());
   return apiRequest(`/anomalies/${anomalyId}/observation/actions/${actionId}/evidences/`, { method: "POST", body });
 }
 

@@ -58,6 +58,8 @@ class AnomalyAttachmentSummarySerializer(serializers.ModelSerializer):
         fields = ("id", "original_name", "content_type", "file_url", "uploaded_by", "created_at")
 
     def get_file_url(self, obj):
+        if not obj.file:
+            return ""
         request = self.context.get("request")
         url = reverse("api:anomalies:attachment-download", kwargs={"attachment_id": obj.pk})
         return request.build_absolute_uri(url) if request else url
@@ -185,6 +187,8 @@ class TreatmentTaskEvidenceSerializer(serializers.ModelSerializer):
         )
 
     def get_file_url(self, obj):
+        if not obj.file:
+            return ""
         request = self.context.get("request")
         url = reverse("api:actions:treatment-task-evidence-download", kwargs={"evidence_id": obj.pk})
         return request.build_absolute_uri(url) if request else url
@@ -858,8 +862,8 @@ class TreatmentEvidenceWriteSerializer(serializers.Serializer):
 
 
 class TreatmentTaskEvidenceWriteSerializer(serializers.Serializer):
-    file = serializers.FileField()
-    note = serializers.CharField(required=False, allow_blank=True)
+    file = serializers.FileField(required=False)
+    note = serializers.CharField()
     original_name = serializers.CharField(required=False, allow_blank=True)
 
     def validate_file(self, value):

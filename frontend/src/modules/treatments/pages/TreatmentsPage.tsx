@@ -828,8 +828,8 @@ export function TreatmentsPage() {
       setFormError("El tratamiento esta cerrado por validacion eficaz y no admite modificaciones.");
       return;
     }
-    if (!taskEvidenceFile) {
-      setFormError("Debes seleccionar una evidencia (imagen o PDF) para cargar en la accion.");
+    if (!taskEvidenceNote.trim()) {
+      setFormError("Debes ingresar una nota de evidencia para la accion.");
       return;
     }
 
@@ -837,7 +837,7 @@ export function TreatmentsPage() {
       async () => {
         await addTreatmentTaskEvidence(selectedTreatment.id, selectedTask.id, {
           file: taskEvidenceFile,
-          note: taskEvidenceNote,
+          note: taskEvidenceNote.trim(),
         });
         setTaskEvidenceFile(null);
         setTaskEvidenceNote("");
@@ -1252,9 +1252,8 @@ return (
                                   <ul className="evidence-list">
                                     {link.anomaly.attachments.map((attachment) => (
                                       <li className="evidence-item" key={attachment.id}>
-                                        <a href={normalizeEvidenceUrl(attachment.file_url)} onClick={(event) => void handleOpenEvidence(event, attachment.file_url, attachment.original_name)} rel="noopener noreferrer" target="_blank">
-                                          {attachment.original_name}
-                                        </a>
+                                        {attachment.file_url ? <a href={normalizeEvidenceUrl(attachment.file_url)} onClick={(event) => void handleOpenEvidence(event, attachment.file_url, attachment.original_name)} rel="noopener noreferrer" target="_blank">{attachment.original_name}</a> : <strong>Nota sin archivo</strong>}
+                                        {attachment.note ? <p>{attachment.note}</p> : null}
                                         <small>
                                           {normalizeEvidenceType(attachment.content_type)} | {formatDate(attachment.created_at)}
                                         </small>

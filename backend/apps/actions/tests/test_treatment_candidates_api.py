@@ -1192,12 +1192,28 @@ class TreatmentCandidatesApiTests(APITestCase):
             },
             format="multipart",
         )
+        note_response = self.client.post(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/tasks/{task.pk}/evidences/",
+            {"note": "Avance documentado sin archivo."},
+            format="multipart",
+        )
+        missing_note_response = self.client.post(
+            f"/api/v1/actions/treatments/{self.treatment_one.pk}/tasks/{task.pk}/evidences/",
+            {"file": SimpleUploadedFile("sin-nota.txt", b"evidencia", content_type="text/plain")},
+            format="multipart",
+        )
 
         self.assertEqual(forbidden_response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(status_response.status_code, status.HTTP_200_OK)
         self.assertFalse(status_response.data["can_manage"])
         self.assertTrue(status_response.data["can_update_status"])
         self.assertEqual(evidence_response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(evidence_response.data["file_url"])
+        self.assertEqual(note_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(note_response.data["note"], "Avance documentado sin archivo.")
+        self.assertEqual(note_response.data["file_url"], "")
+        self.assertEqual(missing_note_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("note", missing_note_response.data)
 
     def test_unassigned_middle_manager_cannot_manage_treatments(self):
         quality_user = User.objects.create_user(

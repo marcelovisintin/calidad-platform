@@ -69,6 +69,10 @@ const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
 ];
 
 const RELEASE_SUMMARIES: Record<string, string[]> = {
+  "release-1.8.1": [
+    "La evidencia de cada acción requiere una nota; el archivo es opcional en tratamientos y observaciones.",
+    "Las notas sin archivo se conservan en el historial y se muestran en el detalle de la acción.",
+  ],
   "release-1.8.0": [
     "Los archivos adjuntos son opcionales para finalizar acciones de Observación y validar su eficacia.",
     "Las acciones de Tratamiento pueden editarse y cambiar de estado sin archivos; la nota de cada cambio sigue siendo obligatoria.",

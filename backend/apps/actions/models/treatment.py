@@ -308,7 +308,7 @@ class TreatmentEvidence(AuditBaseModel):
 
 class TreatmentTaskEvidence(AuditBaseModel):
     treatment_task = models.ForeignKey("actions.TreatmentTask", on_delete=models.CASCADE, related_name="evidences")
-    file = models.FileField(upload_to=treatment_task_evidence_upload_to)
+    file = models.FileField(upload_to=treatment_task_evidence_upload_to, blank=True)
     original_name = models.CharField(max_length=255)
     content_type = models.CharField(max_length=100, blank=True)
     note = models.TextField(blank=True)

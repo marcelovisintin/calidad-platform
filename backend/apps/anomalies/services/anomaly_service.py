@@ -1514,10 +1514,33 @@ def add_observation_action_evidence(*, action: ObservationAction, user, data: di
     locked_action = ObservationAction.objects.select_for_update().get(pk=action.pk)
     if locked_action.status == ObservationActionStatus.COMPLETED:
         raise ValidationError({"action": "La accion finalizada no admite nuevas evidencias."})
-    attachment = add_attachment(anomaly=anomaly, user=user, data=data, request_id=request_id)
-    attachment.observation_action = locked_action
-    attachment.note = (data.get("note") or "").strip()
-    attachment.save(update_fields=["observation_action", "note", "updated_at"])
+    note = (data.get("note") or "").strip()
+    if not note:
+        raise ValidationError({"note": "Debe ingresar una nota de evidencia."})
+    if data.get("file"):
+        attachment = add_attachment(anomaly=anomaly, user=user, data=data, request_id=request_id)
+        attachment.observation_action = locked_action
+        attachment.note = note
+        attachment.save(update_fields=["observation_action", "note", "updated_at"])
+    else:
+        attachment = AnomalyAttachment(
+            anomaly=anomaly, observation_action=locked_action, file="",
+            original_name="Nota sin archivo", content_type="", note=note,
+            uploaded_by=user, created_by=user, updated_by=user,
+        )
+        attachment.full_clean()
+        attachment.save()
+        _write_status_history(
+            anomaly=anomaly,
+            from_status=anomaly.current_status,
+            to_status=anomaly.current_status,
+            from_stage=anomaly.current_stage,
+            to_stage=anomaly.current_stage,
+            comment=f"Nota de evidencia registrada en accion {locked_action.sequence}.",
+            evidence_note=note,
+            actor=user,
+            changed_at=timezone.now(),
+        )
     record_audit_event(entity=anomaly, action="observation.action_evidence_added", actor=user,
                        after_data={"action_id": str(action.pk), "attachment_id": str(attachment.pk)},
                        request_id=_request_id(request_id))

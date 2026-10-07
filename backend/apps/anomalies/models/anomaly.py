@@ -355,7 +355,7 @@ class AnomalyAttachment(AuditBaseModel):
         related_name="evidences", null=True, blank=True,
     )
     note = models.TextField(blank=True)
-    file = models.FileField(upload_to=anomaly_attachment_upload_to)
+    file = models.FileField(upload_to=anomaly_attachment_upload_to, blank=True)
     original_name = models.CharField(max_length=255)
     content_type = models.CharField(max_length=100, blank=True)
     uploaded_by = models.ForeignKey(
@@ -368,6 +368,12 @@ class AnomalyAttachment(AuditBaseModel):
         ordering = ("-created_at",)
         verbose_name = "Adjunto de anomalia"
         verbose_name_plural = "Adjuntos de anomalia"
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(file="") | (models.Q(observation_action__isnull=False) & ~models.Q(note="")),
+                name="anom_attachment_file_or_action_note",
+            ),
+        ]
 
 
 class AnomalyParticipant(AuditBaseModel):

@@ -2510,16 +2510,18 @@ def add_treatment_task_evidence(*, treatment_task: TreatmentTask, user, data: di
         ensure_treatment_is_editable(treatment)
 
     file_obj = data.get("file")
-    if not file_obj:
-        raise ValidationError({"file": "Debe adjuntar un archivo de evidencia."})
-    validate_evidence_file(file_obj)
+    note = (data.get("note") or "").strip()
+    if not note:
+        raise ValidationError({"note": "Debe ingresar una nota de evidencia."})
+    if file_obj:
+        validate_evidence_file(file_obj)
 
     evidence = TreatmentTaskEvidence(
         treatment_task=treatment_task,
-        file=file_obj,
-        original_name=data.get("original_name") or getattr(file_obj, "name", "evidencia"),
-        content_type=normalized_upload_content_type(file_obj),
-        note=(data.get("note") or "").strip(),
+        file=file_obj or "",
+        original_name=(data.get("original_name") or getattr(file_obj, "name", "evidencia")) if file_obj else "Nota sin archivo",
+        content_type=normalized_upload_content_type(file_obj) if file_obj else "",
+        note=note,
         uploaded_by=user,
         created_by=user,
         updated_by=user,

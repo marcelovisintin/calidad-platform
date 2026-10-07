@@ -375,16 +375,15 @@ export function AnomalyDetailPage() {
                 {data.attachments.length ? data.attachments.map((attachment) => (
                   <div className="list-card compact" key={attachment.id}>
                     <div>
-                      <a
+                      {attachment.file_url ? <a
                         className="text-link"
                         href={normalizeAttachmentUrl(attachment.file_url)}
                         onClick={(event) => void handleOpenAttachment(event, attachment.file_url)}
                         rel="noopener noreferrer"
                         target="_blank"
-                      >
-                        {attachment.original_name}
-                      </a>
-                      <p>{attachment.content_type}</p>
+                      >{attachment.original_name}</a> : <strong>Nota sin archivo</strong>}
+                      {attachment.content_type ? <p>{attachment.content_type}</p> : null}
+                      {attachment.note ? <p>{attachment.note}</p> : null}
                       <small>
                         Cargado {formatDateTime(attachment.created_at)}
                         {attachment.uploaded_by?.full_name ? ` por ${attachment.uploaded_by.full_name}` : ""}
