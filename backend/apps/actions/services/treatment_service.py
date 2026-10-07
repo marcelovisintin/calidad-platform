@@ -725,7 +725,8 @@ def _validation_history_comment(*, treatment: Treatment, previous_status: str, r
     new_status = treatment.status
     base = (
         f"Tratamiento {treatment.code}: validacion de eficacia realizada con resultado {result_label}. "
-        f"El tratamiento cambia de estado {previous_status} a estado {new_status}."
+        f"El tratamiento cambia de estado {TreatmentStatus(previous_status).label} "
+        f"a estado {TreatmentStatus(new_status).label}."
     )
     clean_comment = (comment or "").strip()
     if clean_comment:
@@ -1424,7 +1425,7 @@ def update_treatment(*, treatment: Treatment, user, data: dict, request_id: str 
 
     comments: list[str] = []
     if status_changed or auto_progressed:
-        comments.append(f"El tratamiento {locked.code} cambia a estado {locked.status}.")
+        comments.append(f"El tratamiento {locked.code} cambia a estado {locked.get_status_display()}.")
         if overdue_before_transition and not locked.is_overdue:
             comments.append(overdue_end_message(overdue_deadline))
     if "scheduled_for" in data or "treatment_location" in data:
@@ -1760,10 +1761,12 @@ def _restore_anomaly_after_treatment_removal(
             f"Fundamento: {reason}"
         ),
         evidence_note=(
-            f"Etapa anterior: {previous_stage}\nEtapa nueva: {locked.current_stage}\n"
-            f"Estado anterior: {previous_status}\nEstado nuevo: {locked.current_status}\n"
-            f"Camino anterior: {previous_path or 'sin definir'}\n"
-            f"Camino nuevo: {locked.observation_resolution_path or 'sin definir'}\n"
+            f"Etapa anterior: {AnomalyStage(previous_stage).label}\n"
+            f"Etapa nueva: {locked.get_current_stage_display()}\n"
+            f"Estado anterior: {AnomalyStatus(previous_status).label}\n"
+            f"Estado nuevo: {locked.get_current_status_display()}\n"
+            f"Camino anterior: {ObservationResolutionPath(previous_path).label if previous_path else 'sin definir'}\n"
+            f"Camino nuevo: {locked.get_observation_resolution_path_display() or 'sin definir'}\n"
             f"Fundamento de eliminacion: {reason}"
         ),
     )
@@ -2429,7 +2432,8 @@ def update_treatment_task(*, treatment_task: TreatmentTask, data: dict, user, re
             user=user,
             comment=(
                 f"Tratamiento {locked.treatment.code}: se actualiza la accion "
-                f"{locked.code or locked.title} de estado {previous_status} a estado {locked.status}."
+                f"{locked.code or locked.title} de estado {TreatmentTaskStatus(previous_status).label} "
+                f"a estado {locked.get_status_display()}."
                 + (f" {overdue_end_message(overdue_deadline)}"
                    if overdue_before_transition and not locked.is_overdue else "")
             ),

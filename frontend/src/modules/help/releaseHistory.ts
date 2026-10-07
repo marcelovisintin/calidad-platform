@@ -69,6 +69,10 @@ const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
 ];
 
 const RELEASE_SUMMARIES: Record<string, string[]> = {
+  "release-1.8.4": [
+    "Los cambios de estado de acciones, tratamientos y anomalías se registran con nombres en español.",
+    "Los estados y etapas de historiales anteriores se muestran en español sin modificar los registros guardados.",
+  ],
   "release-1.8.3": [
     "La nota de evidencia del cambio de estado en Datos de la acción empieza compacta y crece al escribir.",
   ],

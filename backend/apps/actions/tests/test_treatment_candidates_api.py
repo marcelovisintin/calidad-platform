@@ -1460,7 +1460,7 @@ class TreatmentCandidatesApiTests(APITestCase):
             anomaly=self.anomaly_one,
             comment__icontains=task.code,
         ).latest("created_at")
-        self.assertIn("de estado pending a estado in_progress", history.comment)
+        self.assertIn("de estado Pendiente a estado En curso", history.comment)
         self.assertEqual(history.evidence_note, "Se inicia con material segregado.")
 
     def test_multiple_task_status_changes_register_independent_evidence_notes(self):

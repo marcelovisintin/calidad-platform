@@ -784,10 +784,10 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
             evidence_lines.append(f"Fecha de realizacion: {observation_due_date.isoformat()}")
         evidence_lines.extend(
             [
-                f"Estado anterior: {transition_from_status}",
-                f"Estado nuevo: {locked.current_status}",
-                f"Etapa anterior: {transition_from_stage}",
-                f"Etapa nueva: {locked.current_stage}",
+                f"Estado anterior: {AnomalyStatus(transition_from_status).label}",
+                f"Estado nuevo: {locked.get_current_status_display()}",
+                f"Etapa anterior: {AnomalyStage(transition_from_stage).label}",
+                f"Etapa nueva: {locked.get_current_stage_display()}",
             ]
         )
         _write_status_history(

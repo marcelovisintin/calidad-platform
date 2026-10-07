@@ -11,23 +11,69 @@ type TimelineProps = {
 
 const PAGE_SIZE = 10;
 
+const ACTION_STATUS_LABELS: Record<string, string> = {
+  pending: "Pendiente", in_progress: "En curso", completed: "Completada", cancelled: "Cancelada",
+};
+const TREATMENT_STATUS_LABELS: Record<string, string> = {
+  pending: "Pendiente", scheduled: "Programado", in_progress: "En tratamiento",
+  completed: "Completado", cancelled: "Cancelado",
+};
+const ANOMALY_STATUS_LABELS: Record<string, string> = {
+  registered: "Registrada", in_evaluation: "En evaluación", in_analysis: "En análisis",
+  in_treatment: "En tratamiento", pending_verification: "Pendiente de verificación",
+  closed: "Cerrada", cancelled: "Anulada", reopened: "Reabierta",
+};
+const ANOMALY_STAGE_LABELS: Record<string, string> = {
+  registration: "Registro", containment: "Contención", initial_verification: "Verificación inicial",
+  classification: "Revisión de hallazgos", treatment_created: "Tratamiento creado",
+  cause_analysis: "Análisis de causa", proposals: "Propuestas", action_plan: "Plan de acción",
+  execution_follow_up: "Ejecución y seguimiento", results: "Resultados",
+  effectiveness_verification: "Verificación de eficacia", closure: "Cierre",
+  standardization_learning: "Estandarización y aprendizaje",
+};
+const OBSERVATION_PATH_LABELS: Record<string, string> = {
+  observation: "Observación", treatment_pending: "Observación TRT (con tratamiento)",
+  treatment: "Tratamiento",
+};
+
+function historyLabel(value: string, labels: Record<string, string>) {
+  return labels[value.toLowerCase()] ?? value;
+}
+
 function isTaskStatusHistory(item: AnomalyStatusHistory) {
   const comment = item.comment.toLowerCase();
-  return (comment.includes("se actualiza la accion") || comment.includes("se actualiza la tarea")) && comment.includes("estado");
+  return (/se actualiza la (acci[oó]n|tarea)/i.test(comment)) && comment.includes("estado");
 }
 
 function displayHistoryComment(comment: string) {
+  const labels = /se actualiza la (acci[oó]n|tarea)/i.test(comment)
+    ? ACTION_STATUS_LABELS : TREATMENT_STATUS_LABELS;
   return comment
     .replace(/\bTareas\b/g, "Acciones")
     .replace(/\btareas\b/g, "acciones")
     .replace(/\bTarea\b/g, "Acción")
-    .replace(/\btarea\b/g, "acción");
+    .replace(/\btarea\b/g, "acción")
+    .replace(/(de estado )([a-z_]+)( a estado )([a-z_]+)/gi,
+      (_, start: string, previous: string, middle: string, next: string) =>
+        `${start}${historyLabel(previous, labels)}${middle}${historyLabel(next, labels)}`)
+    .replace(/(cambia a estado )([a-z_]+)/gi,
+      (_, start: string, status: string) => `${start}${historyLabel(status, TREATMENT_STATUS_LABELS)}`);
+}
+
+function displayHistoryEvidence(note: string) {
+  return note
+    .replace(/^(Estado anterior|Estado nuevo):[ \t]*([a-z_]+)$/gim,
+      (_, field: string, status: string) => `${field}: ${historyLabel(status, ANOMALY_STATUS_LABELS)}`)
+    .replace(/^(Etapa anterior|Etapa nueva):[ \t]*([a-z_]+)$/gim,
+      (_, field: string, stage: string) => `${field}: ${historyLabel(stage, ANOMALY_STAGE_LABELS)}`)
+    .replace(/^(Camino anterior|Camino nuevo):[ \t]*([a-z_]+)$/gim,
+      (_, field: string, path: string) => `${field}: ${historyLabel(path, OBSERVATION_PATH_LABELS)}`);
 }
 
 function getEvidenceText(item: AnomalyStatusHistory) {
   const evidenceNote = item.evidence_note?.trim();
   if (evidenceNote) {
-    return evidenceNote;
+    return displayHistoryEvidence(evidenceNote);
   }
   return isTaskStatusHistory(item) ? "Sin evidencia registrada" : "";
 }
