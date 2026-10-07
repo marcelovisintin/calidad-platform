@@ -392,8 +392,8 @@ export const HELP_TOPICS: HelpTopic[] = [
           "Desde Pendiente avanza a En curso o directamente a Completada; desde En curso solo avanza a Completada.",
           "Cancela únicamente antes del primer cambio de estado. No se permiten retrocesos.",
           "Registra una nota de evidencia propia para cada cambio de estado.",
-          "Primero adjunta un archivo en Evidencia de la acción y presiona Cargar evidencia. Solo una carga guardada habilita Datos de la acción; seleccionar el archivo no alcanza.",
-          "En Observaciones, cada acción tiene evidencia propia. Al finalizarla se muestran las completadas y pendientes; deben completarse todas antes de verificar eficacia, respetando la fecha de validación.",
+          "Puedes adjuntar un archivo en Evidencia de la acción y presionar Cargar evidencia para guardarlo. Los datos y el cambio de estado están disponibles sin archivo; cada cambio de estado requiere su nota.",
+          "En Observaciones, los archivos de cada acción son opcionales. Al finalizarla se muestran las completadas y pendientes; deben completarse todas antes de verificar eficacia, respetando la fecha de validación.",
         ],
       },
       {

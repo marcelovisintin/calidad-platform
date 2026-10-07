@@ -69,6 +69,11 @@ const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
 ];
 
 const RELEASE_SUMMARIES: Record<string, string[]> = {
+  "release-1.8.0": [
+    "Los archivos adjuntos son opcionales para finalizar acciones de Observación y validar su eficacia.",
+    "Las acciones de Tratamiento pueden editarse y cambiar de estado sin archivos; la nota de cada cambio sigue siendo obligatoria.",
+    "Se actualizaron formularios y ayudas. La importación masiva conserva su archivo de datos obligatorio.",
+  ],
   "release-1.7.3": [
     "Se corrigieron los tipos del frontend en usuarios, filtros, navegación, confirmación de anomalías y métodos de tratamiento.",
     "La comprobación del frontend ahora revisa realmente los archivos de la aplicación y detecta errores de TypeScript durante la compilación.",

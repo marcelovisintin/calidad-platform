@@ -275,7 +275,7 @@ export function resolveTaskHelpWorkContext(task: TreatmentTaskHistory | ActionWo
     nextAction: complete
       ? "La acción está completada y permanece disponible en el historial."
       : canWork
-        ? "Actualiza el estado, registra la nota del cambio y adjunta la evidencia necesaria."
+        ? "Actualiza el estado, registra la nota del cambio y adjunta archivos si los tienes."
         : "Consulta la definición. Solo el responsable asignado puede actualizar el estado y cargar evidencia.",
     blockers: task.is_overdue && !complete ? ["La fecha prevista de ejecución está vencida."] : [],
     tone: complete ? "success" : task.is_overdue ? "warning" : "info",

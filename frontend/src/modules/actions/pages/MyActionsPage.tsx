@@ -271,10 +271,6 @@ export function MyActionsPage() {
   const handleUpdateTask = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedWorkItem || selectedWorkItem.source !== "treatment") return;
-    if (!selectedWorkItem.evidences.length) {
-      setFormError("Debe cargar evidencia antes de editar los datos de la accion.");
-      return;
-    }
     if (!selectedWorkItem.can_update_status) {
       setFormError("No tienes permisos para actualizar esta acción.");
       return;
@@ -322,10 +318,6 @@ export function MyActionsPage() {
   const handleCompleteObservation = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedWorkItem || selectedWorkItem.source !== "observation") return;
-    if (!selectedWorkItem.evidences.length) {
-      setFormError("Debe cargar evidencia propia de esta accion antes de finalizarla.");
-      return;
-    }
     if (!selectedWorkItem.can_update_status) {
       setFormError("No tienes permisos para finalizar esta accion de Observacion.");
       return;
@@ -496,8 +488,7 @@ export function MyActionsPage() {
             </section>
             {!selectedIsTerminal && selectedWorkItem.can_update_status ? (
               <form className="form-section nested-form" data-tour="action-observation-completion" onSubmit={handleCompleteObservation}>
-                {!selectedWorkItem.evidences.length ? <p role="status">Cargue evidencia para habilitar los datos y la finalización de esta acción.</p> : null}
-                <fieldset className="action-data-fields" disabled={busy || !selectedWorkItem.evidences.length}>
+                <fieldset className="action-data-fields" disabled={busy}>
                 <div className="section-head compact"><h3>Finalizar accion</h3><button className="button button-primary" disabled={busy || !observationCompletedAt} type="submit">Marcar como finalizada</button></div>
                 <label className="field"><span>Fecha real de finalizacion</span><input onChange={(event) => setObservationCompletedAt(event.target.value)} required type="date" value={observationCompletedAt} /></label>
                 </fieldset>
@@ -531,8 +522,7 @@ export function MyActionsPage() {
             </section>
             {!selectedIsTerminal ? (
               <form className="form-section nested-form" data-tour="action-data" onSubmit={handleUpdateTask}>
-                {!selectedWorkItem.evidences.length ? <p role="status">Cargue evidencia para habilitar los datos de esta acción.</p> : null}
-                <fieldset className="action-data-fields" disabled={busy || !selectedWorkItem.evidences.length}>
+                <fieldset className="action-data-fields" disabled={busy}>
                 <div className="section-head compact"><h3>Datos de la acción</h3><div className="task-save-controls">{statusEvidenceError ? <span className="inline-form-alert" role="alert">{statusEvidenceError}</span> : null}<button className="button button-primary" disabled={busy || !selectedWorkItem.can_update_status} type="submit">Guardar acción</button></div></div>
                 <div className="form-grid">
                   <label className="field"><span>Acción</span><input disabled={!selectedWorkItem.can_manage || !selectedWorkItem.can_update_status} onChange={(event) => handleTaskDraftChange("title", event.target.value)} required type="text" value={taskDraft.title} /></label>

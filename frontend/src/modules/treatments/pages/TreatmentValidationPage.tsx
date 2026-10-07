@@ -305,7 +305,7 @@ export function TreatmentValidationPage() {
                           />
                         </label>
                         <label className="field field-span-2" data-tour="validation-evidence">
-                          <span>Evidencia objetiva de eficacia</span>
+                          <span>Evidencia objetiva de eficacia (opcional)</span>
                           <input accept=".jpg,.jpeg,.png,.pdf,.txt" disabled={!selectedItem.can_validate || busy} multiple onChange={(event) => setValidationEvidences(Array.from(event.target.files ?? []))} type="file" />
                         </label>
                       </div>

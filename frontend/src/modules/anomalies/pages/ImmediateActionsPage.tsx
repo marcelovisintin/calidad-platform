@@ -276,11 +276,6 @@ export function ImmediateActionsPage() {
     setActionErrors((current) => ({ ...current, [actionId]: "" }));
     try {
       const files = actionEvidenceFiles[actionId] ?? [];
-      const hasSavedEvidence = selectedAnomaly?.attachments.some((attachment) => attachment.observation_action === actionId);
-      if (!hasSavedEvidence && files.length === 0) {
-        setActionErrors((current) => ({ ...current, [actionId]: "Selecciona una evidencia objetiva para finalizar esta accion." }));
-        return;
-      }
       for (const file of files) {
         await addObservationActionEvidence(selectedAnomalyId, actionId, { file });
       }
@@ -391,10 +386,6 @@ export function ImmediateActionsPage() {
 
     if (!effectivenessVerifiedAt || !effectivenessResult || !effectivenessComment.trim()) {
       setFormError("Completa la fecha de realizacion de la validacion, el resultado y el fundamento de eficacia.");
-      return;
-    }
-    if (!effectivenessEvidenceFiles.length) {
-      setFormError("Adjunta al menos una evidencia objetiva de la verificacion de eficacia.");
       return;
     }
     if (effectivenessVerifiedAt.slice(0, 10) < effectivenessDueDate) {
@@ -788,14 +779,13 @@ export function ImmediateActionsPage() {
                           <AutoResizeTextarea disabled={!canVerifyEffectiveness} minHeightPx={70} onChange={(event) => setEffectivenessComment(event.target.value)} required value={effectivenessComment} />
                         </label>
                         <label className="field field-span-2">
-                          <span>Evidencia objetiva de la verificacion (obligatoria)</span>
+                          <span>Evidencia objetiva de la verificacion (opcional)</span>
                           <input
                             accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.rtf,.odt,.ods,.zip,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tif,.tiff,.heic,.heif"
                             disabled={!canVerifyEffectiveness}
                             key={effectivenessEvidenceInputKey}
                             multiple
                             onChange={(event) => setEffectivenessEvidenceFiles(Array.from(event.target.files ?? []))}
-                            required
                             type="file"
                           />
                         </label>
@@ -805,7 +795,7 @@ export function ImmediateActionsPage() {
                     {message ? <div className="panel success">{message}</div> : null}
 
                     <div className="form-actions" data-tour="observation-effectiveness-confirm">
-                      <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed" || !canVerifyEffectiveness || !effectivenessComment.trim() || !effectivenessEvidenceFiles.length} type="submit">
+                      <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed" || !canVerifyEffectiveness || !effectivenessComment.trim()} type="submit">
                         {submitting ? "Guardando..." : "Guardar verificacion"}
                       </button>
                     </div>

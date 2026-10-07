@@ -1537,8 +1537,6 @@ def complete_observation_action(*, action: ObservationAction, user, completed_at
         raise ValidationError({"action": "La accion ya fue finalizada."})
     if not completed_at:
         raise ValidationError({"completed_at": "Debe indicar la fecha real de finalizacion."})
-    if not locked_action.evidences.exists():
-        raise ValidationError({"evidence": "Debe cargar evidencia propia de esta accion antes de finalizarla."})
 
     overdue_before_completion = locked_action.is_overdue
     previous_status = locked_anomaly.current_status
@@ -1797,8 +1795,6 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, file
         )
 
     evidence_files = list(files or [])
-    if not evidence_files:
-        raise ValidationError({"evidences": "Debe adjuntar al menos una evidencia objetiva de la verificacion."})
     for file_obj in evidence_files:
         validate_evidence_file(file_obj)
 

@@ -761,17 +761,17 @@ class AnomalyCreateApiTests(APITestCase):
 
         self.assertEqual(upload_response.status_code, status.HTTP_201_CREATED)
 
-        missing_verification_evidence = self.client.post(
+        missing_verification_comment = self.client.post(
             f"/api/v1/anomalies/{anomaly.pk}/observation/effectiveness/",
             {
                 "effectiveness_verified_at": timezone.now().isoformat(),
                 "effectiveness_is_effective": False,
-                "effectiveness_comment": "Intento sin evidencia de verificacion",
+                "effectiveness_comment": "",
             },
             format="json",
         )
-        self.assertEqual(missing_verification_evidence.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("evidences", missing_verification_evidence.data)
+        self.assertEqual(missing_verification_comment.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("effectiveness_comment", missing_verification_comment.data)
 
         ineffective_response = self.client.post(
             f"/api/v1/anomalies/{anomaly.pk}/observation/effectiveness/",
@@ -805,9 +805,8 @@ class AnomalyCreateApiTests(APITestCase):
                 "effectiveness_is_effective": True,
                 "effectiveness_comment": "Eficaz",
                 "closure_comment": "Cierre por verificacion eficaz",
-                "evidences": SimpleUploadedFile("verificacion-2.txt", b"Resultado eficaz", content_type="text/plain"),
             },
-            format="multipart",
+            format="json",
         )
 
         self.assertEqual(effective_response.status_code, status.HTTP_200_OK)
@@ -987,12 +986,6 @@ class AnomalyCreateApiTests(APITestCase):
             format="json",
         )
 
-        blocked = self.client.post(
-            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{create_response.data['id']}/complete/",
-            {"completed_at": timezone.localdate().isoformat()}, format="json",
-        )
-        self.assertEqual(blocked.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("evidence", blocked.data)
         uploaded = self.client.post(
             f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{create_response.data['id']}/evidences/",
             {"file": SimpleUploadedFile("evidencia.txt", b"Trabajo realizado", content_type="text/plain"), "note": "Evidencia propia"},
@@ -1027,6 +1020,37 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertTrue(
             anomaly.status_history.filter(comment__contains="finalizada").exists()
         )
+
+    def test_observation_action_can_be_finalized_without_file(self):
+        anomaly = self._immediate_anomaly("OBS-COMPLETE-NO-FILE")
+        self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/load/",
+            {
+                "responsible": str(self.user.pk),
+                "action_date": timezone.localdate().isoformat(),
+                "observation": "Datos generales confirmados.",
+            },
+            format="json",
+        )
+        created = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/",
+            {
+                "detail": "Accion sin archivo adjunto.",
+                "estimated_completion_date": timezone.localdate().isoformat(),
+                "effectiveness_due_date": (timezone.localdate() + timedelta(days=5)).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+
+        completed = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{created.data['id']}/complete/",
+            {"completed_at": timezone.localdate().isoformat()},
+            format="json",
+        )
+        self.assertEqual(completed.status_code, status.HTTP_200_OK)
+        self.assertEqual(completed.data["status"], "completed")
+        self.assertFalse(ObservationAction.objects.get(pk=created.data["id"]).evidences.exists())
 
     def test_observation_actions_advance_to_effectiveness_and_use_latest_due_date(self):
         anomaly = self._immediate_anomaly("OBS-EFFECTIVENESS-001")
@@ -1066,18 +1090,13 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertIn("actions", pending_effectiveness.data)
 
         for action in created_actions:
-            blocked = self.client.post(
-                f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action['id']}/complete/",
-                {"completed_at": timezone.localdate().isoformat()}, format="json",
-            )
-            self.assertEqual(blocked.status_code, status.HTTP_400_BAD_REQUEST)
-            self.assertIn("evidence", blocked.data)
-            uploaded = self.client.post(
-                f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action['id']}/evidences/",
-                {"file": SimpleUploadedFile("evidencia.txt", b"Trabajo realizado", content_type="text/plain")},
-                format="multipart",
-            )
-            self.assertEqual(uploaded.status_code, status.HTTP_201_CREATED)
+            if action == created_actions[0]:
+                uploaded = self.client.post(
+                    f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action['id']}/evidences/",
+                    {"file": SimpleUploadedFile("evidencia.txt", b"Trabajo realizado", content_type="text/plain")},
+                    format="multipart",
+                )
+                self.assertEqual(uploaded.status_code, status.HTTP_201_CREATED)
             complete_response = self.client.post(
                 f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action['id']}/complete/",
                 {"completed_at": timezone.localdate().isoformat()},
