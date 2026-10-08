@@ -1008,8 +1008,12 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertIn("attachments/", work_item["evidences"][0]["file_url"])
         complete_response = self.client.post(
             f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{create_response.data['id']}/complete/",
-            {"completed_at": timezone.localdate().isoformat()},
-            format="json",
+            {
+                "completed_at": timezone.localdate().isoformat(),
+                "evidence_note": "Se realizo y verifico el trabajo.",
+                "evidences": SimpleUploadedFile("realizado.txt", b"Trabajo finalizado", content_type="text/plain"),
+            },
+            format="multipart",
         )
 
         self.assertEqual(complete_response.status_code, status.HTTP_200_OK)
@@ -1017,6 +1021,8 @@ class AnomalyCreateApiTests(APITestCase):
         action = ObservationAction.objects.get(pk=create_response.data["id"])
         self.assertEqual(action.detail, "Accion que debe permanecer inmutable.")
         self.assertEqual(action.completed_by_id, self.user.pk)
+        completion_evidence = action.evidences.get(note="Se realizo y verifico el trabajo.")
+        self.assertTrue(completion_evidence.file)
         self.assertTrue(
             anomaly.status_history.filter(comment__contains="finalizada").exists()
         )
@@ -1043,14 +1049,56 @@ class AnomalyCreateApiTests(APITestCase):
         )
         self.assertEqual(created.status_code, status.HTTP_201_CREATED)
 
-        completed = self.client.post(
+        completed_without_note = self.client.post(
             f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{created.data['id']}/complete/",
             {"completed_at": timezone.localdate().isoformat()},
             format="json",
         )
+        self.assertEqual(completed_without_note.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("evidence_note", completed_without_note.data)
+        self.assertEqual(ObservationAction.objects.get(pk=created.data["id"]).status, "pending")
+        invalid_file = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{created.data['id']}/complete/",
+            {
+                "completed_at": timezone.localdate().isoformat(),
+                "evidence_note": "Trabajo realizado con adjunto invalido.",
+                "evidences": SimpleUploadedFile("invalido.exe", b"invalid", content_type="application/octet-stream"),
+            },
+            format="multipart",
+        )
+        self.assertEqual(invalid_file.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(ObservationAction.objects.get(pk=created.data["id"]).status, "pending")
+
+        note_only = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{created.data['id']}/evidences/",
+            {"note": "Se completo la accion sin archivo adjunto."},
+            format="multipart",
+        )
+        self.assertEqual(note_only.status_code, status.HTTP_201_CREATED)
+        for completion_note in (None, "   "):
+            payload = {"completed_at": timezone.localdate().isoformat()}
+            if completion_note is not None:
+                payload["evidence_note"] = completion_note
+            rejected = self.client.post(
+                f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{created.data['id']}/complete/",
+                payload,
+                format="json",
+            )
+            self.assertEqual(rejected.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertIn("evidence_note", rejected.data)
+        self.assertEqual(ObservationAction.objects.get(pk=created.data["id"]).status, "pending")
+        completed = self.client.post(
+            f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{created.data['id']}/complete/",
+            {"completed_at": timezone.localdate().isoformat(), "evidence_note": "Se realizo y verifico el trabajo."},
+            format="json",
+        )
         self.assertEqual(completed.status_code, status.HTTP_200_OK)
         self.assertEqual(completed.data["status"], "completed")
-        self.assertFalse(ObservationAction.objects.get(pk=created.data["id"]).evidences.exists())
+        evidence = ObservationAction.objects.get(pk=created.data["id"]).evidences.get(note="Se realizo y verifico el trabajo.")
+        self.assertFalse(evidence.file)
+        self.assertEqual(evidence.note, "Se realizo y verifico el trabajo.")
+        history = anomaly.status_history.filter(comment__contains="finalizada").latest("created_at")
+        self.assertIn("Lo realizado: Se realizo y verifico el trabajo.", history.evidence_note)
 
     def test_observation_action_evidence_requires_note_but_not_file(self):
         anomaly = self._immediate_anomaly("OBS-EVIDENCE-NOTE")
@@ -1132,9 +1180,16 @@ class AnomalyCreateApiTests(APITestCase):
                     format="multipart",
                 )
                 self.assertEqual(uploaded.status_code, status.HTTP_201_CREATED)
+            else:
+                note_only = self.client.post(
+                    f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action['id']}/evidences/",
+                    {"note": "Accion completada sin archivo."},
+                    format="multipart",
+                )
+                self.assertEqual(note_only.status_code, status.HTTP_201_CREATED)
             complete_response = self.client.post(
                 f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action['id']}/complete/",
-                {"completed_at": timezone.localdate().isoformat()},
+                {"completed_at": timezone.localdate().isoformat(), "evidence_note": "Se realizo y verifico el trabajo."},
                 format="json",
             )
             self.assertEqual(complete_response.status_code, status.HTTP_200_OK)
@@ -1191,7 +1246,7 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(uploaded.status_code, status.HTTP_201_CREATED)
         self.client.post(
             f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action_response.data['id']}/complete/",
-            {"completed_at": timezone.localdate().isoformat()},
+            {"completed_at": timezone.localdate().isoformat(), "evidence_note": "Se realizo y verifico el trabajo."},
             format="json",
         )
 
@@ -1316,7 +1371,7 @@ class AnomalyCreateApiTests(APITestCase):
         self.assertEqual(uploaded.status_code, status.HTTP_201_CREATED)
         self.client.post(
             f"/api/v1/anomalies/{anomaly.pk}/observation/actions/{action_response.data['id']}/complete/",
-            {"completed_at": timezone.localdate().isoformat()},
+            {"completed_at": timezone.localdate().isoformat(), "evidence_note": "Se realizo y verifico el trabajo."},
             format="json",
         )
 

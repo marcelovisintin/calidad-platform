@@ -1548,7 +1548,7 @@ def add_observation_action_evidence(*, action: ObservationAction, user, data: di
 
 
 @transaction.atomic
-def complete_observation_action(*, action: ObservationAction, user, completed_at, request_id: str = "") -> ObservationAction:
+def complete_observation_action(*, action: ObservationAction, user, completed_at, evidence_note: str, files=None, request_id: str = "") -> ObservationAction:
     locked_anomaly = Anomaly.objects.select_for_update().get(pk=action.anomaly_id)
     _ensure_anomaly_is_editable(locked_anomaly)
     _ensure_observation_path_available(locked_anomaly)
@@ -1560,6 +1560,18 @@ def complete_observation_action(*, action: ObservationAction, user, completed_at
         raise ValidationError({"action": "La accion ya fue finalizada."})
     if not completed_at:
         raise ValidationError({"completed_at": "Debe indicar la fecha real de finalizacion."})
+    note = (evidence_note or "").strip()
+    if not note:
+        raise ValidationError({"evidence_note": "Debe describir lo realizado para finalizar la accion."})
+    completion_files = list(files or [])
+    for file_obj in completion_files:
+        add_observation_action_evidence(
+            action=locked_action, user=user, data={"file": file_obj, "note": note}, request_id=request_id,
+        )
+    if not completion_files:
+        add_observation_action_evidence(
+            action=locked_action, user=user, data={"note": note}, request_id=request_id,
+        )
 
     overdue_before_completion = locked_action.is_overdue
     previous_status = locked_anomaly.current_status
@@ -1611,7 +1623,7 @@ def complete_observation_action(*, action: ObservationAction, user, completed_at
             f" {overdue_end_message(locked_action.estimated_completion_date)}"
             if overdue_before_completion else ""
         ),
-        evidence_note=f"Fecha real de finalizacion: {locked_action.completed_at.isoformat()}",
+        evidence_note=f"Fecha real de finalizacion: {locked_action.completed_at.isoformat()}\nLo realizado: {note}",
         actor=user,
         changed_at=now,
     )

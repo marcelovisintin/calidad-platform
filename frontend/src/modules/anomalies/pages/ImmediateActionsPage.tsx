@@ -81,7 +81,6 @@ export function ImmediateActionsPage() {
   const [actionsTaken, setActionsTaken] = useState("");
   const [effectivenessDueAt, setEffectivenessDueAt] = useState(nowAsDate());
   const [objectiveEvidenceFiles, setObjectiveEvidenceFiles] = useState<File[]>([]);
-  const [objectiveEvidenceNote, setObjectiveEvidenceNote] = useState("");
   const [objectiveEvidenceInputKey, setObjectiveEvidenceInputKey] = useState(0);
   const [effectivenessVerifiedAt, setEffectivenessVerifiedAt] = useState(nowAsLocalDateTime());
   const [effectivenessResult, setEffectivenessResult] = useState<"" | "effective" | "not_effective">("");
@@ -236,10 +235,6 @@ export function ImmediateActionsPage() {
       setFormError("Completa el detalle y las dos fechas estimadas de la accion.");
       return;
     }
-    if (objectiveEvidenceFiles.length && !objectiveEvidenceNote.trim()) {
-      setFormError("Ingresa una nota para los archivos de evidencia de la accion.");
-      return;
-    }
 
     setSubmitting(true);
     setFormError(null);
@@ -252,10 +247,9 @@ export function ImmediateActionsPage() {
       });
       setActionDetail("");
       for (const file of objectiveEvidenceFiles) {
-        await addObservationActionEvidence(selectedAnomalyId, createdAction.id, { file, note: objectiveEvidenceNote.trim() });
+        await addObservationActionEvidence(selectedAnomalyId, createdAction.id, { file, note: actionDetail.trim() });
       }
       setObjectiveEvidenceFiles([]);
-      setObjectiveEvidenceNote("");
       setObjectiveEvidenceInputKey((current) => current + 1);
       await Promise.all([reload(), reloadDetail()]);
       setGeneralStepConfirmed(true);
@@ -270,7 +264,13 @@ export function ImmediateActionsPage() {
   };
 
   const handleCompleteObservationAction = async (actionId: string) => {
-    if (!selectedAnomalyId) {
+    if (!selectedAnomalyId || !selectedAnomaly) {
+      return;
+    }
+    const files = actionEvidenceFiles[actionId] ?? [];
+    const note = (actionEvidenceNotes[actionId] ?? "").trim();
+    if (!note) {
+      setActionErrors((current) => ({ ...current, [actionId]: "Describe lo realizado en la nota obligatoria para finalizar la accion." }));
       return;
     }
     const completedAt = completionDates[actionId] || nowAsDate();
@@ -283,54 +283,16 @@ export function ImmediateActionsPage() {
     setMessage(null);
     setActionErrors((current) => ({ ...current, [actionId]: "" }));
     try {
-      const files = actionEvidenceFiles[actionId] ?? [];
-      const note = (actionEvidenceNotes[actionId] ?? "").trim();
-      if (files.length && !note) {
-        setActionErrors((current) => ({ ...current, [actionId]: "Ingresa una nota para adjuntar evidencia." }));
-        return;
-      }
-      for (const file of files) {
-        await addObservationActionEvidence(selectedAnomalyId, actionId, { file, note });
-      }
-      if (!files.length && note) await addObservationActionEvidence(selectedAnomalyId, actionId, { note });
+      await completeObservationAction(selectedAnomalyId, actionId, completedAt, note, files);
       setActionEvidenceFiles((current) => ({ ...current, [actionId]: [] }));
       setActionEvidenceNotes((current) => ({ ...current, [actionId]: "" }));
       setActionEvidenceInputKeys((current) => ({ ...current, [actionId]: (current[actionId] ?? 0) + 1 }));
-      await completeObservationAction(selectedAnomalyId, actionId, completedAt);
       await Promise.all([reload(), reloadDetail()]);
       setGeneralStepConfirmed(true);
       setMessage("Accion finalizada correctamente.");
     } catch (err) {
       await reloadDetail();
       setActionErrors((current) => ({ ...current, [actionId]: err instanceof Error ? err.message : "No se pudo finalizar la accion." }));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleAddActionEvidence = async (actionId: string) => {
-    if (!selectedAnomalyId || !actionEvidenceNotes[actionId]?.trim()) {
-      return;
-    }
-    setSubmitting(true);
-    setFormError(null);
-    setMessage(null);
-    setActionErrors((current) => ({ ...current, [actionId]: "" }));
-    try {
-      const note = actionEvidenceNotes[actionId].trim();
-      const files = actionEvidenceFiles[actionId] ?? [];
-      for (const file of files) {
-        await addObservationActionEvidence(selectedAnomalyId, actionId, { file, note });
-      }
-      if (!files.length) await addObservationActionEvidence(selectedAnomalyId, actionId, { note });
-      setActionEvidenceFiles((current) => ({ ...current, [actionId]: [] }));
-      setActionEvidenceNotes((current) => ({ ...current, [actionId]: "" }));
-      setActionEvidenceInputKeys((current) => ({ ...current, [actionId]: (current[actionId] ?? 0) + 1 }));
-      await reloadDetail();
-      setMessage("Evidencia vinculada a la accion.");
-    } catch (err) {
-      await reloadDetail();
-      setActionErrors((current) => ({ ...current, [actionId]: err instanceof Error ? err.message : "No se pudo cargar la evidencia de la accion." }));
     } finally {
       setSubmitting(false);
     }
@@ -643,7 +605,6 @@ export function ImmediateActionsPage() {
                           <span>Archivos de evidencia (opcionales)</span>
                           <input key={objectiveEvidenceInputKey} multiple onChange={handleObjectiveEvidenceChange} type="file" />
                         </label>
-                        {objectiveEvidenceFiles.length ? <label className="field field-span-2"><span>Nota para los archivos (obligatoria)</span><AutoResizeTextarea minHeightPx={70} onChange={(event) => setObjectiveEvidenceNote(event.target.value)} required value={objectiveEvidenceNote} /></label> : null}
                       </div>
 
                       {objectiveEvidenceFiles.length ? (
@@ -677,6 +638,8 @@ export function ImmediateActionsPage() {
                               {actionErrors[action.id] ? <div className="panel danger" role="alert">{actionErrors[action.id]}</div> : null}
                               {action.status === "pending" ? (
                                 <div className="form-actions">
+                                  <label className="field"><span>Lo realizado (nota obligatoria para finalizar)</span><AutoResizeTextarea minHeightPx={70} onChange={(event) => setActionEvidenceNotes((current) => ({ ...current, [action.id]: event.target.value }))} value={actionEvidenceNotes[action.id] ?? ""} /></label>
+                                  <label className="field"><span>Archivos de lo realizado (opcionales)</span>
                                   <input
                                     aria-label={`Evidencia objetiva de accion ${action.sequence}`}
                                     accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.rtf,.odt,.ods,.zip,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tif,.tiff,.heic,.heif"
@@ -685,16 +648,8 @@ export function ImmediateActionsPage() {
                                     onChange={(event) => setActionEvidenceFiles((current) => ({ ...current, [action.id]: Array.from(event.target.files ?? []) }))}
                                     type="file"
                                   />
+                                  </label>
                                   {actionEvidenceFiles[action.id]?.length ? <small>{actionEvidenceFiles[action.id].length} archivo(s) seleccionado(s)</small> : null}
-                                  <label className="field"><span>Nota de evidencia (obligatoria)</span><AutoResizeTextarea minHeightPx={70} onChange={(event) => setActionEvidenceNotes((current) => ({ ...current, [action.id]: event.target.value }))} value={actionEvidenceNotes[action.id] ?? ""} /></label>
-                                  <button
-                                    className="button button-secondary"
-                                    disabled={submitting || !actionEvidenceNotes[action.id]?.trim()}
-                                    onClick={() => void handleAddActionEvidence(action.id)}
-                                    type="button"
-                                  >
-                                    Adjuntar evidencia
-                                  </button>
                                 </div>
                               ) : null}
                             </div>

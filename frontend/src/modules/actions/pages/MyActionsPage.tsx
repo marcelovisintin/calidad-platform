@@ -107,6 +107,8 @@ export function MyActionsPage() {
   const [taskStatusEvidenceNote, setTaskStatusEvidenceNote] = useState("");
   const [taskEvidenceInputKey, setTaskEvidenceInputKey] = useState(0);
   const [observationCompletedAt, setObservationCompletedAt] = useState(getTodayInputValue());
+  const [observationCompletionNote, setObservationCompletionNote] = useState("");
+  const [observationCompletionFile, setObservationCompletionFile] = useState<File | null>(null);
   const [observationProgress, setObservationProgress] = useState<{ anomalyId: string; code: string; actions: ObservationAction[] } | null>(null);
 
   const deferredQuery = useDeferredValue(query);
@@ -241,6 +243,8 @@ export function MyActionsPage() {
     setStatusEvidenceError(null);
     setTaskEvidenceInputKey((current) => current + 1);
     setObservationCompletedAt(selectedWorkItem.completed_on || getTodayInputValue());
+    setObservationCompletionNote("");
+    setObservationCompletionFile(null);
   }, [selectedWorkItem?.id, selectedWorkItem?.source, selectedWorkItem?.updated_at]);
 
   const handleTaskDraftChange = <K extends keyof TaskDraft>(field: K, value: TaskDraft[K]) => {
@@ -322,6 +326,10 @@ export function MyActionsPage() {
       setFormError("No tienes permisos para finalizar esta accion de Observacion.");
       return;
     }
+    if (!observationCompletionNote.trim()) {
+      setFormError("Debe describir lo realizado en la nota de evidencia para finalizar la accion.");
+      return;
+    }
     const anomalyId = selectedWorkItem.anomalies[0]?.id;
     if (!anomalyId || !observationCompletedAt) {
       setFormError("Debe indicar la fecha real de finalizacion.");
@@ -329,7 +337,9 @@ export function MyActionsPage() {
     }
     await runMutation(
       async () => {
-        await completeObservationAction(anomalyId, selectedWorkItem.id, observationCompletedAt);
+        await completeObservationAction(anomalyId, selectedWorkItem.id, observationCompletedAt, observationCompletionNote, observationCompletionFile ? [observationCompletionFile] : []);
+        setObservationCompletionNote("");
+        setObservationCompletionFile(null);
         const detail = await fetchAnomalyDetail(anomalyId);
         setObservationProgress({ anomalyId, code: detail.code, actions: detail.observation_actions });
       },
@@ -491,6 +501,8 @@ export function MyActionsPage() {
                 <fieldset className="action-data-fields" disabled={busy}>
                 <div className="section-head compact"><h3>Finalizar accion</h3><button className="button button-primary" disabled={busy || !observationCompletedAt} type="submit">Marcar como finalizada</button></div>
                 <label className="field"><span>Fecha real de finalizacion</span><input onChange={(event) => setObservationCompletedAt(event.target.value)} required type="date" value={observationCompletedAt} /></label>
+                <label className="field"><span>Lo realizado (nota obligatoria para finalizar)</span><AutoResizeTextarea minHeightPx={70} required value={observationCompletionNote} onChange={(event) => setObservationCompletionNote(event.target.value)} /></label>
+                <label className="field"><span>Archivo de lo realizado (opcional)</span><input accept={EVIDENCE_ACCEPT} type="file" onChange={(event) => setObservationCompletionFile(event.target.files?.[0] ?? null)} /></label>
                 </fieldset>
               </form>
             ) : !selectedIsTerminal ? <div className="panel info compact-inline-panel"><p>Esta accion se muestra en modo consulta. Solo el responsable autorizado puede finalizarla.</p></div> : null}

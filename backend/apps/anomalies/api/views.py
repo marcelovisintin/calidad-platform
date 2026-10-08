@@ -789,6 +789,7 @@ class AnomalyViewSet(viewsets.ModelViewSet):
         detail=True,
         methods=["post"],
         url_path=r"observation/actions/(?P<observation_action_id>[^/.]+)/complete",
+        parser_classes=[MultiPartParser, FormParser, JSONParser],
     )
     def complete_observation_action(self, request, pk=None, observation_action_id=None):
         anomaly = self.get_object()
@@ -803,6 +804,8 @@ class AnomalyViewSet(viewsets.ModelViewSet):
             action=observation_action,
             user=request.user,
             completed_at=serializer.validated_data["completed_at"],
+            evidence_note=serializer.validated_data["evidence_note"],
+            files=request.FILES.getlist("evidences"),
             request_id=self._request_id(),
         )
         output = ObservationActionSerializer(completed, context=self.get_serializer_context())

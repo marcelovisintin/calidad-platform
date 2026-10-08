@@ -202,10 +202,14 @@ export function createObservationAction(anomalyId: string, payload: ObservationA
   });
 }
 
-export function completeObservationAction(anomalyId: string, actionId: string, completedAt: string) {
+export function completeObservationAction(anomalyId: string, actionId: string, completedAt: string, note: string, files: File[] = []) {
+  const body = new FormData();
+  body.append("completed_at", completedAt);
+  body.append("evidence_note", note.trim());
+  files.forEach((file) => body.append("evidences", file));
   return apiRequest<ObservationAction>(`/anomalies/${anomalyId}/observation/actions/${actionId}/complete/`, {
     method: "POST",
-    body: { completed_at: completedAt },
+    body,
   });
 }
 

@@ -570,6 +570,7 @@ class ObservationActionCreateSerializer(serializers.Serializer):
 
 class ObservationActionCompleteSerializer(serializers.Serializer):
     completed_at = serializers.DateField()
+    evidence_note = serializers.CharField()
 
 class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin, serializers.ModelSerializer):
     is_overdue = serializers.BooleanField(read_only=True)

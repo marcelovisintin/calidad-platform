@@ -69,6 +69,10 @@ const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
 ];
 
 const RELEASE_SUMMARIES: Record<string, string[]> = {
+  "release-1.8.6": [
+    "Las acciones de observaciones requieren el detalle de lo propuesto al crearlas y una nueva nota de lo realizado al finalizarlas.",
+    "Los archivos son opcionales en ambos pasos; la nota de finalización se conserva en las evidencias y el historial.",
+  ],
   "release-1.8.5": [
     "La tarjeta Código visible en Nueva anomalía es más ancha y compacta para mejorar la lectura del texto.",
     "Se quitaron los rótulos Paso 1 y Paso 2 para reducir la altura de las tarjetas del formulario.",
