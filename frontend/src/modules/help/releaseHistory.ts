@@ -69,6 +69,10 @@ const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
 ];
 
 const RELEASE_SUMMARIES: Record<string, string[]> = {
+  "release-1.8.5": [
+    "La tarjeta Código visible en Nueva anomalía es más ancha y compacta para mejorar la lectura del texto.",
+    "Se quitaron los rótulos Paso 1 y Paso 2 para reducir la altura de las tarjetas del formulario.",
+  ],
   "release-1.8.4": [
     "Los cambios de estado de acciones, tratamientos y anomalías se registran con nombres en español.",
     "Los estados y etapas de historiales anteriores se muestran en español sin modificar los registros guardados.",

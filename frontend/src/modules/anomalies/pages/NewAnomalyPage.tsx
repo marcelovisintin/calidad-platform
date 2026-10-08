@@ -380,7 +380,6 @@ export function NewAnomalyPage() {
         <section className="form-section field-span-2">
           <div className="section-head compact">
             <div>
-              <p className="eyebrow">Paso 1</p>
               <h2>Datos de inicio</h2>
             </div>
             <span className="status-badge accent compact">Obligatorio</span>
@@ -428,7 +427,6 @@ export function NewAnomalyPage() {
         <section className="form-section field-span-2">
           <div className="section-head compact">
             <div>
-              <p className="eyebrow">Paso 2</p>
               <h2>Contexto</h2>
             </div>
             <span className="status-badge accent compact">Obligatorio</span>
