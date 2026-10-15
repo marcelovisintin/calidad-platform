@@ -1743,7 +1743,7 @@ class AnomalyCreateApiTests(APITestCase):
         detail_response = self.client.get(f"/api/v1/anomalies/{child.pk}/")
         self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
 
-    def test_default_tracking_order_prioritizes_registered_and_sends_closed_last(self):
+    def test_default_tracking_order_prioritizes_registered_and_evaluation_and_sends_closed_last(self):
         admin_user = User.objects.create_user(
             username="adminorden",
             email="adminorden@example.com",
@@ -1803,20 +1803,37 @@ class AnomalyCreateApiTests(APITestCase):
             updated_by=self.user,
         )
 
+        evaluation = Anomaly.objects.create(
+            code=f"{year}9023",
+            title="Orden seguimiento",
+            description="En evaluacion mas antigua que las de analisis",
+            current_status=AnomalyStatus.IN_EVALUATION,
+            current_stage=AnomalyStage.CLASSIFICATION,
+            site=self.site,
+            area=self.area,
+            reporter=self.user,
+            anomaly_type=self.anomaly_type,
+            anomaly_origin=self.anomaly_origin,
+            priority=self.priority,
+            detected_at=now - timedelta(minutes=3),
+            created_by=self.user,
+            updated_by=self.user,
+        )
+
         self.client.force_authenticate(user=admin_user)
         response = self.client.get("/api/v1/anomalies/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
-            [item["id"] for item in response.data["results"][:3]],
-            [str(registered.pk), str(middle.pk), str(closed.pk)],
+            [item["id"] for item in response.data["results"][:4]],
+            [str(registered.pk), str(evaluation.pk), str(middle.pk), str(closed.pk)],
         )
 
         search_response = self.client.get("/api/v1/anomalies/?search=Orden%20seguimiento")
         self.assertEqual(search_response.status_code, status.HTTP_200_OK)
         self.assertEqual(
-            [item["id"] for item in search_response.data["results"][:3]],
-            [str(closed.pk), str(middle.pk), str(registered.pk)],
+            [item["id"] for item in search_response.data["results"][:4]],
+            [str(closed.pk), str(middle.pk), str(registered.pk), str(evaluation.pk)],
         )
 
 

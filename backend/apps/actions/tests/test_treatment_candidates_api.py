@@ -663,6 +663,10 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.assertFalse(TreatmentAnomaly.objects.filter(anomaly=self.anomaly_three).exists())
 
     def test_admin_can_delete_empty_treatment_by_code(self):
+        original_detected_at = self.anomaly_one.detected_at
+        self.anomaly_two.current_stage = AnomalyStage.CAUSE_ANALYSIS
+        self.anomaly_two.current_status = AnomalyStatus.IN_ANALYSIS
+        self.anomaly_two.save(update_fields=["current_stage", "current_status"])
         self.anomaly_one.current_stage = AnomalyStage.TREATMENT_CREATED
         self.anomaly_one.current_status = AnomalyStatus.IN_ANALYSIS
         self.anomaly_one.save(update_fields=["current_stage", "current_status"])
@@ -687,6 +691,11 @@ class TreatmentCandidatesApiTests(APITestCase):
         self.anomaly_one.refresh_from_db()
         self.assertEqual(self.anomaly_one.current_stage, AnomalyStage.CLASSIFICATION)
         self.assertEqual(self.anomaly_one.current_status, AnomalyStatus.IN_EVALUATION)
+        self.assertEqual(self.anomaly_one.detected_at, original_detected_at)
+        tracking = self.client.get("/api/v1/anomalies/")
+        self.assertEqual(tracking.status_code, status.HTTP_200_OK)
+        tracking_ids = [item["id"] for item in tracking.data["results"]]
+        self.assertLess(tracking_ids.index(str(self.anomaly_one.pk)), tracking_ids.index(str(self.anomaly_two.pk)))
         self.assertTrue(
             AnomalyStatusHistory.objects.filter(
                 anomaly=self.anomaly_one,

@@ -164,8 +164,9 @@ def apply_default_tracking_order(queryset):
     return queryset.annotate(
         status_sort_priority=Case(
             When(current_status=AnomalyStatus.REGISTERED, then=Value(0)),
-            When(current_status=AnomalyStatus.CLOSED, then=Value(2)),
-            default=Value(1),
+            When(current_status=AnomalyStatus.IN_EVALUATION, then=Value(1)),
+            When(current_status=AnomalyStatus.CLOSED, then=Value(3)),
+            default=Value(2),
             output_field=IntegerField(),
         )
     ).order_by("status_sort_priority", "-detected_at", "code")

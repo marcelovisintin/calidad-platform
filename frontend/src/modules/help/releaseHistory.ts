@@ -69,6 +69,10 @@ const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
 ];
 
 const RELEASE_SUMMARIES: Record<string, string[]> = {
+  "release-1.9.1": [
+    "Seguimiento de anomalías agrupa las registradas y luego las que están en evaluación, antes de las gestiones avanzadas y las cerradas.",
+    "Al eliminar un tratamiento, sus anomalías regresan al grupo de evaluación conservando las fechas originales y el historial.",
+  ],
   "release-1.9.0": [
     "ADMIN puede asociar anomalías a observaciones abiertas, con clasificación automática como OBS y gestión compartida de responsable, acciones y plazos.",
     "La eficacia debe cubrir todos los hallazgos asociados; se conserva su historial y se evitan avisos duplicados. ADMIN puede separarlos para una gestión independiente.",
