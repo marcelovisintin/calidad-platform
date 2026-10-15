@@ -30,8 +30,14 @@ def build_anomaly_queryset(*, detailed: bool = False):
         "priority",
         "duplicate_of",
         "immediate_action",
+        "observation_parent__immediate_action",
+        "observation_parent__owner",
     ).prefetch_related(
         "treatment_links__treatment",
+        Prefetch("associated_observation_anomalies", queryset=Anomaly.objects.select_related("owner")),
+        Prefetch("observation_parent__associated_observation_anomalies", queryset=Anomaly.objects.select_related("owner")),
+        "observation_parent__treatment_links__treatment",
+        "observation_parent__observation_actions",
         Prefetch(
             "observation_actions",
             queryset=ObservationAction.objects.select_related("completed_by").order_by("sequence", "created_at"),

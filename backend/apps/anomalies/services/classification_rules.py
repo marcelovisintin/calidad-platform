@@ -90,6 +90,10 @@ def nonconformity_q(prefix: str = "") -> Q:
 
 
 def stage_allows_classification_change(anomaly) -> bool:
+    if getattr(anomaly, "observation_parent_id", None):
+        return False
+    if getattr(anomaly, "pk", None) and anomaly.associated_observation_anomalies.exists():
+        return False
     return (getattr(anomaly, "current_stage", "") or "") in CLASSIFICATION_EDITABLE_STAGES
 
 

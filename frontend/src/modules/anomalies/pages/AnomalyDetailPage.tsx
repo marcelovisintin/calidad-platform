@@ -1,3 +1,4 @@
+import { ObservationGroupSummary } from "../components/ObservationGroupSummary";
 import { MouseEvent, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { fetchAnomalyDetail } from "../../../api/anomalies";
@@ -210,6 +211,7 @@ export function AnomalyDetailPage() {
         {data ? (
           <div className="detail-layout">
             <article className="panel">
+              <ObservationGroupSummary anomaly={data} onChanged={reload} />
               <div className="section-head">
                 <div>
                   <p className="eyebrow">{`Numero de anomalia: ${data.code}`}</p>
@@ -247,6 +249,11 @@ export function AnomalyDetailPage() {
             <article className="panel">
               <div className="section-head"><h2>Planes y acciones</h2></div>
               <div className="stack-list">
+                {data.observation_actions.map((action) => <div className="nested-card" key={action.id}>
+                  <strong>Acción {action.sequence}</strong><p>{action.detail}</p>
+                  <small>Realización estimada: {action.estimated_completion_date} | Validación: {action.effectiveness_due_date}</small>
+                  <StatusBadge compact value={action.status} overdue={action.is_overdue} />
+                </div>)}
                 {data.action_plans.length ? (
                   <div className="nested-card">
                     <div className="section-head compact">
@@ -313,7 +320,7 @@ export function AnomalyDetailPage() {
                   </div>
                 ) : null}
 
-                {!data.action_plans.length && !data.treatment_tasks.length ? (
+                {!data.action_plans.length && !data.treatment_tasks.length && !data.observation_actions.length ? (
                   <p className="muted-copy">Esta anomalia todavia no tiene planes ni acciones asociadas.</p>
                 ) : null}
               </div>

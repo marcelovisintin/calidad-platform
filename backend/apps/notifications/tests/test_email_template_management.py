@@ -40,7 +40,9 @@ class EmailTemplateManagementTests(TestCase):
         response = self.client.get(self.list_url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 23)
+        self.assertEqual(len(response.data), 24)
+        observation_association = next(item for item in response.data if item["code"] == "observation_anomaly_associated")
+        self.assertIn("observation_code", {field["key"] for field in observation_association["allowed_fields"]})
         association = next(item for item in response.data if item["code"] == "treatment_anomaly_associated")
         self.assertEqual(association["case_number"], "3")
         self.assertEqual(association["stage"], "Adopta la etapa actual del tratamiento")

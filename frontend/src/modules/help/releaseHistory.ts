@@ -69,6 +69,11 @@ const HISTORICAL_RELEASES: ReleaseHistoryEntry[] = [
 ];
 
 const RELEASE_SUMMARIES: Record<string, string[]> = {
+  "release-1.9.0": [
+    "ADMIN puede asociar anomalías a observaciones abiertas, con clasificación automática como OBS y gestión compartida de responsable, acciones y plazos.",
+    "La eficacia debe cubrir todos los hallazgos asociados; se conserva su historial y se evitan avisos duplicados. ADMIN puede separarlos para una gestión independiente.",
+    "El selector de observaciones existentes usa el mismo diseño y distribución que el selector de tratamientos.",
+  ],
   "release-1.8.6": [
     "Las acciones de observaciones requieren el detalle de lo propuesto al crearlas y una nueva nota de lo realizado al finalizarlas.",
     "Los archivos son opcionales en ambos pasos; la nota de finalización se conserva en las evidencias y el historial.",

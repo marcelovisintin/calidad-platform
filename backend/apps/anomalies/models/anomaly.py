@@ -94,6 +94,8 @@ class AnomalyCommentType(models.TextChoices):
 class Anomaly(AuditBaseModel):
     @property
     def deadline(self):
+        if getattr(self, "observation_parent_id", None):
+            return self.observation_parent.deadline
         # Use the current obligation, not dates of actions already completed.
         links = list(self.treatment_links.all())
         if links:
@@ -182,6 +184,10 @@ class Anomaly(AuditBaseModel):
         null=True,
         blank=True,
     )
+    observation_parent = models.ForeignKey(
+        "self", on_delete=models.PROTECT, related_name="associated_observation_anomalies",
+        null=True, blank=True,
+    )
     detected_at = models.DateTimeField()
     manufacturing_order_number = models.CharField(max_length=50, blank=True)
     affected_quantity = models.PositiveIntegerField(null=True, blank=True)
@@ -210,6 +216,10 @@ class Anomaly(AuditBaseModel):
 
     class Meta:
         ordering = ("-detected_at", "code")
+        constraints = [
+            models.CheckConstraint(condition=~models.Q(observation_parent=models.F("id")),
+                                   name="anomaly_observation_not_self"),
+        ]
         indexes = [
             models.Index(fields=["current_status", "current_stage", "area"], name="anom_stat_stage_area_idx"),
             models.Index(fields=["code"], name="anom_code_idx"),
@@ -219,6 +229,8 @@ class Anomaly(AuditBaseModel):
         verbose_name_plural = "Anomalias"
 
     def clean(self):
+        if self.observation_parent_id == self.pk:
+            raise ValidationError({"observation_parent": "Una anomalia no puede asociarse a si misma."})
         if self.closed_at and self.current_status != AnomalyStatus.CLOSED:
             raise ValidationError({"closed_at": "closed_at solo puede informarse cuando el estado es closed."})
         if self.area_id and self.area and self.area.site_id != self.site_id:

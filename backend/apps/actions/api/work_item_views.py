@@ -58,7 +58,9 @@ def _anomaly_filter(value: str, *, observation: bool) -> Q:
         anomaly_id = UUID(value)
     except ValueError:
         if observation:
-            return Q(anomaly__code__icontains=value) | Q(anomaly__title__icontains=value)
+            return (Q(anomaly__code__icontains=value) | Q(anomaly__title__icontains=value)
+                    | Q(anomaly__associated_observation_anomalies__code__icontains=value)
+                    | Q(anomaly__associated_observation_anomalies__title__icontains=value))
         return (
             Q(anomaly_links__anomaly__code__icontains=value)
             | Q(anomaly_links__anomaly__title__icontains=value)
@@ -67,7 +69,7 @@ def _anomaly_filter(value: str, *, observation: bool) -> Q:
         )
 
     if observation:
-        return Q(anomaly_id=anomaly_id)
+        return Q(anomaly_id=anomaly_id) | Q(anomaly__associated_observation_anomalies__id=anomaly_id)
     return Q(anomaly_links__anomaly_id=anomaly_id) | Q(treatment__primary_anomaly_id=anomaly_id)
 
 

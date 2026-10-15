@@ -172,6 +172,8 @@ def is_anomaly_locked_by_effective_treatment(anomaly: Anomaly) -> bool:
 
 
 def _ensure_anomaly_is_editable(anomaly: Anomaly) -> None:
+    if anomaly.observation_parent_id:
+        raise ValidationError({"anomaly": "La gestion se realiza desde la Observacion asociada."})
     if is_anomaly_locked_by_effective_treatment(anomaly):
         raise ValidationError(
             {"anomaly": "La anomalia esta cerrada por un tratamiento validado como eficaz y no admite modificaciones."}
@@ -181,6 +183,7 @@ def _ensure_anomaly_is_editable(anomaly: Anomaly) -> None:
 
 def snapshot_anomaly(anomaly: Anomaly) -> dict:
     return {
+        "observation_parent_id": str(anomaly.observation_parent_id or ""),
         "id": str(anomaly.pk),
         "code": anomaly.code,
         "title": anomaly.title,
@@ -582,6 +585,8 @@ def update_anomaly(*, anomaly: Anomaly, user, data: dict, request_id: str = "") 
     _ensure_scope(next_site.pk, next_area.pk, user)
 
     severity_in_payload = "severity" in data
+    if severity_in_payload and locked.associated_observation_anomalies.exists():
+        raise ValidationError({"severity": "La Observacion tiene anomalias asociadas; debe conservar su clasificacion."})
     previous_severity_id = locked.severity_id
 
     if severity_in_payload and Treatment.objects.filter(anomaly_links__anomaly=locked).exists():
@@ -1241,6 +1246,7 @@ def save_learning(*, anomaly: Anomaly, user, data: dict, files=None, request_id:
 
 
 def _ensure_observation_path_available(locked: Anomaly) -> None:
+    _ensure_anomaly_is_editable(locked)
     if not is_immediate_action_anomaly(locked):
         raise ValidationError({"anomaly": "La anomalia no tiene Revision de hallazgos como Observacion."})
     if locked.observation_resolution_path == ObservationResolutionPath.TREATMENT_PENDING:
@@ -1276,6 +1282,8 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
         raise ValidationError({"responsible": "La Observacion debe gestionarla el responsable asignado en Revision de hallazgos."})
     if immediate_action.pk and immediate_action.responsible_id and data["responsible"].pk != immediate_action.responsible_id:
         raise ValidationError({"responsible": "No se puede cambiar el responsable de una Observacion ya cargada."})
+    if requires_treatment and locked.associated_observation_anomalies.exists():
+        raise ValidationError({"requires_treatment": "ADMIN debe separar las anomalias asociadas antes de derivar la gestion a tratamiento."})
     if requires_treatment and immediate_action.pk and (
         (immediate_action.actions_taken or "").strip()
         or locked.observation_actions.exists()
@@ -1398,6 +1406,9 @@ def save_observation_load(*, anomaly: Anomaly, user, data: dict, request_id: str
             actor=user,
             request_id=request_id,
         )
+    from .observation_association import sync_observation_anomalies
+    sync_observation_anomalies(observation=locked, user=user,
+                              comment="Datos generales actualizados.", request_id=request_id)
     return immediate_action
 
 
@@ -1502,6 +1513,9 @@ def create_observation_action(*, anomaly: Anomaly, user, data: dict, request_id:
         actor=user,
         request_id=request_id,
     )
+    from .observation_association import sync_observation_anomalies
+    sync_observation_anomalies(observation=locked, user=user,
+                              comment="Nueva accion registrada.", request_id=request_id)
     return action
 
 
@@ -1663,6 +1677,9 @@ def complete_observation_action(*, action: ObservationAction, user, completed_at
             actor=user,
             request_id=request_id,
         )
+    from .observation_association import sync_observation_anomalies
+    sync_observation_anomalies(observation=locked_anomaly, user=user,
+                              comment="Accion finalizada con nota de lo realizado.", request_id=request_id)
     return locked_action
 
 
@@ -1751,6 +1768,9 @@ def save_observation_action_taken(*, anomaly: Anomaly, user, data: dict, request
         actor=user,
         request_id=request_id,
     )
+    from .observation_association import sync_observation_anomalies
+    sync_observation_anomalies(observation=locked, user=user,
+                              comment="Acciones tomadas registradas.", request_id=request_id)
     return immediate_action
 
 
@@ -1838,7 +1858,17 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, file
     previous_stage = locked.current_stage
     now = timezone.now()
     is_effective = bool(data["effectiveness_is_effective"])
+    group_ids = {str(locked.pk)} | {
+        str(pk) for pk in locked.associated_observation_anomalies.values_list("pk", flat=True)
+    }
+    if is_effective and len(group_ids) > 1:
+        if {str(pk) for pk in data.get("covered_anomalies", [])} != group_ids:
+            raise ValidationError({"covered_anomalies": "Confirme que la eficacia cubre todas las anomalias asociadas."})
     check_comment = effectiveness_comment
+    if len(group_ids) > 1:
+        check_comment += "\nAnomalias incluidas en la verificacion: " + ", ".join(
+            [locked.code] + list(locked.associated_observation_anomalies.values_list("code", flat=True))
+        )
 
     immediate_action.effectiveness_verified_at = data["effectiveness_verified_at"]
     immediate_action.effectiveness_is_effective = is_effective
@@ -1975,6 +2005,9 @@ def verify_observation_effectiveness(*, anomaly: Anomaly, user, data: dict, file
             actor=user,
             request_id=request_id,
         )
+    from .observation_association import sync_observation_anomalies
+    sync_observation_anomalies(observation=locked, user=user,
+                              comment="Verificacion de eficacia registrada.", request_id=request_id)
     return immediate_action
 
 
@@ -1991,6 +2024,7 @@ def save_immediate_action(*, anomaly: Anomaly, user, data: dict, files=None, req
     if data.get("effectiveness_is_effective") is not None:
         immediate_action = verify_observation_effectiveness(anomaly=anomaly, user=user, data=data, files=files, request_id=request_id)
     return immediate_action
+@transaction.atomic
 def transition_anomaly(*, anomaly: Anomaly, user, target_stage: str | None = None, target_status: str | None = None, comment: str, request_id: str = "") -> Anomaly:
     locked = Anomaly.objects.select_for_update().get(pk=anomaly.pk)
     _ensure_anomaly_is_editable(locked)
@@ -2003,6 +2037,8 @@ def transition_anomaly(*, anomaly: Anomaly, user, target_stage: str | None = Non
 
     reopened = target_status == AnomalyStatus.REOPENED
     resolved_target_status = target_status or resolve_status_for_stage(target_stage, reopened=reopened)
+    if locked.associated_observation_anomalies.exists() and resolved_target_status == AnomalyStatus.CLOSED:
+        raise ValidationError({"target_status": "El cierre del conjunto requiere verificar la eficacia de todas sus anomalias."})
 
     ensure_transition_permission(
         anomaly=locked,
@@ -2075,6 +2111,9 @@ def transition_anomaly(*, anomaly: Anomaly, user, target_stage: str | None = Non
             actor=user,
             request_id=request_id,
         )
+    from .observation_association import sync_observation_anomalies
+    sync_observation_anomalies(observation=locked, user=user,
+                              comment="Estado actualizado.", request_id=request_id)
     return locked
 
 

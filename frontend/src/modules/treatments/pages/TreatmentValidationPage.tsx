@@ -1,6 +1,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { fetchValidationWorkItems } from "../../../api/actions";
 import { fetchAnomalyDetail, verifyObservationEffectiveness } from "../../../api/anomalies";
+import { ObservationGroupSummary } from "../../anomalies/components/ObservationGroupSummary";
 import { fetchTreatmentDetail, validateTreatmentEffectiveness } from "../../../api/treatments";
 import type { ActionWorkItemSource, ValidationWorkItem } from "../../../api/types";
 import { formatDate, formatDateTime } from "../../../app/utils";
@@ -72,6 +73,7 @@ export function TreatmentValidationPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [coversGroup, setCoversGroup] = useState(false);
 
   const selectedSources = useMemo<ActionWorkItemSource[]>(() => {
     const sources: ActionWorkItemSource[] = [];
@@ -112,6 +114,7 @@ export function TreatmentValidationPage() {
 
   useEffect(() => {
     setValidationResult("");
+    setCoversGroup(false);
     setValidationComment("");
     setValidationEvidences([]);
     setVerifiedAt(nowAsLocalDateTime());
@@ -148,6 +151,10 @@ export function TreatmentValidationPage() {
       return;
     }
 
+    if (validationResult === "effective" && selectedDetail?.source === "observation" && selectedDetail.detail.observation_anomalies?.length && !coversGroup) {
+      setFormError("Confirma que la eficacia cubre todas las anomalías asociadas.");
+      return;
+    }
     setBusy(true);
     setFormError(null);
     setMessage(null);
@@ -163,6 +170,8 @@ export function TreatmentValidationPage() {
           effectiveness_verified_at: toOffsetIso(verifiedAt),
           effectiveness_is_effective: validationResult === "effective",
           effectiveness_comment: validationComment.trim(),
+          covered_anomalies: coversGroup && selectedDetail?.source === "observation"
+            ? [selectedItem.id, ...(selectedDetail.detail.observation_anomalies ?? []).map((item) => item.id)] : [],
           evidences: validationEvidences,
         });
       }
@@ -242,6 +251,7 @@ export function TreatmentValidationPage() {
             <DataState loading={detailLoading} error={detailError} onRetry={reloadDetail}>
               {selectedItem && selectedDetail ? (
                 <form className="form-section" onSubmit={handleSubmit}>
+                  {selectedDetail.source === "observation" ? <ObservationGroupSummary anomaly={selectedDetail.detail} /> : null}
                   <div className="section-head compact" data-tour="validation-summary">
                     <div>
                       <div className="badge-stack"><SourceBadge source={selectedItem.source} /></div>
@@ -310,6 +320,7 @@ export function TreatmentValidationPage() {
                         </label>
                       </div>
                       <div className="form-actions" data-tour="validation-confirm">
+                        {selectedDetail.source === "observation" && selectedDetail.detail.observation_anomalies?.length ? <label className="field"><span><input type="checkbox" checked={coversGroup} onChange={(event) => setCoversGroup(event.target.checked)} /> Confirmo que las acciones y el resultado eficaz cubren todas las anomalías asociadas.</span></label> : null}
                         <button
                           className="button button-primary"
                           disabled={busy || !validationResult || !selectedItem.can_validate || !validationComment.trim()}

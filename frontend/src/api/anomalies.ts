@@ -220,11 +220,28 @@ export function addObservationActionEvidence(anomalyId: string, actionId: string
   return apiRequest(`/anomalies/${anomalyId}/observation/actions/${actionId}/evidences/`, { method: "POST", body });
 }
 
+export function fetchOpenObservationOptions(anomalyId: string) {
+  return apiRequest<import("./types").ObservationAssociationSummary[]>(`/anomalies/${anomalyId}/observation-options/`);
+}
+
+export function detachAnomalyFromObservation(anomalyId: string, reason: string, observationDueDate: string) {
+  return apiRequest<AnomalyDetail>(`/anomalies/${anomalyId}/detach-observation/`, {
+    method: "POST", body: { reason, observation_due_date: observationDueDate },
+  });
+}
+
+export function associateAnomalyToObservation(anomalyId: string, observation: string, reason: string) {
+  return apiRequest<AnomalyDetail>(`/anomalies/${anomalyId}/associate-observation/`, {
+    method: "POST", body: { observation, reason },
+  });
+}
+
 export function verifyObservationEffectiveness(anomalyId: string, payload: ObservationVerificationPayload) {
   const body = new FormData();
   body.append("effectiveness_verified_at", payload.effectiveness_verified_at);
   body.append("effectiveness_is_effective", String(payload.effectiveness_is_effective));
   body.append("effectiveness_comment", payload.effectiveness_comment);
+  (payload.covered_anomalies ?? []).forEach((id) => body.append("covered_anomalies", id));
   if (payload.closure_comment !== undefined) body.append("closure_comment", payload.closure_comment);
   (payload.evidences ?? []).forEach((file) => body.append("evidences", file));
   return apiRequest<AnomalyDetail>(`/anomalies/${anomalyId}/observation/effectiveness/`, {

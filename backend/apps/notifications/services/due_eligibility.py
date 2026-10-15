@@ -46,7 +46,7 @@ def current_due_date(recipient):
                     return timezone.localtime(notification.due_at).date() if notification.due_at else None
     elif source_type == "anomalies.anomaly":
         anomaly = Anomaly.objects.filter(pk=notification.source_id).first()
-        if not anomaly or anomaly.current_status in {"closed", "cancelled"}:
+        if not anomaly or anomaly.observation_parent_id or anomaly.current_status in {"closed", "cancelled"}:
             return None
         if notification.template_code == "observation_effectiveness_assigned":
             observation = getattr(anomaly, "immediate_action", None)

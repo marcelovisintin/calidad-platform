@@ -1,5 +1,6 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { ObservationGroupSummary } from "../components/ObservationGroupSummary";
 import {
   addObservationActionEvidence,
   completeObservationAction,
@@ -68,6 +69,9 @@ export function ImmediateActionsPage() {
   const [actionDate, setActionDate] = useState(nowAsDate());
   const [observation, setObservation] = useState("");
   const [requiresTreatment, setRequiresTreatment] = useState(false);
+  const [coversGroup, setCoversGroup] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedAnomalyId = searchParams.get("anomaly") || "";
   const [generalStepConfirmed, setGeneralStepConfirmed] = useState(false);
   const [actionDetail, setActionDetail] = useState("");
   const [estimatedCompletionDate, setEstimatedCompletionDate] = useState(nowAsDate());
@@ -110,6 +114,10 @@ export function ImmediateActionsPage() {
   }, [user?.id, search, page, includeClosed]);
 
   useEffect(() => {
+    if (requestedAnomalyId) {
+      setSelectedAnomalyId(requestedAnomalyId);
+      return;
+    }
     if (!listData) {
       return;
     }
@@ -124,7 +132,7 @@ export function ImmediateActionsPage() {
     }
 
     setSelectedAnomalyId(listData.anomalies.results[0].id);
-  }, [listData?.anomalies.results, selectedAnomalyId]);
+  }, [listData?.anomalies.results, selectedAnomalyId, requestedAnomalyId]);
 
   const {
     data: selectedAnomaly,
@@ -143,6 +151,7 @@ export function ImmediateActionsPage() {
       return;
     }
 
+    setCoversGroup(false);
     const existing = selectedAnomaly.immediate_action;
     setResponsibleId(existing?.responsible?.id || selectedAnomaly.owner?.id || selectedAnomaly.current_responsible?.id || "");
     setActionDate(existing?.action_date || nowAsDate());
@@ -374,6 +383,10 @@ export function ImmediateActionsPage() {
       return;
     }
 
+    if (effectivenessResult === "effective" && selectedAnomaly?.observation_anomalies?.length && !coversGroup) {
+      setFormError("Confirma que la eficacia cubre todas las anomalías asociadas.");
+      return;
+    }
     setSubmitting(true);
     setFormError(null);
     setMessage(null);
@@ -385,6 +398,7 @@ export function ImmediateActionsPage() {
         effectiveness_verified_at: toOffsetIso(effectivenessVerifiedAt),
         effectiveness_is_effective: isEffective,
         effectiveness_comment: effectivenessComment.trim(),
+        covered_anomalies: coversGroup ? [selectedAnomalyId, ...(selectedAnomaly?.observation_anomalies ?? []).map((item) => item.id)] : [],
         evidences: effectivenessEvidenceFiles,
       });
 
@@ -483,7 +497,7 @@ export function ImmediateActionsPage() {
                 <button
                   className={`list-card compact treatment-card${selectedAnomalyId === anomaly.id ? " active" : ""}`}
                   key={anomaly.id}
-                  onClick={() => setSelectedAnomalyId(anomaly.id)}
+                  onClick={() => { setSearchParams({}); setSelectedAnomalyId(anomaly.id); }}
                   type="button"
                 >
                   <div>
@@ -507,8 +521,9 @@ export function ImmediateActionsPage() {
 
           <article className="panel">
             <DataState loading={detailLoading} error={detailError} onRetry={reloadDetail}>
-              {selectedAnomaly ? (
+              {selectedAnomaly?.observation_parent ? <ObservationGroupSummary anomaly={selectedAnomaly} /> : selectedAnomaly ? (
                 <>
+                  <ObservationGroupSummary anomaly={selectedAnomaly} />
                   <div className="section-head compact" data-tour="observation-summary">
                     <div>
                       <p className="eyebrow">Detalle de anomalia</p>
@@ -559,12 +574,13 @@ export function ImmediateActionsPage() {
                       <label className="checkbox-inline field-span-2" data-tour="observation-treatment-path">
                         <input
                           checked={requiresTreatment}
-                          disabled={hasConfirmedActions || selectedAnomaly.current_status === "closed"}
+                          disabled={hasConfirmedActions || selectedAnomaly.current_status === "closed" || Boolean(selectedAnomaly.observation_anomalies?.length)}
                           onChange={(event) => setRequiresTreatment(event.target.checked)}
                           type="checkbox"
                         />
                         <span>Clasificar como Observacion TRT (con tratamiento)</span>
                       </label>
+                      {selectedAnomaly.observation_anomalies?.length ? <small>Para derivar a tratamiento, ADMIN debe separar primero las anomalías asociadas y definir su gestión.</small> : null}
                     </div>
 
                     <div className="form-actions" data-tour="observation-general-confirm">
@@ -772,6 +788,9 @@ export function ImmediateActionsPage() {
                     {message ? <div className="panel success">{message}</div> : null}
 
                     <div className="form-actions" data-tour="observation-effectiveness-confirm">
+                      {selectedAnomaly.observation_anomalies?.length ? <label className="field">
+                        <span><input type="checkbox" checked={coversGroup} onChange={(event) => setCoversGroup(event.target.checked)} /> Confirmo que las acciones y el resultado eficaz cubren esta observación y todas sus anomalías asociadas.</span>
+                      </label> : null}
                       <button className="button button-primary" disabled={submitting || selectedAnomaly.current_status === "closed" || !canVerifyEffectiveness || !effectivenessComment.trim()} type="submit">
                         {submitting ? "Guardando..." : "Guardar verificacion"}
                       </button>

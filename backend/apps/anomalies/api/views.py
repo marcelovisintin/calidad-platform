@@ -188,9 +188,13 @@ class AnomalyAttachmentDownloadAPIView(APIView):
     def get(self, request, attachment_id):
         visible_anomalies = filter_anomaly_queryset_for_user(build_anomaly_queryset(detailed=False), request.user)
         attachment = get_object_or_404(
-            AnomalyAttachment.objects.select_related("anomaly"),
+            AnomalyAttachment.objects.select_related("anomaly").filter(
+                Q(anomaly_id__in=visible_anomalies.values("id"))
+                | Q(observation_action__isnull=False, anomaly_id__in=visible_anomalies.exclude(
+                    observation_parent__isnull=True,
+                ).values("observation_parent_id"))
+            ),
             pk=attachment_id,
-            anomaly_id__in=visible_anomalies.values("id"),
         )
         if not attachment.file:
             raise Http404("Adjunto sin archivo asociado.")
@@ -209,9 +213,13 @@ class AnomalyLearnedLessonEvidenceDownloadAPIView(APIView):
     def get(self, request, evidence_id):
         visible_anomalies = filter_anomaly_queryset_for_user(build_anomaly_queryset(detailed=False), request.user)
         evidence = get_object_or_404(
-            AnomalyLearningEvidence.objects.select_related("learned_lesson", "learned_lesson__anomaly"),
+            AnomalyLearningEvidence.objects.select_related("learned_lesson", "learned_lesson__anomaly").filter(
+                Q(learned_lesson__anomaly_id__in=visible_anomalies.values("id"))
+                | Q(learned_lesson__anomaly_id__in=visible_anomalies.exclude(
+                    observation_parent__isnull=True,
+                ).values("observation_parent_id"))
+            ),
             pk=evidence_id,
-            learned_lesson__anomaly_id__in=visible_anomalies.values("id"),
         )
         if not evidence.file:
             raise Http404("Evidencia sin archivo asociado.")
@@ -502,6 +510,36 @@ class AffectedOrderListAPIView(APIView):
 
 
 class AnomalyViewSet(viewsets.ModelViewSet):
+    @action(detail=True, methods=["post"], url_path="detach-observation")
+    def detach_observation(self, request, pk=None):
+        from apps.anomalies.services.observation_association import detach_from_observation
+        from .serializers import ObservationDetachWriteSerializer
+        serializer = ObservationDetachWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        source = detach_from_observation(anomaly=self.get_object(), user=request.user,
+                                        request_id=self._request_id(), **serializer.validated_data)
+        return self._detail_response(source.pk)
+
+    @action(detail=True, methods=["get"], url_path="observation-options")
+    def observation_options(self, request, pk=None):
+        from apps.anomalies.services.anomaly_service import _require_admin_access_level
+        from apps.anomalies.services.observation_association import open_observation_options
+        from .serializers import ObservationAssociationSummarySerializer
+        _require_admin_access_level(request.user, "Solo ADMIN puede consultar observaciones para asociar.")
+        source = self.get_object()
+        options = open_observation_options().exclude(pk=source.pk).select_related("owner", "immediate_action")
+        return Response(ObservationAssociationSummarySerializer(options.order_by("-updated_at"), many=True).data)
+
+    @action(detail=True, methods=["post"], url_path="associate-observation")
+    def associate_observation(self, request, pk=None):
+        from apps.anomalies.services.observation_association import associate_to_observation
+        from .serializers import ObservationAssociationWriteSerializer
+        serializer = ObservationAssociationWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        source = associate_to_observation(anomaly=self.get_object(), user=request.user,
+                                         request_id=self._request_id(), **serializer.validated_data)
+        return self._detail_response(source.pk)
+
     http_method_names = ["get", "post", "put", "patch", "head", "options"]
 
     def get_permissions(self):
@@ -551,6 +589,7 @@ class AnomalyViewSet(viewsets.ModelViewSet):
         elif relationship == "received":
             queryset = queryset.filter(owner=self.request.user).filter(
                 Q(immediate_action__isnull=False)
+                | Q(observation_parent__isnull=False)
                 | Q(primary_treatments__isnull=False)
                 | Q(treatment_links__treatment__isnull=False)
             ).distinct()
@@ -660,7 +699,7 @@ class AnomalyViewSet(viewsets.ModelViewSet):
         include_closed = (params.get("include_closed") or "").strip().lower() in {"1", "true", "yes", "si"}
         queryset = (
             filter_anomaly_queryset_for_user(build_anomaly_queryset(detailed=False), request.user)
-            .filter(immediate_action_q())
+            .filter(immediate_action_q(), observation_parent__isnull=True)
             .exclude(
                 observation_resolution_path__in=[
                     ObservationResolutionPath.TREATMENT_PENDING,
@@ -680,6 +719,8 @@ class AnomalyViewSet(viewsets.ModelViewSet):
         if term := params.get("search"):
             queryset = queryset.filter(
                 Q(code__icontains=term)
+                | Q(associated_observation_anomalies__code__icontains=term)
+                | Q(associated_observation_anomalies__title__icontains=term)
                 | Q(title__icontains=term)
                 | Q(description__icontains=term)
                 | Q(manufacturing_order_number__icontains=term)

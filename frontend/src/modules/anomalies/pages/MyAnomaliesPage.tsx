@@ -18,6 +18,8 @@ import { TabbedFilters } from "../../../components/TabbedFilters";
 import { useAsyncTask } from "../../../hooks/useAsyncTask";
 import { usePageTitle } from "../../../hooks/usePageTitle";
 
+import { ObservationAssociationPanel } from "../components/ObservationAssociationPanel";
+
 type PendingClassification = {
   anomalyId: string;
   severityId: string;
@@ -91,6 +93,7 @@ export function MyAnomaliesPage() {
   const [updatingAnomalyId, setUpdatingAnomalyId] = useState<string | null>(null);
   const [pendingClassification, setPendingClassification] = useState<PendingClassification | null>(null);
   const [pendingAssociation, setPendingAssociation] = useState<PendingAssociation | null>(null);
+  const [associationKind, setAssociationKind] = useState<"treatment" | "observation">("treatment");
   const [associationOptions, setAssociationOptions] = useState<TreatmentSummary[]>([]);
   const [associationSearch, setAssociationSearch] = useState("");
   const [associationLoading, setAssociationLoading] = useState(false);
@@ -410,10 +413,6 @@ export function MyAnomaliesPage() {
             const canUnlockClassification = item.can_unlock_classification ?? false;
             const pendingForItem = pendingClassification?.anomalyId === item.id ? pendingClassification : null;
             const associationForItem = pendingAssociation?.anomalyId === item.id ? pendingAssociation : null;
-            const displayedCriterion = criteria.find(
-              (criterion) => criterion.id === (pendingForItem?.severityId || item.severity?.id),
-            );
-            const associationDisabledForObservation = Boolean(displayedCriterion && criterionIsObservation(displayedCriterion));
             const disableClassificationSelect =
               updatingAnomalyId === item.id || criteria.length === 0 || !canModifyClassification;
 
@@ -543,7 +542,7 @@ export function MyAnomaliesPage() {
                       {canModifyClassification ? (
                         <button
                           className="button button-secondary associate-anomalies-button"
-                          disabled={updatingAnomalyId === item.id || associationDisabledForObservation}
+                          disabled={updatingAnomalyId === item.id}
                           onClick={() => void handleOpenAssociation(item.id, item.code, canModifyClassification)}
                           type="button"
                         >
@@ -551,7 +550,16 @@ export function MyAnomaliesPage() {
                         </button>
                       ) : null}
 
-                      {associationForItem ? (
+                      {associationForItem ? <div className="form-actions">
+                        <button type="button" className={`button ${associationKind === "treatment" ? "button-primary" : "button-secondary"}`} onClick={() => setAssociationKind("treatment")}>Tratamiento existente</button>
+                        <button type="button" className={`button ${associationKind === "observation" ? "button-primary" : "button-secondary"}`} onClick={() => setAssociationKind("observation")}>Observación existente</button>
+                      </div> : null}
+                      {associationForItem && associationKind === "observation" ? <ObservationAssociationPanel key={item.id} anomalyId={item.id} onCancel={() => setPendingAssociation(null)} onAssociated={async () => {
+                        setPendingAssociation(null);
+                        setClassificationMessage("Anomalía clasificada como OBS y asociada a la observación seleccionada.");
+                        await reload();
+                      }} /> : null}
+                      {associationForItem && associationKind === "treatment" ? (
                         <form className="form-section compact association-treatment-panel" onSubmit={handleConfirmAssociation}>
                           <div className="section-head compact">
                             <div>

@@ -47,6 +47,16 @@ TASK_CODE = _field("task_code", "Código de acción", "TRT-2026-0001-A01")
 
 EMAIL_TEMPLATE_DEFINITIONS = (
     EmailTemplateDefinition(
+        code="observation_anomaly_associated", case_number="OBS-ASOC", name="Anomalia asociada a Observacion",
+        stage="Seguimiento", recipient="Responsable de la Observacion",
+        description="Incorporacion de un hallazgo a una Observacion abierta.",
+        conditions="ADMIN confirma la asociacion con fundamento.",
+        subject_template="Anomalia {anomaly_code} asociada a la Observacion {observation_code}",
+        body_template="Hola {recipient_name},\n\nLa anomalia {anomaly_code} se incorpora a la Observacion {observation_code}.\nMotivo: {reason}\nRevise que sus acciones cubran el nuevo hallazgo.",
+        fields=(RECIPIENT, ANOMALY_CODE, _field("observation_code", "Observacion", "20260001-OBS"),
+                _field("reason", "Motivo", "Misma causa y acciones aplicables")),
+    ),
+    EmailTemplateDefinition(
         code="anomaly_created",
         case_number="1",
         name="Registro de una anomalía",

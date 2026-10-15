@@ -808,7 +808,20 @@ export interface NotificationInboxSummary {
   tasks_overdue: number;
 }
 
+export interface ObservationAssociationSummary {
+  id: UUID;
+  code: string;
+  title: string;
+  current_status: string;
+  current_stage: string;
+  responsible?: UserSummary | null;
+  deadline?: string | null;
+  is_overdue: boolean;
+}
+
 export interface AnomalyListItem {
+  observation_parent?: ObservationAssociationSummary | null;
+  observation_anomalies?: ObservationAssociationSummary[];
   is_overdue?: boolean;
   id: UUID;
   code: string;
@@ -1198,6 +1211,7 @@ export interface ObservationActionCreatePayload {
 }
 
 export interface ObservationVerificationPayload {
+  covered_anomalies?: UUID[];
   effectiveness_verified_at: string;
   effectiveness_is_effective: boolean;
   effectiveness_comment: string;

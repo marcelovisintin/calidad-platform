@@ -91,7 +91,40 @@ class CurrentResponsibleMixin:
         return UserSummarySerializer(responsible).data if responsible else None
 
 
+class ObservationAssociationSummarySerializer(serializers.ModelSerializer):
+    responsible = UserSummarySerializer(source="owner", read_only=True)
+    deadline = serializers.SerializerMethodField()
+    is_overdue = serializers.SerializerMethodField()
+
+    def get_deadline(self, obj):
+        deadline = self.context.get("observation_root", obj).deadline
+        return deadline.isoformat() if deadline else None
+
+    def get_is_overdue(self, obj):
+        return self.context.get("observation_root", obj).is_overdue
+
+    class Meta:
+        model = Anomaly
+        fields = ("id", "code", "title", "current_status", "current_stage", "responsible", "deadline", "is_overdue")
+
+
+class ObservationAssociationWriteSerializer(serializers.Serializer):
+    observation = serializers.PrimaryKeyRelatedField(queryset=Anomaly.objects.all())
+    reason = serializers.CharField(allow_blank=False)
+
+
+class ObservationDetachWriteSerializer(serializers.Serializer):
+    reason = serializers.CharField(allow_blank=False)
+    observation_due_date = serializers.DateField()
+
+
 class ClassificationControlsMixin:
+    def get_observation_anomalies(self, obj):
+        root = obj.observation_parent if obj.observation_parent_id else obj
+        return ObservationAssociationSummarySerializer(
+            root.associated_observation_anomalies.all(), many=True, context={"observation_root": root},
+        ).data
+
     def get_can_modify_classification(self, obj):
         return can_modify_classification(obj)
 
@@ -573,6 +606,8 @@ class ObservationActionCompleteSerializer(serializers.Serializer):
     evidence_note = serializers.CharField()
 
 class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin, serializers.ModelSerializer):
+    observation_parent = ObservationAssociationSummarySerializer(read_only=True)
+    observation_anomalies = serializers.SerializerMethodField()
     is_overdue = serializers.BooleanField(read_only=True)
     deadline = serializers.DateField(read_only=True, allow_null=True)
     site = SiteSummarySerializer(read_only=True)
@@ -599,6 +634,8 @@ class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin
     class Meta:
         model = Anomaly
         fields = (
+            "observation_parent",
+            "observation_anomalies",
             "is_overdue",
             "deadline",
             "id",
@@ -635,6 +672,21 @@ class AnomalyListSerializer(CurrentResponsibleMixin, ClassificationControlsMixin
 
 
 class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMixin, serializers.ModelSerializer):
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.observation_parent_id:
+            root = instance.observation_parent
+            data["immediate_action"] = AnomalyImmediateActionSerializer(root.immediate_action).data
+            data["observation_actions"] = ObservationActionSerializer(root.observation_actions.all(), many=True).data
+            data["effectiveness_checks"] = AnomalyEffectivenessCheckSerializer(root.effectiveness_checks.all(), many=True).data
+            shared_attachments = root.attachments.filter(observation_action__isnull=False)
+            data["attachments"].extend(AnomalyAttachmentSerializer(shared_attachments, many=True, context=self.context).data)
+            lesson = getattr(root, "learning", None)
+            data["learning"] = AnomalyLearningSerializer(lesson, context=self.context).data if lesson else None
+        return data
+
+    observation_parent = ObservationAssociationSummarySerializer(read_only=True)
+    observation_anomalies = serializers.SerializerMethodField()
     is_overdue = serializers.BooleanField(read_only=True)
     deadline = serializers.DateField(read_only=True, allow_null=True)
     site = SiteSummarySerializer(read_only=True)
@@ -715,6 +767,8 @@ class AnomalyDetailSerializer(CurrentResponsibleMixin, ClassificationControlsMix
     class Meta:
         model = Anomaly
         fields = (
+            "observation_parent",
+            "observation_anomalies",
             "is_overdue",
             "deadline",
             "id",
@@ -1071,6 +1125,7 @@ class AnomalyObservationActionWriteSerializer(serializers.Serializer):
 
 
 class AnomalyObservationVerificationWriteSerializer(serializers.Serializer):
+    covered_anomalies = serializers.ListField(child=serializers.UUIDField(), required=False)
     effectiveness_verified_at = serializers.DateTimeField(style=DATETIME_INPUT_STYLE)
     effectiveness_is_effective = serializers.BooleanField()
     effectiveness_comment = serializers.CharField(
